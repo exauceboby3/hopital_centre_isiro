@@ -1,22 +1,22 @@
 name: Publier la version clinique finale
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - '.github/workflows/publish-final-clinical-version.yml'
+  issues:
+    types: [opened]
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   publish-final-version:
+    if: github.event.issue.title == '[AUTOMATION] Publier version clinique finale'
     runs-on: ubuntu-latest
     steps:
-      - name: Récupérer le dépôt
+      - name: Récupérer main
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
 
       - name: Reconstruire et vérifier le correctif
@@ -49,3 +49,8 @@ jobs:
           git add -A
           git commit -m 'Corriger les notifications et finaliser le parcours clinique'
           git push origin main
+
+      - name: Fermer la demande technique
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue close "${{ github.event.issue.number }}" --repo "${{ github.repository }}" --comment "Version clinique finale publiée sur main."
