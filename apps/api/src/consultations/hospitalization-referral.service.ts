@@ -17,6 +17,7 @@ import {
 } from '@prisma/client';
 import { AuthenticatedUser, hasAnyRole } from '../common/authenticated-user';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertLaboratoryResultsComplete } from './consultation-finalization.service';
 
 @Injectable()
 export class HospitalizationReferralService {
@@ -25,7 +26,12 @@ export class HospitalizationReferralService {
   async request(consultationId: string, serviceId: string, user: AuthenticatedUser) {
     const consultation = await this.prisma.consultation.findUnique({
       where: { id: consultationId },
-      include: { doctor: true, patient: true, appointment: true },
+      include: {
+        doctor: true,
+        patient: true,
+        appointment: true,
+        examRequests: { select: { status: true } },
+      },
     });
     if (!consultation) throw new NotFoundException('Consultation introuvable.');
     if (
@@ -34,6 +40,11 @@ export class HospitalizationReferralService {
     ) {
       throw new ForbiddenException('Cette consultation appartient à un autre médecin.');
     }
+
+    assertLaboratoryResultsComplete(
+      consultation.examRequests,
+      'Hospitalisation indisponible',
+    );
 
     const service = await this.prisma.billableService.findUnique({ where: { id: serviceId } });
     if (!service || !service.isActive || service.type !== BillableServiceType.HOSPITALIZATION) {
@@ -69,6 +80,12 @@ export class HospitalizationReferralService {
 
     const now = new Date();
     return this.prisma.$transaction(async (transaction) => {
+      const currentExams = await transaction.examRequest.findMany({
+        where: { consultationId },
+        select: { status: true },
+      });
+      assertLaboratoryResultsComplete(currentExams, 'Hospitalisation indisponible');
+
       const invoice = await transaction.invoice.create({
         data: {
           number: this.invoiceNumber(),
@@ -179,6 +196,12 @@ export class HospitalizationReferralService {
     now: Date,
   ) {
     await this.prisma.$transaction(async (transaction) => {
+      const currentExams = await transaction.examRequest.findMany({
+        where: { consultationId },
+        select: { status: true },
+      });
+      assertLaboratoryResultsComplete(currentExams, 'Hospitalisation indisponible');
+
       await transaction.consultation.update({
         where: { id: consultationId },
         data: {

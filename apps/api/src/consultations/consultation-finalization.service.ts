@@ -2,8 +2,28 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { ConsultationStatus, ExamStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { decodeClinicalReport } from './clinical-report';
+import type { ConsultationDecision } from './clinical-report';
 
-const finalDecisions = new Set(['PRESCRIPTION', 'DISCHARGE', 'COMPLETE', 'HOSPITALIZATION']);
+export const FINAL_CONSULTATION_DECISIONS = new Set<ConsultationDecision>([
+  'PRESCRIPTION',
+  'DISCHARGE',
+  'COMPLETE',
+  'HOSPITALIZATION',
+]);
+
+export function assertLaboratoryResultsComplete(
+  examRequests: ReadonlyArray<{ status: ExamStatus }>,
+  actionLabel: string,
+) {
+  const pendingCount = examRequests.filter(
+    (exam) => exam.status !== ExamStatus.VALIDATED && exam.status !== ExamStatus.CANCELLED,
+  ).length;
+  if (pendingCount > 0) {
+    throw new BadRequestException(
+      `${actionLabel} : ${pendingCount} résultat(s) de laboratoire sont encore attendus. Le patient doit rester dans le circuit laboratoire puis revenir chez le médecin.`,
+    );
+  }
+}
 
 @Injectable()
 export class ConsultationFinalizationService {
@@ -20,7 +40,7 @@ export class ConsultationFinalizationService {
     if (!consultation) throw new NotFoundException('Consultation introuvable.');
 
     const report = decodeClinicalReport(consultation.report).sections;
-    if (!report.decision || !finalDecisions.has(report.decision)) {
+    if (!report.decision || !FINAL_CONSULTATION_DECISIONS.has(report.decision)) {
       throw new BadRequestException(
         'Choisissez une décision finale : prescription, libération, conclusion ou hospitalisation avant de signer.',
       );
@@ -31,14 +51,7 @@ export class ConsultationFinalizationService {
       );
     }
 
-    const pendingExams = consultation.examRequests.filter(
-      (exam) => exam.status !== ExamStatus.VALIDATED && exam.status !== ExamStatus.CANCELLED,
-    );
-    if (pendingExams.length) {
-      throw new BadRequestException(
-        `Signature indisponible : ${pendingExams.length} résultat(s) de laboratoire sont encore attendus.`,
-      );
-    }
+    assertLaboratoryResultsComplete(consultation.examRequests, 'Signature indisponible');
 
     if (report.decision === 'PRESCRIPTION' && consultation.prescriptions.length === 0) {
       throw new BadRequestException(

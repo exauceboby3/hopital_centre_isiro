@@ -20,16 +20,7 @@ import { AppointmentDoctorRequirement } from '@/components/appointment-doctor-re
 import { AppointmentFileAccessPresentation } from '@/components/appointment-file-access-presentation';
 import { AppointmentVitalsVisibility } from '@/components/appointment-vitals-visibility';
 import { BiologistAdditionalExamPanel } from '@/components/biologist-additional-exam-panel';
-import { ConsultationConclusionAction } from '@/components/consultation-conclusion-action';
-import { ConsultationFocusPanel } from '@/components/consultation-focus-panel';
-import { ConsultationPrescriptionVisibility } from '@/components/consultation-prescription-visibility';
-import { ConsultationSignVisibility } from '@/components/consultation-sign-visibility';
-import { ConsultationStructuredPrescription } from '@/components/consultation-structured-prescription';
-import { ConsultationWorkflowGuide } from '@/components/consultation-workflow-guide';
-import { DoctorWaitingRoomEnhancement } from '@/components/doctor-waiting-room-enhancement';
-import { FinalPresentationCleanup } from '@/components/final-presentation-cleanup';
 import { GraceExpiryNotifications } from '@/components/grace-expiry-notifications';
-import { HospitalizationAdmissionAccess } from '@/components/hospitalization-admission-access';
 import { IdleSessionGuard } from '@/components/idle-session-guard';
 import { LaboratoryBatchValidationPanel } from '@/components/laboratory-batch-validation-panel';
 import { LaboratoryGroupPrintAction } from '@/components/laboratory-group-print-action';
@@ -43,7 +34,6 @@ import { ProtectedShell } from '@/components/protected-shell';
 import { PushNotificationManager } from '@/components/push-notification-manager';
 import { RoleNavigationVisibility } from '@/components/role-navigation-visibility';
 import { RoleRouteGuard } from '@/components/role-route-guard';
-import { WorkflowInteractionEnhancements } from '@/components/workflow-interaction-enhancements';
 
 export default function ProtectedLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
@@ -54,19 +44,9 @@ export default function ProtectedLayout({ children }: Readonly<{ children: React
         <PushNotificationManager />
         <PrintModeLayout />
         <RoleNavigationVisibility />
-        <FinalPresentationCleanup />
-        <DoctorWaitingRoomEnhancement />
         <GraceExpiryNotifications />
-        <WorkflowInteractionEnhancements />
-        <ConsultationFocusPanel />
-        <ConsultationConclusionAction />
-        <ConsultationStructuredPrescription />
-        <ConsultationPrescriptionVisibility />
-        <ConsultationWorkflowGuide />
-        <ConsultationSignVisibility />
         <AppointmentDoctorRequirement />
         <AppointmentFileAccessPresentation />
-        <HospitalizationAdmissionAccess />
         <LaboratoryBatchValidationPanel />
         <BiologistAdditionalExamPanel />
         <AppointmentVitalsVisibility />

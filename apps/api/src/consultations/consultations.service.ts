@@ -24,6 +24,10 @@ import {
   mergeClinicalReport,
 } from './clinical-report';
 import type { ConsultationDecision } from './clinical-report';
+import {
+  assertLaboratoryResultsComplete,
+  FINAL_CONSULTATION_DECISIONS,
+} from './consultation-finalization.service';
 import { CreateConsultationDto } from './dto/create-consultation.dto';
 import { CreateVitalSignDto } from './dto/create-vital-sign.dto';
 import { SignConsultationDto } from './dto/sign-consultation.dto';
@@ -38,6 +42,13 @@ const consultationInclude = {
   examRequests: {
     orderBy: { requestedAt: 'desc' as const },
     include: { careAuthorization: { include: { service: true, invoice: true } } },
+  },
+  prescriptions: {
+    orderBy: { prescribedAt: 'desc' as const },
+    include: {
+      invoice: true,
+      items: { include: { medication: true } },
+    },
   },
 } satisfies Prisma.ConsultationInclude;
 
@@ -199,6 +210,13 @@ export class ConsultationsService {
         where: { id },
         include: { examRequests: { select: { status: true } } },
       });
+      if (decision && FINAL_CONSULTATION_DECISIONS.has(decision)) {
+        assertLaboratoryResultsComplete(
+          current.examRequests,
+          'Décision finale indisponible',
+        );
+      }
+
       const clinicalReport = mergeClinicalReport(current.report, {
         chiefComplaint,
         presentIllnessHistory,
@@ -359,70 +377,6 @@ export class ConsultationsService {
     return presentVitalSign(row);
   }
 
-  async requestHospitalization(
-    consultationId: string,
-    serviceId: string,
-    user: AuthenticatedUser,
-  ) {
-    const consultation = await this.prisma.consultation.findUnique({
-      where: { id: consultationId },
-      include: { doctor: true, patient: true },
-    });
-    if (!consultation) throw new NotFoundException('Consultation introuvable.');
-    this.assertAssignedDoctor(consultation.doctor.userId, user);
-
-    return this.prisma.$transaction(async (transaction) => {
-      const authorization = await this.authorizations.createFromService(
-        {
-          patientId: consultation.patientId,
-          serviceId,
-          createdById: user.id,
-          expectedType: BillableServiceType.HOSPITALIZATION,
-        },
-        transaction,
-      );
-      await transaction.consultation.update({
-        where: { id: consultationId },
-        data: { orientation: 'Hospitalisation — admission après validation financière' },
-      });
-      if (consultation.appointmentId) {
-        await transaction.appointment.update({
-          where: { id: consultation.appointmentId },
-          data: {
-            journeyStage: PatientJourneyStage.HOSPITALIZATION,
-            journeyUpdatedAt: new Date(),
-          },
-        });
-      }
-      const recipients = await transaction.user.findMany({
-        where: {
-          isActive: true,
-          OR: [
-            { role: { in: [Role.RECEPTIONIST, Role.SECRETARY, Role.CASHIER] } },
-            { additionalRoles: { hasSome: [Role.RECEPTIONIST, Role.SECRETARY, Role.CASHIER] } },
-          ],
-        },
-        select: { id: true },
-      });
-      const name = [
-        consultation.patient.lastName,
-        consultation.patient.postName,
-        consultation.patient.firstName,
-      ]
-        .filter(Boolean)
-        .join(' ');
-      const notifications = recipients
-        .filter((recipient) => recipient.id !== user.id)
-        .map((recipient) => ({
-          senderId: user.id,
-          receiverId: recipient.id,
-          content: `Orientation hospitalisation : ${name} (${consultation.patient.medicalRecordNumber}). Facture ${authorization.invoice.number} à traiter avant attribution d’un lit.`,
-        }));
-      if (notifications.length) await transaction.message.createMany({ data: notifications });
-      return authorization;
-    });
-  }
-
   private present(row: ConsultationRow) {
     return {
       ...row,
@@ -447,13 +401,16 @@ export class ConsultationsService {
     requested?: ConsultationStatus,
     decision?: ConsultationDecision,
   ) {
-    if (decision && ['DISCHARGE', 'COMPLETE', 'PRESCRIPTION'].includes(decision)) {
-      return ConsultationStatus.COMPLETED;
-    }
     if (
       decision &&
-      ['CONTINUE', 'LABORATORY', 'IMAGING', 'HOSPITALIZATION', 'TRANSFER'].includes(decision)
+      ['HOSPITALIZATION', 'DISCHARGE', 'COMPLETE', 'PRESCRIPTION'].includes(decision)
     ) {
+      return ConsultationStatus.COMPLETED;
+    }
+    if (decision && ['LABORATORY', 'IMAGING'].includes(decision)) {
+      return ConsultationStatus.WAITING;
+    }
+    if (decision && ['CONTINUE', 'TRANSFER'].includes(decision)) {
       return ConsultationStatus.IN_PROGRESS;
     }
     return requested ?? current;
@@ -465,6 +422,7 @@ export class ConsultationsService {
     awaitingLaboratory: boolean,
   ) {
     if (decision === 'LABORATORY' || awaitingLaboratory) return PatientJourneyStage.LABORATORY;
+    if (decision === 'IMAGING') return PatientJourneyStage.IMAGING;
     if (decision === 'HOSPITALIZATION') return PatientJourneyStage.HOSPITALIZATION;
     if (decision === 'TRANSFER') return PatientJourneyStage.WAITING_DOCTOR;
     if (status === ConsultationStatus.COMPLETED) return PatientJourneyStage.COMPLETED;
@@ -476,7 +434,8 @@ export class ConsultationsService {
       CONTINUE: 'Poursuite de la prise en charge',
       LABORATORY: 'Laboratoire — examens demandés',
       IMAGING: 'Radiologie / imagerie médicale',
-      HOSPITALIZATION: 'Hospitalisation — admission après validation financière',
+      HOSPITALIZATION:
+        'Hospitalisation — admission à organiser; facture du séjour à finaliser à la sortie',
       TRANSFER: 'Transfert vers un autre médecin',
       PRESCRIPTION: 'Prescription et retour à domicile',
       DISCHARGE: 'Patient libéré',

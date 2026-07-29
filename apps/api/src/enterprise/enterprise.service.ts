@@ -261,6 +261,15 @@ export class EnterpriseService {
   }
 
   async createPrescription(dto: CreatePrescriptionDto, userId: string) {
+    if (dto.consultationId) {
+      const existing = await this.prisma.prescription.findFirst({
+        where: { consultationId: dto.consultationId, patientId: dto.patientId },
+        include: prescriptionInclude,
+        orderBy: { prescribedAt: 'desc' },
+      });
+      if (existing) return existing;
+    }
+
     const medicationIds = [...new Set(dto.items.map((item) => item.medicationId))];
     if (medicationIds.length !== dto.items.length) {
       throw new BadRequestException('Un médicament ne peut apparaître qu’une fois par ordonnance.');
@@ -301,11 +310,9 @@ export class EnterpriseService {
     });
     if (unavailable.length) {
       throw new BadRequestException(
-        `Médicament non disponible ou non tarifé à la pharmacie : ${unavailable
+        `Médicament non disponible, quantité insuffisante ou tarif absent : ${unavailable
           .map((item) => byId.get(item.medicationId)!.name)
-          .join(
-            ', ',
-          )}. Inscrivez-le dans les médicaments externes de la consultation afin que le patient puisse l’acheter ailleurs.`,
+          .join(', ')}. Mettez le stock à jour ou choisissez un médicament disponible.`,
       );
     }
     const total = dto.items.reduce(

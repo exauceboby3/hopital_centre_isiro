@@ -74,7 +74,7 @@ export class OperationsController {
   }
 
   @Post('clinical-orders')
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.DOCTOR)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.DOCTOR, Role.SURGEON, Role.MIDWIFE)
   createClinicalOrder(@Body() dto: CreateClinicalOrderDto, @CurrentUser() user: AuthenticatedUser) {
     return this.operations.createClinicalOrder(dto, user.id);
   }

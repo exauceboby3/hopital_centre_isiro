@@ -5,7 +5,6 @@ import {
   ExamStatus,
   PatientJourneyStage,
   Prisma,
-  Role,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -94,24 +93,27 @@ export class LaboratoryBatchValidationService {
       const patientName = [first.patient.lastName, first.patient.postName, first.patient.firstName]
         .filter(Boolean)
         .join(' ');
-      const recipients = await transaction.user.findMany({
-        where: {
-          isActive: true,
-          OR: [
-            { id: first.requestedByDoctor.userId },
-            { role: { in: [Role.RECEPTIONIST, Role.SECRETARY] } },
-            { additionalRoles: { hasSome: [Role.RECEPTIONIST, Role.SECRETARY] } },
-          ],
-        },
-        select: { id: true },
-      });
       const content = returnedToDoctor
-        ? `Retour laboratoire : les ${active.length} résultat(s) de ${patientName} (${first.patient.medicalRecordNumber}) ont été validés ensemble. Le patient est replacé dans la file de son médecin.`
+        ? `Retour laboratoire : les ${active.length} résultat(s) de ${patientName} (${first.patient.medicalRecordNumber}) ont été validés ensemble. Le patient est replacé dans votre file médicale.`
         : `Validation laboratoire : les ${active.length} résultat(s) de ${patientName} (${first.patient.medicalRecordNumber}) ont été confirmés ensemble.`;
-      const notifications = recipients
-        .filter((recipient) => recipient.id !== userId)
-        .map((recipient) => ({ senderId: userId, receiverId: recipient.id, content }));
-      if (notifications.length) await transaction.message.createMany({ data: notifications });
+      const requestingDoctorIds = [
+        ...new Set(active.map((exam) => exam.requestedByDoctor.userId)),
+      ].filter((receiverId) => receiverId !== userId);
+      if (requestingDoctorIds.length) {
+        const activeRequestingDoctors = await transaction.user.findMany({
+          where: { id: { in: requestingDoctorIds }, isActive: true },
+          select: { id: true },
+        });
+        if (activeRequestingDoctors.length) {
+          await transaction.message.createMany({
+            data: activeRequestingDoctors.map((recipient) => ({
+              senderId: userId,
+              receiverId: recipient.id,
+              content,
+            })),
+          });
+        }
+      }
 
       return transaction.examRequest.findMany({
         where: { requestGroupId },

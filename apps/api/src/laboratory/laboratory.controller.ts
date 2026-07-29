@@ -92,13 +92,13 @@ export class LaboratoryController {
   }
 
   @Post()
-  @Roles(Role.DOCTOR)
+  @Roles(Role.DOCTOR, Role.SURGEON, Role.MIDWIFE)
   request(@Body() dto: CreateExamDto, @CurrentUser() user: AuthenticatedUser) {
     return this.laboratory.request(dto, user.id);
   }
 
   @Post('batch')
-  @Roles(Role.DOCTOR)
+  @Roles(Role.DOCTOR, Role.SURGEON, Role.MIDWIFE)
   requestBatch(@Body() dto: CreateExamBatchDto, @CurrentUser() user: AuthenticatedUser) {
     return this.laboratory.requestBatch(dto, user.id);
   }

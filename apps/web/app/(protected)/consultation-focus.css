@@ -336,3 +336,138 @@
     padding: 12px;
   }
 }
+
+.consultation-workflow-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line, #e4e9ed);
+  border-left: 5px solid var(--brand, #087b68);
+  border-radius: 12px;
+  background: #f7faf9;
+}
+
+.consultation-workflow-state > div {
+  display: grid;
+  gap: 4px;
+}
+
+.consultation-workflow-state span {
+  color: var(--muted, #687784);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.consultation-workflow-state.stage-laboratory,
+.consultation-workflow-state.stage-imaging {
+  border-left-color: #2877b8;
+  background: #f2f8fd;
+}
+
+.consultation-workflow-state.stage-return_to_doctor {
+  border-left-color: #d28b08;
+  background: #fff8e9;
+}
+
+.consultation-workflow-state.stage-hospitalization {
+  border-left-color: #7a4eb3;
+  background: #f8f4fc;
+}
+
+.consultation-stage-label {
+  display: inline-flex;
+  max-width: 230px;
+  line-height: 1.35;
+  font-weight: 700;
+}
+
+.exam-count-summary,
+.waiting-patient-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.waiting-patient-kind {
+  margin-top: 4px;
+  color: var(--muted, #687784);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.waiting-patient-card.laboratory-return {
+  border-color: #e4b65f;
+  background: #fffaf0;
+}
+
+.consultation-exam-section {
+  border-color: color-mix(in srgb, var(--brand, #087b68) 28%, var(--line, #e4e9ed));
+}
+
+.pending-exam-list {
+  display: grid;
+  gap: 8px;
+}
+
+.pending-exam-list article {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid #c9d9e6;
+  border-radius: 10px;
+  background: #f4f8fb;
+}
+
+.pending-exam-list article > div {
+  display: grid;
+  gap: 2px;
+}
+
+.pending-exam-list article span {
+  color: var(--muted, #687784);
+  font-size: 0.78rem;
+}
+
+.consultation-decision-section {
+  border-width: 2px;
+}
+
+.decision-flow-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 13px;
+  border: 1px solid #b7d8cf;
+  border-radius: 10px;
+  background: #eef9f6;
+  line-height: 1.45;
+}
+
+.decision-flow-note svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.hospitalization-referral-flow ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+@media (max-width: 720px) {
+  .consultation-workflow-state {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+.consultation-temporary-lock {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.35rem;
+  white-space: nowrap;
+}

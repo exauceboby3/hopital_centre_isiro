@@ -110,7 +110,7 @@ export class EnterpriseController {
   }
 
   @Post('prescriptions')
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.DOCTOR, Role.SURGEON)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.DOCTOR, Role.SURGEON, Role.MIDWIFE)
   createPrescription(@Body() dto: CreatePrescriptionDto, @CurrentUser() user: AuthenticatedUser) {
     return this.enterprise.createPrescription(dto, user.id);
   }
