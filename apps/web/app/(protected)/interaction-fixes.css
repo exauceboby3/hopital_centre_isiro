@@ -1,0 +1,219 @@
+.app-notification-stack {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 10000;
+  display: grid;
+  width: min(390px, calc(100vw - 28px));
+  gap: 10px;
+  pointer-events: none;
+}
+
+.app-notification {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 13px 14px;
+  border: 1px solid var(--line, #e4e9ed);
+  border-left-width: 5px;
+  border-radius: 13px;
+  color: var(--ink, #17212b);
+  background: var(--surface, #fff);
+  box-shadow: 0 18px 48px rgb(15 23 42 / 20%);
+  pointer-events: auto;
+  animation: notification-enter 180ms ease-out;
+}
+
+.app-notification.success { border-left-color: #07865f; }
+.app-notification.error { border-left-color: #c32b20; }
+.app-notification.warning { border-left-color: #d28b08; }
+.app-notification.info { border-left-color: #2877b8; }
+.app-notification.success > svg { color: #07865f; }
+.app-notification.error > svg { color: #c32b20; }
+.app-notification.warning > svg { color: #d28b08; }
+.app-notification.info > svg { color: #2877b8; }
+
+.app-notification div {
+  display: grid;
+  gap: 3px;
+}
+
+.app-notification strong,
+.app-notification p {
+  margin: 0;
+}
+
+.app-notification p {
+  color: var(--muted, #687784);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.app-notification button {
+  display: grid;
+  place-items: center;
+  padding: 3px;
+  border: 0;
+  color: var(--muted, #687784);
+  background: transparent;
+  cursor: pointer;
+}
+
+@keyframes notification-enter {
+  from { opacity: 0; transform: translateY(-8px) translateX(8px); }
+  to { opacity: 1; transform: translateY(0) translateX(0); }
+}
+
+.modal-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 5000 !important;
+  display: grid !important;
+  align-items: center;
+  justify-items: center;
+  padding: 20px;
+  overflow: auto;
+  background: rgb(4 27 25 / 66%);
+  backdrop-filter: blur(3px);
+}
+
+.modal-card {
+  position: relative;
+  width: min(760px, 100%);
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-radius: 18px;
+  background: var(--surface, #fff);
+  box-shadow: 0 30px 90px rgb(0 0 0 / 28%);
+}
+
+.modal-card-wide {
+  width: min(1180px, 100%);
+}
+
+.modal-header {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  margin-bottom: 16px;
+  padding-top: 4px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line, #e4e9ed);
+  background: var(--surface, #fff);
+}
+
+.modal-header .icon-button {
+  flex: 0 0 auto;
+}
+
+.patient-clickable-row {
+  cursor: pointer;
+}
+
+.patient-clickable-row:hover,
+.patient-clickable-row:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--brand, #087b68) 7%, var(--surface, #fff));
+}
+
+.payment-required-note {
+  display: block;
+  width: fit-content;
+  margin-top: 7px;
+  padding: 4px 7px;
+  border-radius: 7px;
+  color: #9a3412;
+  background: #fff1e8;
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.payment-gate-notice {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 13px 14px;
+  border: 1px solid #f1bb82;
+  border-radius: 12px;
+  color: #8a4108;
+  background: #fff8ed;
+}
+
+.payment-gate-notice span {
+  color: #7b5a3b;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+body.hospital-print-mode .sidebar,
+body.hospital-print-mode .topbar,
+body.hospital-print-mode .sidebar-overlay,
+body.hospital-print-mode .emergency-stack,
+body.hospital-print-mode .waiting-toast-stack,
+body.hospital-print-mode .offline-banner,
+body.hospital-print-mode .global-shell-error,
+body.hospital-print-mode .laboratory-patient-access,
+body.hospital-print-mode .profile-photo-manager {
+  display: none !important;
+}
+
+body.hospital-print-mode .app-shell,
+body.hospital-print-mode .content-shell {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+}
+
+body.hospital-print-mode .page-content {
+  width: 100% !important;
+  max-width: none !important;
+  min-height: 100dvh;
+  margin: 0 !important;
+  padding: 20px !important;
+}
+
+body.hospital-print-mode .print-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  border-radius: 12px;
+  background: #f5f8f8;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 8%);
+}
+
+.availability-card.available {
+  border-color: #9bd8c6;
+  background: #effbf7;
+}
+
+.availability-card.busy {
+  border-color: #f0b7ae;
+  background: #fff4f2;
+}
+
+@media (max-width: 640px) {
+  .app-notification-stack {
+    top: 10px;
+    right: 10px;
+  }
+
+  .modal-backdrop {
+    align-items: end;
+    padding: 8px;
+  }
+
+  .modal-card,
+  .modal-card-wide {
+    width: 100%;
+    max-height: calc(100dvh - 16px);
+    border-radius: 16px 16px 8px 8px;
+  }
+
+  body.hospital-print-mode .page-content {
+    padding: 8px !important;
+  }
+}

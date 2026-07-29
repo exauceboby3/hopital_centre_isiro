@@ -1,0 +1,21 @@
+.role-nav-extension {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.7rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.role-nav-title {
+  padding: 0 0.8rem 0.25rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.62;
+}
+
+.sidebar-nav a[hidden] {
+  display: none !important;
+}

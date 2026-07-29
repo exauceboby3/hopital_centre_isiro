@@ -1,0 +1,459 @@
+.segmented-control {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin: 0 0 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.segmented-control button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  color: var(--muted);
+  background: transparent;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.segmented-control button.active {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.waiting-room-panel {
+  margin-bottom: 20px;
+}
+
+.waiting-patient-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+}
+
+.waiting-patient-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--canvas);
+}
+
+.waiting-patient-card > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.waiting-patient-card time {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.waiting-patient-card .primary-button {
+  grid-column: 1 / -1;
+  justify-content: center;
+}
+
+.signed-record {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 5px;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.clinical-consultation-form {
+  display: grid;
+  gap: 18px;
+}
+
+.clinical-vitals-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--primary) 7%, var(--surface));
+}
+
+.clinical-vitals-strip span {
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: var(--surface);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.clinical-form-section {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-title > span {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 50%;
+  color: white;
+  background: var(--primary);
+  font-weight: 800;
+}
+
+.section-title > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.section-title small {
+  color: var(--muted);
+}
+
+.clinical-decision-panel {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--canvas);
+}
+
+.exam-catalog-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  max-height: 310px;
+  overflow-y: auto;
+}
+
+.exam-catalog-groups fieldset {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.exam-catalog-groups legend {
+  padding: 0 5px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.clinical-actions {
+  position: sticky;
+  bottom: -1px;
+  z-index: 3;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.patient-journey-detail {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.patient-journey-detail > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.patient-journey-detail .full {
+  grid-column: 1 / -1;
+}
+
+.laboratory-patient-access {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.lab-catalog-editor {
+  display: grid;
+  grid-template-columns: minmax(250px, 0.72fr) minmax(0, 1.8fr);
+  min-height: 560px;
+  max-height: 74dvh;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.lab-catalog-list {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: var(--canvas);
+}
+
+.lab-catalog-list-heading {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.lab-catalog-list-heading input {
+  width: 100%;
+}
+
+.lab-catalog-list-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.lab-catalog-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lab-catalog-item:hover,
+.lab-catalog-item.active {
+  background: color-mix(in srgb, var(--primary) 9%, var(--surface));
+}
+
+.lab-catalog-item > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.lab-catalog-item small {
+  color: var(--muted);
+}
+
+.lab-catalog-form {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px;
+}
+
+.lab-result-fields-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 20px 0 10px;
+}
+
+.lab-result-fields-heading > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.lab-result-fields-heading small {
+  color: var(--muted);
+}
+
+.lab-result-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.lab-result-field-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--canvas);
+}
+
+.lab-result-field-number {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  font-weight: 800;
+}
+
+.profile-photo-manager {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+
+.profile-photo-preview {
+  position: relative;
+}
+
+.profile-photo-camera {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 3px solid var(--surface);
+  border-radius: 50%;
+  color: white;
+  background: var(--primary);
+  cursor: pointer;
+}
+
+.profile-photo-manager > div:last-child {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+
+.profile-photo-manager h2,
+.profile-photo-manager p {
+  margin: 0;
+}
+
+.profile-photo-rules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profile-photo-rules span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.patient-history-date-group {
+  display: grid;
+  gap: 10px;
+}
+
+.patient-history-date-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--primary);
+  background: var(--surface);
+  font-weight: 800;
+}
+
+.patient-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px 10px;
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.patient-history-signature {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .lab-catalog-editor {
+    grid-template-columns: 1fr;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .lab-catalog-list {
+    max-height: 260px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .lab-catalog-form {
+    overflow: visible;
+  }
+}
+
+@media (max-width: 640px) {
+  .segmented-control,
+  .segmented-control button,
+  .clinical-actions,
+  .lab-result-fields-heading,
+  .profile-photo-rules {
+    width: 100%;
+  }
+
+  .segmented-control button {
+    justify-content: center;
+  }
+
+  .patient-journey-detail,
+  .profile-photo-manager {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-photo-manager {
+    justify-items: center;
+    text-align: center;
+  }
+
+  .profile-photo-manager > div:last-child {
+    justify-items: center;
+  }
+
+  .lab-result-field-card {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .lab-result-field-card > .icon-button {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+  }
+}

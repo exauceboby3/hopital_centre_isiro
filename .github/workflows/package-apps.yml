@@ -1,0 +1,87 @@
+name: Applications installables
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/reconstruction-typescript]
+    paths:
+      - 'packaging/**'
+      - '.github/workflows/package-apps.yml'
+  pull_request:
+    paths:
+      - 'packaging/**'
+      - '.github/workflows/package-apps.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Setup Windows
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: packaging/desktop
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Installer les dépendances du setup
+        shell: pwsh
+        run: npm install --no-audit --no-fund
+
+      - name: Générer le setup Windows
+        shell: pwsh
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run dist
+
+      - name: Publier le setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: CHI-Isiro-Windows
+          path: packaging/desktop/dist/*.exe
+          if-no-files-found: error
+          retention-days: 30
+
+  android:
+    name: APK Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: packaging/android
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Installer Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Générer l’APK
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Préparer le fichier final
+        run: cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/CHI-Isiro-Android.apk
+
+      - name: Publier l’APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: CHI-Isiro-Android
+          path: packaging/android/app/build/outputs/apk/debug/CHI-Isiro-Android.apk
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,112 @@
+name: hopital_isiro
+
+x-api-environment: &api-environment
+  NODE_ENV: production
+  API_PORT: 4000
+  WEB_URL: ${HOSPITAL_PUBLIC_URL}
+  DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+  JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+  JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+  JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+  JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
+  VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+  VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:administration@hopitalcentreisiro.online}
+  PROFILE_UPLOAD_DIR: /app/uploads/profiles
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - hospital_postgres_data:/var/lib/postgresql/data
+    networks:
+      - hospital_internal
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+      target: runner
+    restart: unless-stopped
+    environment: *api-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:${HOSPITAL_API_PORT:-4100}:4000'
+    volumes:
+      - hospital_profile_uploads:/app/uploads
+    networks:
+      - hospital_internal
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:4000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        NEXT_PUBLIC_API_URL: ${HOSPITAL_PUBLIC_URL}/api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:${HOSPITAL_WEB_PORT:-3100}:3000'
+    networks:
+      - hospital_internal
+    security_opt:
+      - no-new-privileges:true
+
+  seed:
+    profiles: ['tools']
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+      target: builder
+    working_dir: /app/apps/api
+    command: ['npm', 'run', 'prisma:seed']
+    environment:
+      <<: *api-environment
+      SEED_SUPER_ADMIN_USERNAME: ${SEED_SUPER_ADMIN_USERNAME}
+      SEED_SUPER_ADMIN_PASSWORD: ${SEED_SUPER_ADMIN_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - hospital_internal
+    restart: 'no'
+
+volumes:
+  hospital_postgres_data:
+    name: hopital_isiro_postgres_data
+  hospital_profile_uploads:
+    name: hopital_isiro_profile_uploads
+
+networks:
+  hospital_internal:
+    name: hopital_isiro_internal

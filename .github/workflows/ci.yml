@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: hopital_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d hopital_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hopital_ci
+      JWT_ACCESS_SECRET: ci-access-secret-with-at-least-32-characters
+      JWT_REFRESH_SECRET: ci-refresh-secret-with-at-least-32-characters
+      WEB_URL: http://localhost:3000
+      NEXT_PUBLIC_API_URL: http://localhost:4000/api
+      NEXT_TELEMETRY_DISABLED: 1
+      SEED_SUPER_ADMIN_USERNAME: ci-superadmin
+      SEED_SUPER_ADMIN_PASSWORD: ci-only-strong-password
+
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Générer et valider le client Prisma
+        run: |
+          npm run db:generate
+          npm exec --workspace @hopital/api prisma validate
+
+      - name: Tester les migrations et les données initiales
+        run: |
+          npm run db:deploy
+          npm run db:seed
+
+      - name: Vérifier le code
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run lint 2>&1 | tee lint.log
+
+      - name: Conserver les diagnostics de lint
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-diagnostics
+          path: lint.log
+          if-no-files-found: ignore
+          retention-days: 3
+
+      - name: Exécuter les tests
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee test.log
+
+      - name: Conserver les diagnostics des tests
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-diagnostics
+          path: test.log
+          if-no-files-found: ignore
+          retention-days: 3
+
+      - name: Compiler les applications
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee build.log
+
+      - name: Conserver les diagnostics de compilation
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-diagnostics
+          path: build.log
+          if-no-files-found: ignore
+          retention-days: 3

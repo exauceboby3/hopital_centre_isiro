@@ -1,0 +1,37 @@
+.brand-mark {
+  overflow: hidden;
+  background: #004a44 url('/software-logo.svg') center / cover no-repeat !important;
+  box-shadow: 0 8px 22px rgb(0 42 39 / 24%);
+}
+
+.brand-mark > img,
+.brand-mark > svg {
+  opacity: 0 !important;
+}
+
+.software-logo-frame {
+  overflow: hidden;
+  border: 0 !important;
+  border-radius: 18px;
+  background: #004a44 !important;
+  box-shadow: 0 12px 30px rgb(0 42 39 / 22%);
+}
+
+.software-logo-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.showcase-logo.software-logo-frame {
+  width: 72px;
+  height: 72px;
+  padding: 0;
+}
+
+.mobile-logo.software-logo-frame {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+}

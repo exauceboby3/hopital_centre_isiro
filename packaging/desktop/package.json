@@ -1,0 +1,45 @@
+{
+  "name": "chi-isiro-desktop",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Application Windows du Centre Hospitalier d'Isiro",
+  "main": "main.cjs",
+  "scripts": {
+    "dist": "node generate-icon.cjs && electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "latest",
+    "electron-builder": "latest"
+  },
+  "build": {
+    "appId": "cd.isiro.hopital.desktop",
+    "productName": "CHI Isiro",
+    "asar": true,
+    "files": [
+      "main.cjs",
+      "offline.html",
+      "package.json",
+      "build/icon.png"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "CHI-Isiro-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "CHI Isiro"
+    }
+  }
+}

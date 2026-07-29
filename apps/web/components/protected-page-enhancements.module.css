@@ -1,0 +1,170 @@
+.labPanel,
+.photoPanel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+  padding: 16px 18px;
+}
+
+.panelCopy {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.panelCopy > div,
+.photoCopy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.panelCopy p,
+.photoCopy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.panelIcon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  flex: 0 0 42px;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.fieldsHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 24px 0 12px;
+}
+
+.fieldsHeading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.fieldsHeading span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.fieldList {
+  display: grid;
+  gap: 12px;
+}
+
+.fieldCard {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fbfdfd;
+}
+
+.fieldCardHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.removeButton {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  color: var(--danger);
+  background: #fff0ef;
+  cursor: pointer;
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.requiredField {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.requiredField input {
+  width: auto;
+  min-height: 0;
+  accent-color: var(--brand);
+}
+
+.photoPanel {
+  justify-content: flex-start;
+}
+
+.photoCopy {
+  flex: 1;
+}
+
+.photoCopy > strong {
+  font-size: 1rem;
+}
+
+.photoForm {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.photoForm > span {
+  max-width: 180px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.successText {
+  color: #047857;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.errorText {
+  color: var(--danger);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .labPanel,
+  .photoPanel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .fieldGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .photoForm {
+    justify-content: flex-start;
+  }
+}

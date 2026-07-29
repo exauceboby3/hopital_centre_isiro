@@ -1,0 +1,289 @@
+.patient-history-date-group {
+  min-width: 0;
+}
+
+.patient-history-class-folders {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 10px 0 2px;
+}
+
+.patient-history-class-folder {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border, #dfe7e5);
+  border-radius: 15px;
+  background: var(--surface, #fff);
+  box-shadow: 0 6px 20px rgb(15 23 42 / 4%);
+}
+
+.patient-history-folder-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  min-height: 58px;
+  padding: 13px 17px;
+  cursor: pointer;
+  list-style: none;
+  background: color-mix(in srgb, var(--primary, #087b68) 8%, var(--surface, #fff));
+}
+
+.patient-history-folder-summary::-webkit-details-marker {
+  display: none;
+}
+
+.patient-history-folder-summary::before {
+  content: '▸';
+  color: var(--primary, #087b68);
+  font-size: 0.9rem;
+  transition: transform 150ms ease;
+}
+
+.patient-history-class-folder[open] > .patient-history-folder-summary::before {
+  transform: rotate(90deg);
+}
+
+.patient-history-folder-summary strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink, #17212b);
+  font-size: 0.98rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.patient-history-folder-summary span {
+  color: var(--muted, #687784);
+  font-size: 0.78rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.patient-history-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.patient-history-class-table {
+  width: 100%;
+  min-width: 1040px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.patient-history-class-table .history-column-time {
+  width: 8%;
+}
+
+.patient-history-class-table .history-column-event {
+  width: 18%;
+}
+
+.patient-history-class-table .history-column-description {
+  width: 34%;
+}
+
+.patient-history-class-table .history-column-service {
+  width: 14%;
+}
+
+.patient-history-class-table .history-column-author {
+  width: 14%;
+}
+
+.patient-history-class-table .history-column-status {
+  width: 12%;
+}
+
+.patient-history-class-table th,
+.patient-history-class-table td {
+  min-width: 0;
+  padding: 13px 14px;
+  border-top: 1px solid var(--border, #dfe7e5);
+  text-align: left;
+  vertical-align: top;
+}
+
+.patient-history-class-table th {
+  color: var(--muted, #687784);
+  background: #f8fbfa;
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.patient-history-class-table td {
+  overflow-wrap: anywhere;
+  color: var(--ink, #17212b);
+  font-size: 0.84rem;
+  line-height: 1.48;
+  word-break: normal;
+}
+
+.patient-history-table-row:hover {
+  background: color-mix(in srgb, var(--primary, #087b68) 3%, white);
+}
+
+.history-time-cell {
+  color: #52616d;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.history-event-cell {
+  color: var(--ink, #17212b);
+  font-weight: 850;
+}
+
+.history-description-cell {
+  color: #34434f;
+  white-space: normal;
+}
+
+.history-service-cell,
+.history-author-cell {
+  color: var(--muted, #687784);
+}
+
+.history-status-cell {
+  white-space: nowrap;
+}
+
+.history-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 27px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: #075e52;
+  background: #dff3ed;
+  font-size: 0.72rem;
+  font-weight: 850;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.history-status-pill[data-status*='PENDING'],
+.history-status-pill[data-status*='ATTENTE'],
+.history-status-pill[data-status*='À PAYER'] {
+  color: #8a4b08;
+  background: #fff0d8;
+}
+
+.history-status-pill[data-status*='CANCEL'],
+.history-status-pill[data-status*='ANNUL'],
+.history-status-pill[data-status*='REJET'] {
+  color: #a1261c;
+  background: #fee9e7;
+}
+
+.biologist-extra-exam-slot {
+  margin-bottom: 16px;
+}
+
+.biologist-extra-exam-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 17px 19px;
+  border-color: color-mix(in srgb, var(--brand, #087b68) 38%, var(--line, #e4e9ed));
+  background: linear-gradient(135deg, #f2fbf8, #ffffff);
+}
+
+.biologist-extra-exam-panel > div {
+  display: grid;
+  gap: 4px;
+}
+
+.biologist-extra-exam-panel strong {
+  font-size: 1rem;
+}
+
+.biologist-extra-exam-panel small {
+  color: var(--muted, #687784);
+  line-height: 1.45;
+}
+
+@media (max-width: 900px) {
+  .patient-history-class-table {
+    min-width: 0;
+  }
+
+  .patient-history-class-table thead,
+  .patient-history-class-table colgroup {
+    display: none;
+  }
+
+  .patient-history-class-table,
+  .patient-history-class-table tbody,
+  .patient-history-class-table tr,
+  .patient-history-class-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .patient-history-table-row {
+    padding: 10px 14px;
+    border-top: 1px solid var(--border, #dfe7e5);
+  }
+
+  .patient-history-class-table td {
+    display: grid;
+    grid-template-columns: minmax(108px, 0.35fr) minmax(0, 1fr);
+    gap: 12px;
+    padding: 7px 0;
+    border: 0;
+  }
+
+  .patient-history-class-table td::before {
+    content: attr(data-label);
+    color: var(--muted, #687784);
+    font-size: 0.7rem;
+    font-weight: 850;
+    letter-spacing: 0.035em;
+    text-transform: uppercase;
+  }
+
+  .history-status-pill {
+    justify-self: start;
+  }
+}
+
+@media (max-width: 720px) {
+  .patient-history-folder-summary {
+    min-height: 54px;
+    padding: 12px 14px;
+  }
+
+  .patient-history-folder-summary strong {
+    font-size: 0.9rem;
+  }
+
+  .patient-history-folder-summary span {
+    font-size: 0.72rem;
+  }
+
+  .patient-history-class-table td {
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
+
+  .biologist-extra-exam-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .biologist-extra-exam-panel button {
+    width: 100%;
+  }
+}

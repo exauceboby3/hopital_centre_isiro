@@ -1,0 +1,4 @@
+ALTER TYPE "Role" ADD VALUE 'RECEPTIONIST';
+
+ALTER TABLE "User"
+ADD COLUMN "additionalRoles" "Role"[] NOT NULL DEFAULT ARRAY[]::"Role"[];

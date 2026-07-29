@@ -1,0 +1,16 @@
+.idea/
+.vscode/
+.env
+.env.server
+.env.local
+.env.*.local
+node_modules/
+.next/
+dist/
+coverage/
+*.log
+apps/api/uploads/*
+!apps/api/uploads/.gitkeep
+legacy/uploads/
+packaging/android/.gradle/
+packaging/android/build/

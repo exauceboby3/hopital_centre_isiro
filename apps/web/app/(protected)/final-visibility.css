@@ -1,0 +1,25 @@
+.consultation-prescription-slot {
+  display: none;
+}
+
+.consultation-prescription-slot.prescription-decision-active {
+  display: block;
+}
+
+.availability-card .status-badge,
+.invoice-ledger-modal .status-badge,
+.financial-status-table .status-badge,
+.doctor-queue-card .status-badge {
+  width: max-content;
+  max-width: 190px;
+  min-height: 0;
+  align-self: center;
+  justify-self: start;
+  padding: 6px 9px;
+  white-space: nowrap;
+}
+
+.availability-card .status-badge {
+  justify-self: end;
+  font-size: 0.7rem;
+}

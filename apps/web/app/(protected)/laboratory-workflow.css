@@ -1,0 +1,124 @@
+.status-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.clickable-row {
+  cursor: pointer;
+}
+
+.clickable-row:hover {
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+}
+
+.lab-request-summary,
+.lab-result-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--canvas);
+}
+
+.lab-entry-table input,
+.lab-entry-table select,
+.lab-entry-table textarea {
+  min-width: 145px;
+  width: 100%;
+}
+
+.required-mark {
+  color: var(--danger);
+}
+
+.lab-document-viewer {
+  display: grid;
+  min-height: 520px;
+  max-height: 72dvh;
+  place-items: center;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--canvas);
+}
+
+.lab-document-viewer iframe {
+  width: 100%;
+  height: 68dvh;
+  border: 0;
+}
+
+.lab-document-viewer img {
+  display: block;
+  max-width: 100%;
+  max-height: 68dvh;
+  object-fit: contain;
+}
+
+.laboratory-batch-panel {
+  margin-bottom: 18px;
+  border-left: 4px solid var(--primary);
+}
+
+.laboratory-batch-panel.attention {
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.laboratory-batch-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.laboratory-batch-grid article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--canvas);
+}
+
+.laboratory-batch-grid article > div {
+  display: grid;
+  gap: 3px;
+}
+
+.laboratory-batch-grid small {
+  color: var(--muted);
+}
+
+.laboratory-group-review {
+  display: grid;
+  gap: 14px;
+  max-height: 58dvh;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.compact-empty-state {
+  min-height: auto;
+  padding: 18px;
+}
+
+@media (max-width: 640px) {
+  .lab-request-summary,
+  .lab-result-context {
+    display: grid;
+  }
+
+  .lab-document-viewer {
+    min-height: 420px;
+  }
+
+  .laboratory-batch-grid article {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

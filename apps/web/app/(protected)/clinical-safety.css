@@ -1,0 +1,125 @@
+.clinical-safety-selector {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.8fr) minmax(320px, 1.2fr);
+  gap: 20px;
+  align-items: end;
+}
+
+.clinical-safety-selector > div:first-child {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.clinical-safety-selector span,
+.clinical-action-grid small,
+.clinical-mini-list small,
+.clinical-document-list small {
+  display: block;
+  color: var(--muted);
+}
+
+.clinical-action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.clinical-action-grid > button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 82px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+
+.clinical-action-grid > button:hover {
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.clinical-action-grid svg {
+  color: var(--primary);
+  flex: 0 0 auto;
+}
+
+.clinical-safety-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.clinical-safety-summary-grid .panel {
+  min-width: 0;
+}
+
+.clinical-safety-summary-grid .full-span {
+  grid-column: 1 / -1;
+}
+
+.triage-value {
+  display: block;
+  margin: 10px 0;
+  font-size: 1.05rem;
+}
+
+.triage-red { color: #b42318; }
+.triage-orange { color: #b54708; }
+.triage-yellow { color: #946200; }
+.triage-green { color: #067647; }
+.triage-blue { color: #175cd3; }
+
+.clinical-mini-list,
+.clinical-document-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.clinical-mini-list > div,
+.clinical-document-list > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.clinical-mini-list > div > span,
+.clinical-document-list > div > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.check-field {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.check-field.full {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 820px) {
+  .clinical-safety-selector,
+  .clinical-safety-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .clinical-safety-summary-grid .full-span {
+    grid-column: auto;
+  }
+}

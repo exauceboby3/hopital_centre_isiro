@@ -1,0 +1,339 @@
+.governance-patient-selector,
+.emergency-lookup-panel {
+  margin-bottom: 20px;
+}
+
+.governance-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.governance-summary-grid > article {
+  display: grid;
+  gap: 7px;
+  align-content: start;
+}
+
+.governance-summary-grid > article > svg {
+  opacity: 0.72;
+}
+
+.governance-summary-grid > article > span,
+.governance-summary-grid > article > small {
+  color: var(--muted-text, #647067);
+}
+
+.governance-summary-grid > article > strong {
+  font-size: clamp(1.15rem, 2vw, 1.65rem);
+}
+
+.governance-debt-card {
+  border-color: color-mix(in srgb, var(--danger, #b43a3a) 42%, transparent);
+}
+
+.governance-grace-current,
+.active-break-glass-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+
+.governance-grace-current > div,
+.active-break-glass-panel > div {
+  display: grid;
+  gap: 5px;
+}
+
+.governance-grace-current > div:last-child {
+  justify-items: end;
+}
+
+.governance-two-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin: 18px 0;
+}
+
+.governance-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border, #dce3df);
+}
+
+.governance-list-row:last-child {
+  border-bottom: 0;
+}
+
+.governance-list-row > div {
+  display: grid;
+  gap: 4px;
+}
+
+.governance-list-row span,
+.governance-list-row small {
+  color: var(--muted-text, #647067);
+}
+
+.governance-details,
+.episode-card {
+  border: 1px solid var(--border, #dce3df);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+.governance-details > summary,
+.episode-card > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  background: var(--surface-subtle, #f7f9f8);
+}
+
+.governance-details > summary::-webkit-details-marker,
+.episode-card > summary::-webkit-details-marker {
+  display: none;
+}
+
+.governance-details > summary > span {
+  color: var(--muted-text, #647067);
+}
+
+.governance-details > div,
+.episode-content {
+  padding: 14px 16px;
+}
+
+.episode-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.episode-card > summary > div {
+  display: grid;
+  gap: 4px;
+}
+
+.episode-card > summary small {
+  color: var(--muted-text, #647067);
+}
+
+.episode-subfolders {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.episode-subfolders details {
+  border: 1px solid var(--border, #dce3df);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.episode-subfolders summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.governance-summary-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin: 12px 0 18px;
+}
+
+.death-governance-panel {
+  margin-top: 18px;
+}
+
+.governance-checkbox {
+  display: flex !important;
+  grid-template-columns: auto 1fr !important;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.waiting-room-heading-count {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border: 1px solid var(--border, #dce3df);
+  border-radius: 14px;
+}
+
+.waiting-room-heading-count strong {
+  font-size: 1.35rem;
+}
+
+.doctor-queue-list {
+  display: grid;
+  gap: 12px;
+}
+
+.doctor-queue-card {
+  display: grid;
+  grid-template-columns: 86px minmax(180px, 1.5fr) minmax(170px, 1fr) minmax(150px, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--border, #dce3df);
+  border-radius: 14px;
+}
+
+.doctor-queue-card.next {
+  border-width: 2px;
+  border-color: var(--primary, #176d4d);
+}
+
+.doctor-queue-position,
+.doctor-queue-patient,
+.doctor-queue-time,
+.doctor-queue-status {
+  display: grid;
+  gap: 4px;
+}
+
+.doctor-queue-position {
+  text-align: center;
+}
+
+.doctor-queue-position strong {
+  font-size: 1.8rem;
+}
+
+.doctor-queue-card span,
+.doctor-queue-card small {
+  color: var(--muted-text, #647067);
+}
+
+.waiting-toast-queue-info {
+  margin-top: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--primary, #176d4d);
+}
+
+.emergency-search-form,
+.emergency-search-line {
+  width: 100%;
+}
+
+.emergency-search-line {
+  display: flex;
+  gap: 10px;
+}
+
+.emergency-search-line input {
+  flex: 1;
+}
+
+.emergency-result-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.emergency-patient-card {
+  cursor: pointer;
+  text-align: left;
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid var(--border, #dce3df);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  color: inherit;
+}
+
+.emergency-patient-card.selected {
+  border-width: 2px;
+  border-color: var(--danger, #b43a3a);
+}
+
+.emergency-patient-card span,
+.emergency-patient-card small {
+  color: var(--muted-text, #647067);
+}
+
+.break-glass-form-panel,
+.active-break-glass-panel {
+  margin-top: 18px;
+}
+
+.active-break-glass-panel {
+  border-color: var(--danger, #b43a3a);
+}
+
+.field span:has(svg) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 1100px) {
+  .governance-summary-grid,
+  .emergency-result-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .doctor-queue-card {
+    grid-template-columns: 70px 1fr 1fr;
+  }
+
+  .doctor-queue-card .row-actions,
+  .doctor-queue-status {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 760px) {
+  .governance-summary-grid,
+  .governance-two-columns,
+  .episode-subfolders,
+  .emergency-result-list {
+    grid-template-columns: 1fr;
+  }
+
+  .governance-grace-current,
+  .active-break-glass-panel,
+  .governance-list-row,
+  .waiting-room-heading-count {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .governance-grace-current > div:last-child {
+    justify-items: start;
+  }
+
+  .doctor-queue-card {
+    grid-template-columns: 64px 1fr;
+  }
+
+  .doctor-queue-time,
+  .doctor-queue-status,
+  .doctor-queue-card .row-actions {
+    grid-column: 1 / -1;
+  }
+
+  .emergency-search-line {
+    flex-direction: column;
+  }
+}

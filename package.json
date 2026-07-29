@@ -1,0 +1,27 @@
+{
+  "name": "hopital-centre-isiro",
+  "version": "2.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=11.0.0"
+  },
+  "scripts": {
+    "dev:api": "npm run start:dev --workspace @hopital/api",
+    "dev:web": "npm run dev --workspace @hopital/web",
+    "build": "npm run build --workspace @hopital/api && npm run build --workspace @hopital/web",
+    "lint": "npm run lint --workspace @hopital/api && npm run lint --workspace @hopital/web",
+    "test": "npm run test --workspace @hopital/api && npm run test --workspace @hopital/web",
+    "db:generate": "npm run prisma:generate --workspace @hopital/api",
+    "db:migrate": "npm run prisma:migrate --workspace @hopital/api",
+    "db:deploy": "npm run prisma:deploy --workspace @hopital/api",
+    "db:seed": "npm run prisma:seed --workspace @hopital/api",
+    "format": "prettier --write \"apps/**/*.{ts,tsx,js,mjs,cjs,json,css,md}\" \"*.{json,md,yml}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.9.5"
+  }
+}

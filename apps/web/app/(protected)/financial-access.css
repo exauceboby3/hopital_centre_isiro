@@ -1,0 +1,188 @@
+.financial-patient-selector,
+.financial-access-actions,
+.grace-active-panel,
+.financial-patient-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.financial-patient-selector > div:first-child,
+.financial-access-actions > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.financial-patient-selector > div:first-child > div,
+.financial-access-actions > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.financial-patient-selector > .field {
+  width: min(560px, 100%);
+}
+
+.financial-patient-header {
+  justify-content: flex-start;
+  padding: 18px 20px;
+}
+
+.financial-patient-header > div:nth-child(2) {
+  min-width: 0;
+  flex: 1;
+}
+
+.financial-patient-header h2,
+.financial-patient-header p {
+  margin: 0;
+}
+
+.financial-patient-header h2 {
+  margin-top: 3px;
+  font-size: clamp(1.25rem, 2vw, 1.7rem);
+  text-transform: capitalize;
+}
+
+.financial-patient-header p {
+  margin-top: 5px;
+  color: var(--muted, #687784);
+}
+
+.financial-patient-avatar {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  flex: 0 0 54px;
+  place-items: center;
+  border-radius: 16px;
+  color: white;
+  background: linear-gradient(145deg, var(--brand-dark, #075e52), var(--brand, #087b68));
+  font-size: 1.05rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+}
+
+.financial-status-panel,
+.financial-invoice-history {
+  margin-bottom: 18px;
+  overflow: hidden;
+}
+
+.financial-status-table {
+  min-width: 880px;
+}
+
+.financial-status-table td {
+  vertical-align: middle;
+}
+
+.financial-status-table td:first-child {
+  min-width: 240px;
+}
+
+.financial-status-table td:first-child strong,
+.financial-status-table td:first-child span {
+  display: block;
+}
+
+.financial-status-table td:first-child span {
+  margin-top: 3px;
+  color: var(--muted, #687784);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.financial-account-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.financial-account-cards > article {
+  display: grid;
+  gap: 7px;
+  min-height: 112px;
+  align-content: center;
+}
+
+.financial-account-cards span {
+  color: var(--muted, #687784);
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.financial-account-cards strong {
+  font-size: clamp(1.05rem, 2vw, 1.45rem);
+}
+
+.grace-active-panel {
+  border-color: #8bcfbe;
+  background: #effaf7;
+}
+
+.grace-active-panel > div {
+  display: grid;
+  gap: 4px;
+}
+
+.grace-active-panel p,
+.grace-active-panel small {
+  margin: 0;
+}
+
+.grace-active-panel small {
+  color: var(--muted, #687784);
+}
+
+.financial-invoice-history table {
+  min-width: 920px;
+}
+
+.financial-invoice-history td:nth-child(3) {
+  min-width: 220px;
+  max-width: 360px;
+  white-space: normal;
+}
+
+.financial-access-actions .row-actions {
+  justify-content: flex-end;
+}
+
+.nursing-administration-summary {
+  margin-bottom: 14px;
+}
+
+@media (max-width: 1100px) {
+  .financial-account-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .financial-patient-selector,
+  .financial-access-actions,
+  .grace-active-panel,
+  .financial-patient-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .financial-patient-header {
+    align-items: flex-start;
+  }
+
+  .financial-account-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .financial-access-actions .row-actions,
+  .financial-access-actions .row-actions button,
+  .grace-active-panel button {
+    width: 100%;
+  }
+}

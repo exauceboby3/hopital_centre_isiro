@@ -1,0 +1,85 @@
+.push-notification-card {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 700;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  width: min(560px, calc(100vw - 2rem));
+  max-height: min(220px, calc(100dvh - 2rem));
+  padding: 0.9rem 1rem;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--primary, #00665f) 35%, transparent);
+  border-radius: 16px;
+  background: var(--surface, #ffffff);
+  box-shadow: 0 12px 32px rgb(8 40 38 / 16%);
+  contain: layout paint;
+}
+
+.push-notification-card > svg {
+  color: var(--primary, #00665f);
+}
+
+.push-notification-card > div {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.push-notification-card strong {
+  color: var(--text, #142321);
+  font-size: 0.95rem;
+}
+
+.push-notification-card span {
+  color: var(--muted, #5c6f6c);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.push-notification-card button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 38px;
+  padding: 0.55rem 0.8rem;
+  border: 0;
+  border-radius: 10px;
+  background: var(--primary, #00665f);
+  color: #fff;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.push-notification-card button.icon-only {
+  width: 34px;
+  min-height: 34px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted, #5c6f6c);
+}
+
+.push-notification-card button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+@media (max-width: 760px) {
+  .push-notification-card {
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: calc(0.75rem + env(safe-area-inset-bottom));
+    width: auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    padding: 0.8rem;
+  }
+
+  .push-notification-card button:not(.icon-only) {
+    grid-column: 2 / -1;
+  }
+}

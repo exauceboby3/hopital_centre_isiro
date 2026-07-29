@@ -1,0 +1,4 @@
+/* Le catalogue professionnel est exposé par LaboratoryPatientAccess. */
+.laboratory-patient-access ~ .page-heading .heading-actions > .secondary-button {
+  display: none;
+}

@@ -1,0 +1,18 @@
+tr.print-date-break td {
+  border-top: 8px solid var(--surface, #ffffff);
+  background: color-mix(in srgb, var(--primary, #087f6a) 7%, #ffffff);
+}
+
+tr.print-date-break td:first-child {
+  color: var(--primary, #087f6a);
+  font-weight: 800;
+}
+
+@media print {
+  tr.print-date-break td {
+    border-top: 5mm solid #ffffff;
+    background: #f2f8f6 !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}

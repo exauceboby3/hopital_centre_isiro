@@ -1,0 +1,406 @@
+/* Stabilisation globale des fenêtres et des interactions */
+.modal-backdrop {
+  z-index: 1000;
+  padding: clamp(12px, 3vw, 34px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  pointer-events: auto;
+}
+
+.modal-card {
+  position: relative;
+  z-index: 1001;
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  pointer-events: auto;
+}
+
+.modal-card button,
+.modal-card input,
+.modal-card select,
+.modal-card textarea,
+.modal-card a {
+  pointer-events: auto;
+}
+
+.modal-actions {
+  position: sticky;
+  bottom: -1px;
+  z-index: 3;
+  margin-top: 20px;
+  padding-top: 14px;
+  padding-bottom: 2px;
+  background: linear-gradient(to bottom, rgb(255 255 255 / 75%), var(--surface, #fff) 32%);
+}
+
+/* Facturation : lignes structurées et lisibles */
+.invoice-ledger-modal {
+  width: min(1120px, 100%);
+}
+
+.invoice-ledger-modal .compact-modal-list {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--line, #e4e9ed);
+  border-radius: 14px;
+}
+
+.invoice-ledger-modal .invoice-modal-row {
+  display: grid;
+  grid-template-columns: 28px minmax(230px, 1.35fr) minmax(130px, 0.65fr) auto minmax(210px, auto);
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 15px 16px;
+  border: 0;
+  border-top: 1px solid var(--line, #e4e9ed);
+  border-radius: 0;
+  background: var(--surface, #fff);
+}
+
+.invoice-ledger-modal .invoice-modal-row:first-child {
+  border-top: 0;
+}
+
+.invoice-ledger-modal .invoice-modal-row > div {
+  min-width: 0;
+}
+
+.invoice-ledger-modal .invoice-modal-row > div:nth-child(2) {
+  display: grid;
+  gap: 4px;
+}
+
+.invoice-ledger-modal .invoice-modal-row > div:nth-child(2) span {
+  color: var(--muted, #687784);
+  line-height: 1.4;
+  white-space: normal;
+}
+
+.invoice-ledger-modal .invoice-modal-amount {
+  display: grid;
+  gap: 3px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.invoice-ledger-modal .invoice-modal-amount span {
+  color: var(--muted, #687784);
+  font-size: 0.78rem;
+}
+
+.invoice-ledger-modal .invoice-modal-row .row-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.invoice-ledger-modal[data-invoice-count='1'] .invoice-modal-row {
+  grid-template-columns: 28px minmax(260px, 1fr) minmax(140px, auto) auto minmax(190px, auto);
+}
+
+/* Salle d’attente : présentation tabulaire */
+.doctor-queue-table {
+  overflow: hidden;
+  border: 1px solid var(--border, #dce3df);
+  border-radius: 16px;
+}
+
+.doctor-queue-table-head,
+.doctor-queue-card {
+  display: grid;
+  grid-template-columns: 72px minmax(230px, 1.45fr) minmax(170px, 0.9fr) minmax(220px, 1fr) minmax(210px, auto);
+  align-items: center;
+  gap: 16px;
+}
+
+.doctor-queue-table-head {
+  padding: 11px 16px;
+  color: var(--muted, #687784);
+  background: #f7f9f9;
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.doctor-queue-list {
+  gap: 0;
+}
+
+.doctor-queue-card {
+  padding: 16px;
+  border: 0;
+  border-top: 1px solid var(--border, #dce3df);
+  border-radius: 0;
+  background: white;
+}
+
+.doctor-queue-card:first-child {
+  border-top: 0;
+}
+
+.doctor-queue-card.next {
+  border-width: 0;
+  border-left: 4px solid var(--primary, #176d4d);
+  background: color-mix(in srgb, var(--primary, #176d4d) 4%, white);
+}
+
+.doctor-queue-position {
+  width: 48px;
+  height: 48px;
+  place-content: center;
+  justify-self: center;
+  border-radius: 14px;
+  color: var(--primary, #176d4d);
+  background: color-mix(in srgb, var(--primary, #176d4d) 10%, white);
+}
+
+.doctor-queue-position strong {
+  font-size: 1.45rem;
+}
+
+.doctor-queue-patient strong {
+  color: var(--primary, #087b68);
+  text-transform: capitalize;
+}
+
+.doctor-queue-time strong {
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.doctor-queue-status {
+  min-width: 0;
+}
+
+.doctor-queue-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+}
+
+.doctor-queue-actions button {
+  justify-content: center;
+  white-space: nowrap;
+}
+
+/* Orientation médecin */
+.availability-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.availability-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px 14px;
+  min-height: 132px;
+  padding: 17px 18px;
+  border: 1px solid var(--line, #e4e9ed);
+  border-left: 4px solid #94a3b8;
+  border-radius: 14px;
+  background: white;
+}
+
+.availability-card.available {
+  border-left-color: #16845f;
+  background: #f5fbf8;
+}
+
+.availability-card.busy {
+  border-left-color: #d97706;
+  background: #fffaf2;
+}
+
+.availability-card > div {
+  min-width: 0;
+}
+
+.availability-card > div strong,
+.availability-card > div span,
+.availability-card small {
+  display: block;
+}
+
+.availability-card > div strong {
+  font-size: 1rem;
+  text-transform: capitalize;
+}
+
+.availability-card > div span,
+.availability-card small {
+  margin-top: 4px;
+  color: var(--muted, #687784);
+}
+
+.availability-card small {
+  grid-column: 1 / -1;
+}
+
+/* Prescription : invisible tant que la décision Prescription n’est pas sélectionnée */
+.consultation-prescription-slot[hidden] {
+  display: none !important;
+}
+
+.consultation-prescription-slot.prescription-decision-active {
+  display: block;
+  margin-top: 16px;
+  animation: prescription-reveal 160ms ease-out;
+}
+
+@keyframes prescription-reveal {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Action biologiste */
+.biologist-extra-exam-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.biologist-extra-exam-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  color: white;
+  background: linear-gradient(145deg, var(--brand-dark, #075e52), var(--brand, #087b68));
+}
+
+/* Installation PWA */
+.install-app-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--brand, #087b68) 35%, transparent);
+  border-radius: 10px;
+  color: var(--brand-dark, #075e52);
+  background: var(--brand-soft, #e5f5f1);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.install-app-button:hover {
+  border-color: var(--brand, #087b68);
+}
+
+.ios-install-steps {
+  display: grid;
+  gap: 12px;
+}
+
+.ios-install-steps > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  padding: 14px;
+  border: 1px solid var(--line, #e4e9ed);
+  border-radius: 13px;
+  background: #fafcfc;
+}
+
+.ios-install-steps svg {
+  flex: 0 0 auto;
+  color: var(--brand, #087b68);
+}
+
+.ios-install-steps span,
+.ios-install-steps strong,
+.ios-install-steps small {
+  display: block;
+}
+
+.ios-install-steps small {
+  margin-top: 4px;
+  color: var(--muted, #687784);
+  line-height: 1.45;
+}
+
+@media (max-width: 1120px) {
+  .doctor-queue-table-head {
+    display: none;
+  }
+
+  .doctor-queue-card {
+    grid-template-columns: 64px minmax(220px, 1fr) minmax(170px, 0.8fr);
+  }
+
+  .doctor-queue-status,
+  .doctor-queue-actions {
+    grid-column: 2 / -1;
+  }
+
+  .invoice-ledger-modal .invoice-modal-row {
+    grid-template-columns: 28px minmax(230px, 1fr) minmax(130px, auto) auto;
+  }
+
+  .invoice-ledger-modal .invoice-modal-row .row-actions {
+    grid-column: 2 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .modal-backdrop {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal-card,
+  .modal-card-wide,
+  .invoice-ledger-modal {
+    width: 100%;
+    max-height: 96dvh;
+    border-radius: 18px 18px 0 0;
+  }
+
+  .doctor-queue-card {
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .doctor-queue-time,
+  .doctor-queue-status,
+  .doctor-queue-actions {
+    grid-column: 1 / -1;
+  }
+
+  .doctor-queue-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .invoice-ledger-modal .invoice-modal-row,
+  .invoice-ledger-modal[data-invoice-count='1'] .invoice-modal-row {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .invoice-ledger-modal .invoice-modal-amount,
+  .invoice-ledger-modal .invoice-modal-row > .status-badge,
+  .invoice-ledger-modal .invoice-modal-row .row-actions {
+    grid-column: 2;
+    justify-self: start;
+    text-align: left;
+  }
+
+  .biologist-extra-exam-panel {
+    grid-template-columns: auto 1fr;
+  }
+
+  .biologist-extra-exam-panel button {
+    grid-column: 1 / -1;
+  }
+
+  .install-app-button span {
+    display: none;
+  }
+}

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Logo CHI Isiro</title>
+  <desc id="desc">Symbole médical géométrique vert et jaune sur fond vert foncé.</desc>
+  <rect width="512" height="512" rx="92" fill="#004a44"/>
+  <rect x="196" y="56" width="120" height="120" rx="22" fill="#49b36b"/>
+  <rect x="106" y="146" width="120" height="120" rx="22" fill="#1aa066"/>
+  <rect x="286" y="146" width="120" height="120" rx="22" fill="#b7db2d"/>
+  <rect x="196" y="236" width="120" height="120" rx="22" fill="#f0df0b"/>
+  <rect x="196" y="326" width="120" height="120" rx="22" fill="#7fce29"/>
+  <rect x="214" y="214" width="84" height="84" rx="18" fill="#eadf13"/>
+  <circle cx="384" cy="90" r="28" fill="#0d776e"/>
+</svg>
