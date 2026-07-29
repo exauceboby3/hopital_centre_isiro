@@ -1,0 +1,2 @@
+ALTER TYPE "PatientJourneyStage"
+ADD VALUE IF NOT EXISTS 'IMAGING';
