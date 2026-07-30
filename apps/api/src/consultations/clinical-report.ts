@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-export const CLINICAL_REPORT_VERSION = 1;
+export const CLINICAL_REPORT_VERSION = 2;
 
 export type ConsultationDecision =
   | 'CONTINUE'
@@ -9,6 +9,7 @@ export type ConsultationDecision =
   | 'HOSPITALIZATION'
   | 'TRANSFER'
   | 'PRESCRIPTION'
+  | 'FOLLOW_UP'
   | 'DISCHARGE'
   | 'COMPLETE';
 
@@ -22,6 +23,11 @@ export interface ClinicalReportSections {
   diagnosis?: string;
   treatmentPlan?: string;
   decision?: ConsultationDecision;
+  preLaboratoryLockedAt?: string;
+  laboratoryInterpretation?: string;
+  postLaboratoryDiagnosis?: string;
+  postLaboratoryPlan?: string;
+  postLaboratoryNotes?: string;
   amendmentReason?: string;
   amendedAt?: string;
   amendedById?: string;
@@ -106,7 +112,7 @@ export function createMedicalSignature(input: {
   return {
     version: 1,
     doctorUserId: input.doctorUserId,
-    doctorName: input.doctorName,
+    doctorName,
     licenseNumber: input.licenseNumber ?? undefined,
     signedAt,
     hash: createHash('sha256').update(payload).digest('hex'),
