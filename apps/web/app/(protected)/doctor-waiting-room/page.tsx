@@ -62,10 +62,12 @@ const patientName = (row: WaitingPatient) =>
   [row.lastName, row.postName, row.firstName].filter(Boolean).join(' ');
 
 function cleanServiceLabel(value: string) {
-  return value
-    .replace(/\s+(?:avec\s+)?consultations?\s+inclus(?:e|es)?\s+dans\s+la\s+fiche\s+mensuelle/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim() || 'Consultation';
+  return (
+    value
+      .replace(/\s+(?:avec\s+)?consultations?\s+inclus(?:e|es)?\s+dans\s+la\s+fiche\s+mensuelle/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim() || 'Consultation'
+  );
 }
 
 function waitingLabel(seconds: number) {
@@ -102,7 +104,7 @@ export default function DoctorWaitingRoomPage() {
 
   useEffect(() => {
     void load();
-    const polling = window.setInterval(() => void load(), 5_000);
+    const polling = window.setInterval(() => void load(), 15_000);
     const clock = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => {
       window.clearInterval(polling);
@@ -135,7 +137,7 @@ export default function DoctorWaitingRoomPage() {
       await api(`/appointments/${row.id}/acknowledge`, { method: 'PATCH' });
       notifySuccess(`${patientName(row)} est maintenant en consultation.`, 'Patient reçu');
       setRows((current) => current.filter((item) => item.id !== row.id));
-      router.push('/consultations');
+      router.push(`/consultations?appointmentId=${encodeURIComponent(row.id)}`);
     } catch (reason) {
       notifyError(reason instanceof Error ? reason.message : 'Impossible de recevoir le patient.');
     } finally {
@@ -204,7 +206,9 @@ export default function DoctorWaitingRoomPage() {
         </div>
 
         {loading ? (
-          <div className="empty-state"><Activity className="spin" /> Chargement de la file…</div>
+          <div className="empty-state">
+            <Activity className="spin" /> Chargement de la file…
+          </div>
         ) : queue.length === 0 ? (
           <div className="empty-state">
             <Stethoscope />
@@ -249,7 +253,8 @@ export default function DoctorWaitingRoomPage() {
                     <small>
                       {[row.doctorLastName, row.doctorPostName, row.doctorFirstName]
                         .filter(Boolean)
-                        .join(' ')} · {row.specialty}
+                        .join(' ')}{' '}
+                      · {row.specialty}
                     </small>
                   </div>
                   <div className="row-actions doctor-queue-actions">
@@ -305,12 +310,20 @@ export default function DoctorWaitingRoomPage() {
               </label>
               <label className="field full">
                 <span>Motif du transfert</span>
-                <textarea rows={3} value={transferReason} onChange={(event) => setTransferReason(event.target.value)} />
+                <textarea
+                  rows={3}
+                  value={transferReason}
+                  onChange={(event) => setTransferReason(event.target.value)}
+                />
               </label>
             </div>
             <div className="modal-actions">
-              <button type="button" className="secondary-button" onClick={() => setTransferring(null)}>Annuler</button>
-              <button className="primary-button" disabled={submitting || !doctorId}>Confirmer le transfert</button>
+              <button type="button" className="secondary-button" onClick={() => setTransferring(null)}>
+                Annuler
+              </button>
+              <button className="primary-button" disabled={submitting || !doctorId}>
+                Confirmer le transfert
+              </button>
             </div>
           </form>
         </Modal>
