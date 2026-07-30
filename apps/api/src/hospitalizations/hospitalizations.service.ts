@@ -275,6 +275,12 @@ export class HospitalizationsService {
       );
     }
 
+    if (!hospitalization.careAuthorization?.invoice) {
+      throw new ConflictException(
+        'Sortie administrative bloquée : le compte d’hospitalisation est introuvable. La caisse doit régulariser la facturation avant toute sortie.',
+      );
+    }
+
     const preview = this.billingPreview(hospitalization, new Date());
     if (!preview.settled) {
       throw new ConflictException(
@@ -377,8 +383,9 @@ export class HospitalizationsService {
         total: 0,
         paid: 0,
         balance: 0,
-        settled: true,
+        settled: false,
         settledByWaiver: false,
+        billingMissing: true,
       };
     }
     const elapsed = at.getTime() - hospitalization.admittedAt.getTime();
@@ -395,6 +402,7 @@ export class HospitalizationsService {
       balance,
       settled: settledByWaiver || balance <= 0.005,
       settledByWaiver,
+      billingMissing: false,
     };
   }
 
