@@ -112,7 +112,7 @@ export function createMedicalSignature(input: {
   return {
     version: 1,
     doctorUserId: input.doctorUserId,
-    doctorName,
+    doctorName: input.doctorName,
     licenseNumber: input.licenseNumber ?? undefined,
     signedAt,
     hash: createHash('sha256').update(payload).digest('hex'),
