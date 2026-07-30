@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS "MessageDeletion" (
-  "id" UUID NOT NULL,
-  "messageId" UUID NOT NULL,
-  "userId" UUID NOT NULL,
+  "id" TEXT NOT NULL,
+  "messageId" TEXT NOT NULL,
+  "userId" TEXT NOT NULL,
   "deletedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "MessageDeletion_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "MessageDeletion_messageId_fkey"
@@ -16,8 +16,8 @@ CREATE INDEX IF NOT EXISTS "MessageDeletion_userId_deletedAt_idx"
   ON "MessageDeletion"("userId", "deletedAt");
 
 CREATE TABLE IF NOT EXISTS "BusinessNotification" (
-  "id" UUID NOT NULL,
-  "recipientId" UUID NOT NULL,
+  "id" TEXT NOT NULL,
+  "recipientId" TEXT NOT NULL,
   "type" TEXT NOT NULL,
   "title" TEXT NOT NULL,
   "message" TEXT NOT NULL,
