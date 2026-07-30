@@ -23,7 +23,7 @@ import {
   decodeMedicalSignature,
   mergeClinicalReport,
 } from './clinical-report';
-import type { ConsultationDecision } from './clinical-report';
+import type { ClinicalReportSections, ConsultationDecision } from './clinical-report';
 import {
   assertLaboratoryResultsComplete,
   FINAL_CONSULTATION_DECISIONS,
@@ -53,6 +53,29 @@ const consultationInclude = {
 } satisfies Prisma.ConsultationInclude;
 
 type ConsultationRow = Prisma.ConsultationGetPayload<{ include: typeof consultationInclude }>;
+
+type InitialAssessmentField =
+  | 'chiefComplaint'
+  | 'presentIllnessHistory'
+  | 'anamnesisComplements'
+  | 'medicalHistory'
+  | 'physicalExamination'
+  | 'paraclinicalExams'
+  | 'diagnosis'
+  | 'treatmentPlan';
+
+const initialAssessmentFields: InitialAssessmentField[] = [
+  'chiefComplaint',
+  'presentIllnessHistory',
+  'anamnesisComplements',
+  'medicalHistory',
+  'physicalExamination',
+  'paraclinicalExams',
+  'diagnosis',
+  'treatmentPlan',
+];
+
+const normalizeClinicalValue = (value?: string | null) => value?.trim() ?? '';
 
 @Injectable()
 export class ConsultationsService {
@@ -197,6 +220,10 @@ export class ConsultationsService {
       paraclinicalExams,
       diagnosis,
       treatmentPlan,
+      laboratoryInterpretation,
+      postLaboratoryDiagnosis,
+      postLaboratoryPlan,
+      postLaboratoryNotes,
       decision,
       amendmentReason,
       report,
@@ -208,8 +235,23 @@ export class ConsultationsService {
     return this.prisma.$transaction(async (transaction) => {
       const current = await transaction.consultation.findUniqueOrThrow({
         where: { id },
-        include: { examRequests: { select: { status: true } } },
+        include: {
+          examRequests: { select: { status: true } },
+          appointment: { select: { journeyStage: true } },
+        },
       });
+      const currentSections = decodeClinicalReport(current.report).sections;
+      const hasLaboratoryHistory =
+        current.examRequests.length > 0 ||
+        current.appointment?.journeyStage === PatientJourneyStage.LABORATORY ||
+        current.appointment?.journeyStage === PatientJourneyStage.RETURN_TO_DOCTOR;
+      const firstLaboratorySubmission =
+        decision === 'LABORATORY' && !currentSections.preLaboratoryLockedAt;
+
+      if (hasLaboratoryHistory && !firstLaboratorySubmission) {
+        this.assertInitialAssessmentUnchanged(currentSections, dto);
+      }
+
       if (decision && FINAL_CONSULTATION_DECISIONS.has(decision)) {
         assertLaboratoryResultsComplete(
           current.examRequests,
@@ -226,11 +268,24 @@ export class ConsultationsService {
         paraclinicalExams,
         diagnosis,
         treatmentPlan,
+        laboratoryInterpretation,
+        postLaboratoryDiagnosis,
+        postLaboratoryPlan,
+        postLaboratoryNotes,
         decision,
+        preLaboratoryLockedAt:
+          decision === 'LABORATORY' || hasLaboratoryHistory
+            ? currentSections.preLaboratoryLockedAt ?? new Date().toISOString()
+            : undefined,
         amendmentReason,
         amendedAt: amendmentReason ? new Date().toISOString() : undefined,
         amendedById: amendmentReason ? user.id : undefined,
       });
+      const mergedSections = decodeClinicalReport(clinicalReport).sections;
+
+      if (hasLaboratoryHistory && decision && FINAL_CONSULTATION_DECISIONS.has(decision)) {
+        this.assertPostLaboratoryInterpretationComplete(mergedSections);
+      }
 
       const effectiveStatus = this.resolveStatus(current.status, status, decision);
       const effectiveOrientation = orientation ?? this.decisionLabel(decision) ?? current.orientation;
@@ -277,6 +332,7 @@ export class ConsultationsService {
           metadata: {
             decision: decision ?? null,
             status: effectiveStatus,
+            initialAssessmentLocked: hasLaboratoryHistory || decision === 'LABORATORY',
             amendmentReason: amendmentReason ?? null,
             ...(signature
               ? {
@@ -294,7 +350,7 @@ export class ConsultationsService {
   async sign(id: string, dto: SignConsultationDto, user: AuthenticatedUser) {
     const consultation = await this.prisma.consultation.findUnique({
       where: { id },
-      include: { doctor: true },
+      include: { doctor: true, examRequests: { select: { id: true } } },
     });
     if (!consultation) throw new NotFoundException('Consultation introuvable.');
     this.assertAssignedDoctor(consultation.doctor.userId, user);
@@ -315,6 +371,9 @@ export class ConsultationsService {
       throw new BadRequestException(
         'Complétez la plainte, l’histoire de la maladie, l’examen physique, le diagnostic, la conduite thérapeutique et la décision finale avant de signer.',
       );
+    }
+    if (consultation.examRequests.length > 0 || report.sections.preLaboratoryLockedAt) {
+      this.assertPostLaboratoryInterpretationComplete(report.sections);
     }
 
     const signedAt = new Date();
@@ -396,6 +455,37 @@ export class ConsultationsService {
     }
   }
 
+  private assertInitialAssessmentUnchanged(
+    current: ClinicalReportSections,
+    dto: UpdateConsultationDto,
+  ) {
+    const changedFields = initialAssessmentFields.filter((field) => {
+      const requested = dto[field];
+      return (
+        requested !== undefined &&
+        normalizeClinicalValue(requested) !== normalizeClinicalValue(current[field])
+      );
+    });
+    if (changedFields.length > 0) {
+      throw new ConflictException(
+        'L’évaluation initiale est verrouillée depuis l’envoi au laboratoire. Ajoutez l’interprétation, le diagnostic réévalué et la conduite post-laboratoire sans modifier les données antérieures.',
+      );
+    }
+  }
+
+  private assertPostLaboratoryInterpretationComplete(report: ClinicalReportSections) {
+    const missing = [
+      report.laboratoryInterpretation,
+      report.postLaboratoryDiagnosis,
+      report.postLaboratoryPlan,
+    ].some((value) => !value?.trim());
+    if (missing) {
+      throw new BadRequestException(
+        'Complétez l’interprétation des résultats, le diagnostic réévalué et la conduite post-laboratoire avant la décision finale.',
+      );
+    }
+  }
+
   private resolveStatus(
     current: ConsultationStatus,
     requested?: ConsultationStatus,
@@ -403,7 +493,7 @@ export class ConsultationsService {
   ) {
     if (
       decision &&
-      ['HOSPITALIZATION', 'DISCHARGE', 'COMPLETE', 'PRESCRIPTION'].includes(decision)
+      ['HOSPITALIZATION', 'DISCHARGE', 'COMPLETE', 'PRESCRIPTION', 'FOLLOW_UP'].includes(decision)
     ) {
       return ConsultationStatus.COMPLETED;
     }
@@ -435,10 +525,11 @@ export class ConsultationsService {
       LABORATORY: 'Laboratoire — examens demandés',
       IMAGING: 'Radiologie / imagerie médicale',
       HOSPITALIZATION:
-        'Hospitalisation — admission à organiser; facture du séjour à finaliser à la sortie',
+        'Hospitalisation — admission à organiser; sortie administrative soumise au règlement du séjour',
       TRANSFER: 'Transfert vers un autre médecin',
       PRESCRIPTION: 'Prescription et retour à domicile',
-      DISCHARGE: 'Patient libéré',
+      FOLLOW_UP: 'Suivi ambulatoire programmé',
+      DISCHARGE: 'Ancienne décision de libération',
       COMPLETE: 'Consultation terminée',
     };
     return decision ? labels[decision] : undefined;
