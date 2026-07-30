@@ -10,8 +10,7 @@ const decisions: ConsultationDecision[] = [
   'HOSPITALIZATION',
   'TRANSFER',
   'PRESCRIPTION',
-  'DISCHARGE',
-  'COMPLETE',
+  'FOLLOW_UP',
 ];
 
 export class UpdateConsultationDto {
@@ -50,7 +49,7 @@ export class UpdateConsultationDto {
   @MaxLength(10000)
   physicalExamination?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ deprecated: true })
   @IsOptional()
   @IsString()
   @MaxLength(10000)
@@ -67,6 +66,32 @@ export class UpdateConsultationDto {
   @IsString()
   @MaxLength(10000)
   treatmentPlan?: string;
+
+  @ApiPropertyOptional({
+    description: 'Interprétation médicale distincte, saisie après validation des résultats.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  laboratoryInterpretation?: string;
+
+  @ApiPropertyOptional({ description: 'Diagnostic confirmé ou révisé après le laboratoire.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  postLaboratoryDiagnosis?: string;
+
+  @ApiPropertyOptional({ description: 'Conduite médicale décidée après interprétation.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  postLaboratoryPlan?: string;
+
+  @ApiPropertyOptional({ description: 'Observations complémentaires du retour laboratoire.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  postLaboratoryNotes?: string;
 
   @ApiPropertyOptional({ enum: decisions })
   @IsOptional()
@@ -86,11 +111,13 @@ export class UpdateConsultationDto {
   @MaxLength(10000)
   report?: string;
 
+  @ApiPropertyOptional({ deprecated: true })
   @IsOptional()
   @IsString()
   @MaxLength(2000)
   orientation?: string;
 
+  @ApiPropertyOptional({ deprecated: true })
   @IsOptional()
   @IsString()
   @MaxLength(10000)

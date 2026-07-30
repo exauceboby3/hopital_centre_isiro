@@ -36,6 +36,7 @@ interface DoctorAvailability {
   currentPatient?: Patient | null;
   waitingPatients: Patient[];
 }
+
 interface VitalSign {
   weightKg?: string;
   heightCm?: string;
@@ -49,6 +50,7 @@ interface VitalSign {
   notes?: string;
   recordedAt: string;
 }
+
 interface Appointment {
   id: string;
   scheduledAt: string;
@@ -58,7 +60,13 @@ interface Appointment {
   journeyStage: string;
   journeyUpdatedAt: string;
   patient: Patient & { vitalSigns?: VitalSign[] };
-  doctor?: { id: string; lastName: string; postName?: string; firstName?: string; specialty: string };
+  doctor?: {
+    id: string;
+    lastName: string;
+    postName?: string;
+    firstName?: string;
+    specialty: string;
+  };
   careAuthorization?: {
     status: string;
     invoice: { number: string; status: string };
@@ -69,6 +77,7 @@ interface Appointment {
     examRequests: Array<{ id: string; type: string; status: string }>;
   };
 }
+
 interface BillableService {
   id: string;
   name: string;
@@ -82,6 +91,7 @@ const emptyForm = {
   billableServiceId: '',
   reason: '',
 };
+
 const emptyVitals = {
   temperatureC: '',
   weightKg: '',
@@ -94,6 +104,7 @@ const emptyVitals = {
   bloodGlucoseMgDl: '',
   notes: '',
 };
+
 const vitalFields = [
   ['temperatureC', 'Température (°C)'],
   ['weightKg', 'Poids (kg)'],
@@ -116,6 +127,7 @@ export default function AppointmentsPage() {
   const [form, setForm] = useState(emptyForm);
   const [vitals, setVitals] = useState(emptyVitals);
   const [createOpen, setCreateOpen] = useState(false);
+  const [doctorsOpen, setDoctorsOpen] = useState(false);
   const [vitalAppointment, setVitalAppointment] = useState<Appointment | null>(null);
   const [viewing, setViewing] = useState<Appointment | null>(null);
   const [query, setQuery] = useState('');
@@ -156,7 +168,7 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     void load();
-    const timer = window.setInterval(() => void load(), 15000);
+    const timer = window.setInterval(() => void load(), 15_000);
     return () => window.clearInterval(timer);
   }, [load]);
 
@@ -190,7 +202,10 @@ export default function AppointmentsPage() {
   const setStatus = async (id: string, status: string) => {
     setError('');
     try {
-      await api(`/appointments/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+      await api(`/appointments/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      });
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Mise à jour impossible.');
@@ -239,6 +254,14 @@ export default function AppointmentsPage() {
     [appointments, query, stageFilter],
   );
 
+  const doctorSummary = useMemo(() => {
+    const available = doctors.filter((doctor) => doctor.availability === 'AVAILABLE').length;
+    const busy = doctors.filter((doctor) => doctor.availability === 'BUSY').length;
+    const unavailable = doctors.length - available - busy;
+    const waiting = doctors.reduce((sum, doctor) => sum + doctor.waitingPatients.length, 0);
+    return { available, busy, unavailable, waiting };
+  }, [doctors]);
+
   return (
     <>
       <div className="page-heading">
@@ -272,33 +295,27 @@ export default function AppointmentsPage() {
       {error && <div className="alert error">{error}</div>}
 
       {scope === 'active' && (
-        <section className="panel doctor-availability-panel">
-          <div className="panel-heading">
-            <div>
-              <span className="eyebrow">Orientation en temps réel</span>
-              <h2>Médecins disponibles</h2>
-            </div>
-            <UserRoundCheck size={22} />
-          </div>
-          <div className="availability-grid">
-            {doctors.map((doctor) => (
-              <article className={`availability-card ${doctor.availability.toLowerCase()}`} key={doctor.id}>
-                <div>
-                  <strong>{doctor.name}</strong>
-                  <span>{doctor.specialty}</span>
-                </div>
-                <StatusBadge status={doctor.availability} />
-                <small>
-                  {doctor.availability === 'BUSY' && doctor.currentPatient
-                    ? `Avec ${patientName(doctor.currentPatient)}`
-                    : doctor.onDuty || doctor.attendanceStatus
-                      ? 'Présent dans le service'
-                      : 'Présence non confirmée'}
-                  {doctor.waitingPatients.length ? ` · ${doctor.waitingPatients.length} en attente` : ''}
-                </small>
-              </article>
-            ))}
-          </div>
+        <section className="appointment-stage-summary doctor-availability-summary">
+          <button className="appointment-stage-card" onClick={() => setDoctorsOpen(true)}>
+            <UserRoundCheck size={19} />
+            <span>Disponibles</span>
+            <strong>{doctorSummary.available}</strong>
+          </button>
+          <button className="appointment-stage-card" onClick={() => setDoctorsOpen(true)}>
+            <Stethoscope size={19} />
+            <span>Occupés</span>
+            <strong>{doctorSummary.busy}</strong>
+          </button>
+          <button className="appointment-stage-card" onClick={() => setDoctorsOpen(true)}>
+            <CalendarClock size={19} />
+            <span>Hors service</span>
+            <strong>{doctorSummary.unavailable}</strong>
+          </button>
+          <button className="appointment-stage-card" onClick={() => setDoctorsOpen(true)}>
+            <UserRoundCheck size={19} />
+            <span>File totale</span>
+            <strong>{doctorSummary.waiting}</strong>
+          </button>
         </section>
       )}
 
@@ -366,54 +383,101 @@ export default function AppointmentsPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7}><div className="empty-state"><Activity className="spin" /> Chargement…</div></td>
+                  <td colSpan={7}>
+                    <div className="empty-state">
+                      <Activity className="spin" /> Chargement…
+                    </div>
+                  </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7}><div className="empty-state"><CalendarPlus /><strong>Aucun rendez-vous</strong></div></td>
+                  <td colSpan={7}>
+                    <div className="empty-state">
+                      <CalendarPlus />
+                      <strong>Aucun rendez-vous</strong>
+                    </div>
+                  </td>
                 </tr>
               ) : (
                 filtered.map((row) => {
                   const latestVitals = row.patient.vitalSigns?.[0];
                   return (
                     <tr key={row.id}>
-                      <td>{new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(row.scheduledAt))}</td>
                       <td>
-                        <strong>{patientName(row.patient)}</strong><br />
+                        {new Intl.DateTimeFormat('fr-FR', {
+                          dateStyle: 'medium',
+                          timeStyle: 'short',
+                        }).format(new Date(row.scheduledAt))}
+                      </td>
+                      <td>
+                        <strong>{patientName(row.patient)}</strong>
+                        <br />
                         <span className="muted">{row.patient.medicalRecordNumber}</span>
                         {latestVitals && (
                           <small className="vital-summary">
-                            {latestVitals.temperatureC ? `${Number(latestVitals.temperatureC)} °C` : 'Temp. —'} ·{' '}
-                            {latestVitals.systolic && latestVitals.diastolic ? `TA ${latestVitals.systolic}/${latestVitals.diastolic}` : 'TA —'}
+                            {latestVitals.temperatureC
+                              ? `${Number(latestVitals.temperatureC)} °C`
+                              : 'Temp. —'}{' '}
+                            ·{' '}
+                            {latestVitals.systolic && latestVitals.diastolic
+                              ? `TA ${latestVitals.systolic}/${latestVitals.diastolic}`
+                              : 'TA —'}
                           </small>
                         )}
                       </td>
-                      <td>{row.service}<br /><span className="muted">{row.reason || '—'}</span></td>
+                      <td>
+                        {row.service}
+                        <br />
+                        <span className="muted">{row.reason || '—'}</span>
+                      </td>
                       <td>{row.doctor ? patientName(row.doctor) : 'Non assigné'}</td>
-                      <td><StatusBadge status={scope === 'history' ? row.status : row.journeyStage} /></td>
+                      <td>
+                        <StatusBadge status={scope === 'history' ? row.status : row.journeyStage} />
+                      </td>
                       <td>
                         <StatusBadge status={row.careAuthorization?.status ?? 'PENDING'} />
-                        {row.careAuthorization && <><br /><span className="muted">{row.careAuthorization.invoice.number}</span></>}
+                        {row.careAuthorization && (
+                          <>
+                            <br />
+                            <span className="muted">{row.careAuthorization.invoice.number}</span>
+                          </>
+                        )}
                       </td>
                       <td>
                         <div className="row-actions">
-                          <button className="text-button" onClick={() => setViewing(row)}><Eye size={15} /> Détails</button>
+                          <button className="text-button" onClick={() => setViewing(row)}>
+                            <Eye size={15} /> Détails
+                          </button>
                           {scope === 'active' && row.status === 'SCHEDULED' && (
                             <button
                               className="text-button"
-                              disabled={!row.careAuthorization || !['AUTHORIZED', 'WAIVED'].includes(row.careAuthorization.status)}
+                              disabled={
+                                !row.careAuthorization ||
+                                !['AUTHORIZED', 'WAIVED'].includes(row.careAuthorization.status)
+                              }
                               onClick={() => void setStatus(row.id, 'CHECKED_IN')}
                             >
                               Marquer arrivé
                             </button>
                           )}
                           {scope === 'active' && canRecordVitals && (
-                            <button className="text-button" onClick={() => { setVitalAppointment(row); setVitals(emptyVitals); }}>
+                            <button
+                              className="text-button"
+                              onClick={() => {
+                                setVitalAppointment(row);
+                                setVitals(emptyVitals);
+                              }}
+                            >
                               <HeartPulse size={15} /> Signes vitaux
                             </button>
                           )}
                           {scope === 'active' && (
-                            <button className="text-button danger" onClick={() => void setStatus(row.id, 'CANCELLED')}>Annuler</button>
+                            <button
+                              className="text-button danger"
+                              onClick={() => void setStatus(row.id, 'CANCELLED')}
+                            >
+                              Annuler
+                            </button>
                           )}
                           <CustomFieldsEditor entity="APPOINTMENT" entityId={row.id} />
                         </div>
@@ -427,6 +491,59 @@ export default function AppointmentsPage() {
         </div>
       </section>
 
+      {doctorsOpen && (
+        <Modal
+          wide
+          title="Disponibilité des médecins"
+          eyebrow={`${doctorSummary.available} disponible(s) · ${doctorSummary.waiting} patient(s) en attente`}
+          onClose={() => setDoctorsOpen(false)}
+        >
+          <div className="table-scroll">
+            <table className="compact-table">
+              <thead>
+                <tr>
+                  <th>Médecin</th>
+                  <th>Spécialité</th>
+                  <th>Présence</th>
+                  <th>Disponibilité</th>
+                  <th>Patient actuel</th>
+                  <th>File</th>
+                </tr>
+              </thead>
+              <tbody>
+                {doctors.map((doctor) => (
+                  <tr key={doctor.id}>
+                    <td>
+                      <strong>{doctor.name}</strong>
+                    </td>
+                    <td>{doctor.specialty}</td>
+                    <td>
+                      {doctor.onDuty || doctor.attendanceStatus
+                        ? doctor.attendanceStatus || 'Présent dans le service'
+                        : 'Présence non confirmée'}
+                    </td>
+                    <td>
+                      <StatusBadge status={doctor.availability} />
+                    </td>
+                    <td>
+                      {doctor.availability === 'BUSY' && doctor.currentPatient
+                        ? patientName(doctor.currentPatient)
+                        : '—'}
+                    </td>
+                    <td>{doctor.waitingPatients.length}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="modal-actions">
+            <button className="secondary-button" onClick={() => setDoctorsOpen(false)}>
+              Fermer
+            </button>
+          </div>
+        </Modal>
+      )}
+
       {createOpen && (
         <Modal title="Planifier un rendez-vous" eyebrow="Réception" onClose={() => setCreateOpen(false)}>
           <form onSubmit={submit}>
@@ -437,49 +554,157 @@ export default function AppointmentsPage() {
                 label="Patient"
                 value={form.patientId}
                 onChange={(patientId) => setForm({ ...form, patientId })}
-                options={patients.map((patient) => ({ value: patient.id, label: patientName(patient), description: patient.medicalRecordNumber }))}
+                options={patients.map((patient) => ({
+                  value: patient.id,
+                  label: patientName(patient),
+                  description: patient.medicalRecordNumber,
+                }))}
               />
               <SearchableSelect
                 className="full"
                 label="Médecin affecté"
                 value={form.doctorId}
                 onChange={(doctorId) => setForm({ ...form, doctorId })}
-                options={doctors.map((doctor) => ({ value: doctor.id, label: doctor.name, description: `${doctor.specialty} · ${doctor.availability}` }))}
+                options={doctors.map((doctor) => ({
+                  value: doctor.id,
+                  label: doctor.name,
+                  description: `${doctor.specialty} · ${doctor.availability}`,
+                }))}
               />
-              <label className="field"><span>Date et heure *</span><input required type="datetime-local" value={form.scheduledAt} onChange={(event) => setForm({ ...form, scheduledAt: event.target.value })} /></label>
-              <label className="field"><span>Type de consultation *</span><select required value={form.billableServiceId} onChange={(event) => setForm({ ...form, billableServiceId: event.target.value })}><option value="">Sélectionner</option>{services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}</select></label>
-              <label className="field full"><span>Motif</span><textarea rows={3} value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} /></label>
+              <label className="field">
+                <span>Date et heure *</span>
+                <input
+                  required
+                  type="datetime-local"
+                  value={form.scheduledAt}
+                  onChange={(event) => setForm({ ...form, scheduledAt: event.target.value })}
+                />
+              </label>
+              <label className="field">
+                <span>Type de consultation *</span>
+                <select
+                  required
+                  value={form.billableServiceId}
+                  onChange={(event) => setForm({ ...form, billableServiceId: event.target.value })}
+                >
+                  <option value="">Sélectionner</option>
+                  {services.map((service) => (
+                    <option key={service.id} value={service.id}>
+                      {service.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field full">
+                <span>Motif</span>
+                <textarea
+                  rows={3}
+                  value={form.reason}
+                  onChange={(event) => setForm({ ...form, reason: event.target.value })}
+                />
+              </label>
             </div>
-            <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setCreateOpen(false)}>Annuler</button><button className="primary-button" disabled={submitting}>Enregistrer</button></div>
+            <div className="modal-actions">
+              <button type="button" className="secondary-button" onClick={() => setCreateOpen(false)}>
+                Annuler
+              </button>
+              <button className="primary-button" disabled={submitting}>
+                Enregistrer
+              </button>
+            </div>
           </form>
         </Modal>
       )}
 
       {vitalAppointment && (
-        <Modal title="Signes vitaux" eyebrow={patientName(vitalAppointment.patient)} onClose={() => setVitalAppointment(null)}>
+        <Modal
+          title="Signes vitaux"
+          eyebrow={patientName(vitalAppointment.patient)}
+          onClose={() => setVitalAppointment(null)}
+        >
           <form onSubmit={recordVitals}>
             <div className="form-grid">
               {vitalFields.map(([key, label]) => (
-                <label className="field" key={key}><span>{label}</span><input type="number" step="any" value={vitals[key]} onChange={(event) => setVitals({ ...vitals, [key]: event.target.value })} /></label>
+                <label className="field" key={key}>
+                  <span>{label}</span>
+                  <input
+                    type="number"
+                    step="any"
+                    value={vitals[key]}
+                    onChange={(event) => setVitals({ ...vitals, [key]: event.target.value })}
+                  />
+                </label>
               ))}
-              <label className="field full"><span>Observations de réception</span><textarea rows={3} value={vitals.notes} onChange={(event) => setVitals({ ...vitals, notes: event.target.value })} /></label>
+              <label className="field full">
+                <span>Observations de réception</span>
+                <textarea
+                  rows={3}
+                  value={vitals.notes}
+                  onChange={(event) => setVitals({ ...vitals, notes: event.target.value })}
+                />
+              </label>
             </div>
-            <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setVitalAppointment(null)}>Annuler</button><button className="primary-button" disabled={submitting}>Enregistrer les signes vitaux</button></div>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setVitalAppointment(null)}
+              >
+                Annuler
+              </button>
+              <button className="primary-button" disabled={submitting}>
+                Enregistrer les signes vitaux
+              </button>
+            </div>
           </form>
         </Modal>
       )}
 
       {viewing && (
-        <Modal title={patientName(viewing.patient)} eyebrow={viewing.patient.medicalRecordNumber} onClose={() => setViewing(null)}>
+        <Modal
+          title={patientName(viewing.patient)}
+          eyebrow={viewing.patient.medicalRecordNumber}
+          onClose={() => setViewing(null)}
+        >
           <div className="patient-journey-detail">
-            <div><strong>Rendez-vous</strong><span>{new Intl.DateTimeFormat('fr-FR', { dateStyle: 'full', timeStyle: 'short' }).format(new Date(viewing.scheduledAt))}</span></div>
-            <div><strong>Service</strong><span>{viewing.service}</span></div>
-            <div><strong>Médecin</strong><span>{viewing.doctor ? patientName(viewing.doctor) : 'Non assigné'}</span></div>
-            <div><strong>Parcours</strong><StatusBadge status={viewing.journeyStage} /></div>
-            <div><strong>Statut rendez-vous</strong><StatusBadge status={viewing.status} /></div>
-            <div><strong>Paiement</strong><StatusBadge status={viewing.careAuthorization?.status ?? 'PENDING'} /></div>
+            <div>
+              <strong>Rendez-vous</strong>
+              <span>
+                {new Intl.DateTimeFormat('fr-FR', {
+                  dateStyle: 'full',
+                  timeStyle: 'short',
+                }).format(new Date(viewing.scheduledAt))}
+              </span>
+            </div>
+            <div>
+              <strong>Service</strong>
+              <span>{viewing.service}</span>
+            </div>
+            <div>
+              <strong>Médecin</strong>
+              <span>{viewing.doctor ? patientName(viewing.doctor) : 'Non assigné'}</span>
+            </div>
+            <div>
+              <strong>Parcours</strong>
+              <StatusBadge status={viewing.journeyStage} />
+            </div>
+            <div>
+              <strong>Statut rendez-vous</strong>
+              <StatusBadge status={viewing.status} />
+            </div>
+            <div>
+              <strong>Paiement</strong>
+              <StatusBadge status={viewing.careAuthorization?.status ?? 'PENDING'} />
+            </div>
             {viewing.consultation?.examRequests?.length ? (
-              <div className="full"><strong>Examens demandés</strong><span>{viewing.consultation.examRequests.map((exam) => `${exam.type} (${exam.status})`).join(' · ')}</span></div>
+              <div className="full">
+                <strong>Examens demandés</strong>
+                <span>
+                  {viewing.consultation.examRequests
+                    .map((exam) => `${exam.type} (${exam.status})`)
+                    .join(' · ')}
+                </span>
+              </div>
             ) : null}
           </div>
         </Modal>

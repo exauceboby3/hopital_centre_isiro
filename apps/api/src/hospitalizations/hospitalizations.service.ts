@@ -3,6 +3,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import {
   BedStatus,
   BillableServiceType,
+  CareAuthorizationStatus,
   ConsultationStatus,
   HospitalizationStatus,
   InvoiceStatus,
@@ -29,6 +30,13 @@ const hospitalizationInclude = {
   },
 } satisfies Prisma.HospitalizationInclude;
 
+type HospitalizationRow = Prisma.HospitalizationGetPayload<{
+  include: typeof hospitalizationInclude;
+}>;
+
+const MEDICAL_DISCHARGE_ACTION = 'HOSPITALIZATION_MEDICAL_DISCHARGE_APPROVED';
+const ADMINISTRATIVE_DISCHARGE_ACTION = 'HOSPITALIZATION_ADMINISTRATIVE_DISCHARGE';
+
 @Injectable()
 export class HospitalizationsService {
   constructor(
@@ -36,13 +44,30 @@ export class HospitalizationsService {
     private readonly authorizations: FinancialAuthorizationService,
   ) {}
 
-  list(status?: HospitalizationStatus) {
-    return this.prisma.hospitalization.findMany({
+  async list(status?: HospitalizationStatus) {
+    const rows = await this.prisma.hospitalization.findMany({
       where: status ? { status } : undefined,
       include: hospitalizationInclude,
       orderBy: { admittedAt: 'desc' },
       take: 250,
     });
+    const approvals = rows.length
+      ? await this.prisma.auditLog.findMany({
+          where: {
+            entity: 'Hospitalization',
+            entityId: { in: rows.map((row) => row.id) },
+            action: MEDICAL_DISCHARGE_ACTION,
+          },
+          orderBy: { createdAt: 'desc' },
+        })
+      : [];
+    const approvalByHospitalization = new Map<string, (typeof approvals)[number]>();
+    for (const approval of approvals) {
+      if (approval.entityId && !approvalByHospitalization.has(approval.entityId)) {
+        approvalByHospitalization.set(approval.entityId, approval);
+      }
+    }
+    return rows.map((row) => this.present(row, approvalByHospitalization.get(row.id)?.createdAt));
   }
 
   rooms() {
@@ -150,24 +175,6 @@ export class HospitalizationsService {
         data: { hospitalizationId: hospitalization.id },
       });
 
-      const recipients = await transaction.user.findMany({
-        where: {
-          isActive: true,
-          id: { not: user.id },
-          OR: [
-            ...(referralConsultation?.doctor.userId
-              ? [{ id: referralConsultation.doctor.userId }]
-              : []),
-            { role: { in: [Role.ADMIN, Role.RECEPTIONIST, Role.SECRETARY, Role.NURSE] } },
-            {
-              additionalRoles: {
-                hasSome: [Role.ADMIN, Role.RECEPTIONIST, Role.SECRETARY, Role.NURSE],
-              },
-            },
-          ],
-        },
-        select: { id: true },
-      });
       const patient = await transaction.patient.findUniqueOrThrow({
         where: { id: dto.patientId },
         select: { medicalRecordNumber: true, lastName: true, postName: true, firstName: true },
@@ -176,18 +183,21 @@ export class HospitalizationsService {
         where: { id: dto.bedId },
         include: { room: true },
       });
-      const name = [patient.lastName, patient.postName, patient.firstName]
-        .filter(Boolean)
-        .join(' ');
-      if (recipients.length) {
-        await transaction.message.createMany({
-          data: recipients.map((recipient) => ({
-            senderId: user.id,
-            receiverId: recipient.id,
-            content: `Admission hospitalière enregistrée : ${name} (${patient.medicalRecordNumber}), chambre ${bed.room.code}, lit ${bed.code}. Le séjour sera facturé à la sortie.`,
-          })),
-        });
-      }
+      await transaction.auditLog.create({
+        data: {
+          userId: user.id,
+          action: 'HOSPITALIZATION_ADMITTED',
+          entity: 'Hospitalization',
+          entityId: hospitalization.id,
+          metadata: {
+            patientId: dto.patientId,
+            medicalRecordNumber: patient.medicalRecordNumber,
+            room: bed.room.code,
+            bed: bed.code,
+            consultationId: referralConsultation?.id ?? null,
+          },
+        },
+      });
 
       return transaction.hospitalization.findUniqueOrThrow({
         where: { id: hospitalization.id },
@@ -196,7 +206,7 @@ export class HospitalizationsService {
     });
   }
 
-  async discharge(id: string, userId?: string) {
+  async medicalDischarge(id: string, userId: string) {
     const hospitalization = await this.prisma.hospitalization.findUnique({
       where: { id },
       include: hospitalizationInclude,
@@ -207,55 +217,92 @@ export class HospitalizationsService {
     }
 
     return this.prisma.$transaction(async (transaction) => {
+      const billing = await this.finalizeInvoice(hospitalization, new Date(), transaction);
+      const existingApproval = await transaction.auditLog.findFirst({
+        where: {
+          action: MEDICAL_DISCHARGE_ACTION,
+          entity: 'Hospitalization',
+          entityId: id,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      const approval =
+        existingApproval ??
+        (await transaction.auditLog.create({
+          data: {
+            userId,
+            action: MEDICAL_DISCHARGE_ACTION,
+            entity: 'Hospitalization',
+            entityId: id,
+            metadata: {
+              billedDays: billing.billedDays,
+              total: billing.total,
+              paid: billing.paid,
+              balance: billing.balance,
+              administrativeDischargeAllowed: billing.settled,
+            },
+          },
+        }));
+      const row = await transaction.hospitalization.findUniqueOrThrow({
+        where: { id },
+        include: hospitalizationInclude,
+      });
+      return this.present(row, approval.createdAt);
+    });
+  }
+
+  async administrativeDischarge(id: string, userId: string) {
+    const hospitalization = await this.prisma.hospitalization.findUnique({
+      where: { id },
+      include: hospitalizationInclude,
+    });
+    if (!hospitalization) throw new NotFoundException('Hospitalisation introuvable.');
+    if (hospitalization.status !== HospitalizationStatus.ACTIVE) {
+      throw new ConflictException('Cette hospitalisation est déjà clôturée.');
+    }
+
+    const approval = await this.prisma.auditLog.findFirst({
+      where: {
+        action: MEDICAL_DISCHARGE_ACTION,
+        entity: 'Hospitalization',
+        entityId: id,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!approval) {
+      throw new ConflictException(
+        'La sortie médicale doit être validée par le médecin avant la sortie administrative.',
+      );
+    }
+
+    if (!hospitalization.careAuthorization?.invoice) {
+      throw new ConflictException(
+        'Sortie administrative bloquée : le compte d’hospitalisation est introuvable. La caisse doit régulariser la facturation avant toute sortie.',
+      );
+    }
+
+    const preview = this.billingPreview(hospitalization, new Date());
+    if (!preview.settled) {
+      throw new ConflictException(
+        `Sortie administrative bloquée : le solde du séjour est de ${preview.balance.toFixed(2)}. Finalisez le paiement ou la prise en charge avant de libérer le patient.`,
+      );
+    }
+
+    return this.prisma.$transaction(async (transaction) => {
       const dischargedAt = new Date();
+      const billing = await this.finalizeInvoice(hospitalization, dischargedAt, transaction);
+      if (!billing.settled) {
+        throw new ConflictException(
+          `Sortie administrative bloquée : le solde du séjour est de ${billing.balance.toFixed(2)}.`,
+        );
+      }
+
       const updated = await transaction.hospitalization.update({
         where: { id },
         data: { status: HospitalizationStatus.DISCHARGED, dischargedAt },
       });
       // Le trigger de gouvernance place automatiquement le lit en maintenance et crée
       // une demande de nettoyage. Le lit ne redevient disponible qu'après validation.
-
-      const authorization = hospitalization.careAuthorization;
-      const invoice = authorization?.invoice;
-      if (authorization && invoice) {
-        const elapsed = dischargedAt.getTime() - hospitalization.admittedAt.getTime();
-        const billedDays = Math.max(1, Math.ceil(elapsed / 86_400_000));
-        const unitPrice = authorization.service?.price ?? authorization.amount;
-        const total = unitPrice.mul(billedDays);
-        const paid = invoice.payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
-        const invoiceStatus =
-          paid >= Number(total)
-            ? InvoiceStatus.PAID
-            : paid > 0
-              ? InvoiceStatus.PARTIALLY_PAID
-              : InvoiceStatus.PENDING;
-
-        const firstItem = invoice.items[0];
-        if (firstItem) {
-          await transaction.invoiceItem.update({
-            where: { id: firstItem.id },
-            data: {
-              description: `${authorization.service?.name ?? authorization.description} — ${billedDays} jour(s)`,
-              quantity: billedDays,
-              unitPrice,
-              total,
-            },
-          });
-        }
-        await transaction.invoice.update({
-          where: { id: invoice.id },
-          data: {
-            status: invoiceStatus,
-            total,
-            dueAt: dischargedAt,
-            notes: `Facture de sortie — ${billedDays} jour(s) d'hospitalisation. Paiement à effectuer à la caisse.`,
-          },
-        });
-        await transaction.careAuthorization.update({
-          where: { id: authorization.id },
-          data: { amount: total, quantity: billedDays },
-        });
-      }
 
       await transaction.nursingCare.updateMany({
         where: {
@@ -265,37 +312,22 @@ export class HospitalizationsService {
         data: { status: NursingCareStatus.CANCELLED },
       });
 
-      const recipients = await transaction.user.findMany({
-        where: {
-          isActive: true,
-          ...(userId ? { id: { not: userId } } : {}),
-          OR: [
-            { role: { in: [Role.CASHIER, Role.ACCOUNTANT, Role.RECEPTIONIST, Role.SECRETARY] } },
-            {
-              additionalRoles: {
-                hasSome: [Role.CASHIER, Role.ACCOUNTANT, Role.RECEPTIONIST, Role.SECRETARY],
-              },
-            },
-          ],
+      await transaction.auditLog.create({
+        data: {
+          userId,
+          action: ADMINISTRATIVE_DISCHARGE_ACTION,
+          entity: 'Hospitalization',
+          entityId: id,
+          metadata: {
+            medicalApprovalAt: approval.createdAt,
+            billedDays: billing.billedDays,
+            total: billing.total,
+            paid: billing.paid,
+            balance: billing.balance,
+            settledByWaiver: billing.settledByWaiver,
+          },
         },
-        select: { id: true },
       });
-      if (recipients.length && userId) {
-        const name = [
-          hospitalization.patient.lastName,
-          hospitalization.patient.postName,
-          hospitalization.patient.firstName,
-        ]
-          .filter(Boolean)
-          .join(' ');
-        await transaction.message.createMany({
-          data: recipients.map((recipient) => ({
-            senderId: userId,
-            receiverId: recipient.id,
-            content: `Sortie d'hospitalisation : ${name} (${hospitalization.patient.medicalRecordNumber}). La facture ${invoice?.number ?? 'de sortie'} est prête pour encaissement. Le lit est en attente de nettoyage.`,
-          })),
-        });
-      }
 
       return transaction.hospitalization.findUniqueOrThrow({
         where: { id: updated.id },
@@ -340,5 +372,92 @@ export class HospitalizationsService {
         include: hospitalizationInclude,
       });
     });
+  }
+
+  private billingPreview(hospitalization: HospitalizationRow, at: Date) {
+    const authorization = hospitalization.careAuthorization;
+    const invoice = authorization?.invoice;
+    if (!authorization || !invoice) {
+      return {
+        billedDays: 0,
+        total: 0,
+        paid: 0,
+        balance: 0,
+        settled: false,
+        settledByWaiver: false,
+        billingMissing: true,
+      };
+    }
+    const elapsed = at.getTime() - hospitalization.admittedAt.getTime();
+    const billedDays = Math.max(1, Math.ceil(elapsed / 86_400_000));
+    const unitPrice = authorization.service?.price ?? authorization.amount;
+    const total = Number(unitPrice.mul(billedDays));
+    const paid = invoice.payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+    const settledByWaiver = authorization.status === CareAuthorizationStatus.WAIVED;
+    const balance = Math.max(total - paid, 0);
+    return {
+      billedDays,
+      total,
+      paid,
+      balance,
+      settled: settledByWaiver || balance <= 0.005,
+      settledByWaiver,
+      billingMissing: false,
+    };
+  }
+
+  private async finalizeInvoice(
+    hospitalization: HospitalizationRow,
+    at: Date,
+    transaction: Prisma.TransactionClient,
+  ) {
+    const authorization = hospitalization.careAuthorization;
+    const invoice = authorization?.invoice;
+    const preview = this.billingPreview(hospitalization, at);
+    if (!authorization || !invoice) return preview;
+
+    const unitPrice = authorization.service?.price ?? authorization.amount;
+    const total = unitPrice.mul(preview.billedDays);
+    const firstItem = invoice.items[0];
+    if (firstItem) {
+      await transaction.invoiceItem.update({
+        where: { id: firstItem.id },
+        data: {
+          description: `${authorization.service?.name ?? authorization.description} — ${preview.billedDays} jour(s)`,
+          quantity: preview.billedDays,
+          unitPrice,
+          total,
+        },
+      });
+    }
+    const status = preview.settled
+      ? InvoiceStatus.PAID
+      : preview.paid > 0
+        ? InvoiceStatus.PARTIALLY_PAID
+        : InvoiceStatus.PENDING;
+    await transaction.invoice.update({
+      where: { id: invoice.id },
+      data: {
+        status,
+        total,
+        dueAt: at,
+        notes: preview.settledByWaiver
+          ? `Compte de sortie — ${preview.billedDays} jour(s). Prise en charge ou exonération validée.`
+          : `Compte de sortie — ${preview.billedDays} jour(s). Solde à régler avant la sortie administrative.`,
+      },
+    });
+    await transaction.careAuthorization.update({
+      where: { id: authorization.id },
+      data: { amount: total, quantity: preview.billedDays },
+    });
+    return preview;
+  }
+
+  private present(row: HospitalizationRow, medicalDischargeApprovedAt?: Date) {
+    return {
+      ...row,
+      medicalDischargeApprovedAt: medicalDischargeApprovedAt?.toISOString() ?? null,
+      financialStatus: this.billingPreview(row, new Date()),
+    };
   }
 }

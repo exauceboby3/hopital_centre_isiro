@@ -29,6 +29,7 @@ import { ArchivesModule } from './archives/archives.module';
 import { ClinicalGovernanceModule } from './clinical-governance/clinical-governance.module';
 import { ClinicalSafetyModule } from './clinical-safety/clinical-safety.module';
 import { PushNotificationsModule } from './push-notifications/push-notifications.module';
+import { BusinessNotificationsModule } from './business-notifications/business-notifications.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { PushNotificationsModule } from './push-notifications/push-notifications
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
     PrismaModule,
     PushNotificationsModule,
+    BusinessNotificationsModule,
     ConfigurationModule,
     OperationsModule,
     EnterpriseModule,

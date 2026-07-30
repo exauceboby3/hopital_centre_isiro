@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SendMessageDto } from './dto/send-message.dto';
 
@@ -15,8 +17,12 @@ export class MessagesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async conversations(userId: string) {
+    const hiddenIds = await this.deletedMessageIds(userId);
     const messages = await this.prisma.message.findMany({
-      where: { OR: [{ senderId: userId }, { receiverId: userId }] },
+      where: {
+        OR: [{ senderId: userId }, { receiverId: userId }],
+        ...(hiddenIds.length ? { id: { notIn: hiddenIds } } : {}),
+      },
       orderBy: { sentAt: 'desc' },
       take: 1000,
       include: { attachments: { select: attachmentSelect } },
@@ -32,7 +38,11 @@ export class MessagesService {
     });
     const unread = await this.prisma.message.groupBy({
       by: ['senderId'],
-      where: { receiverId: userId, readAt: null },
+      where: {
+        receiverId: userId,
+        readAt: null,
+        ...(hiddenIds.length ? { id: { notIn: hiddenIds } } : {}),
+      },
       _count: { _all: true },
     });
     const unreadMap = new Map(unread.map((entry) => [entry.senderId, entry._count._all]));
@@ -51,10 +61,16 @@ export class MessagesService {
   }
 
   async unread(userId: string) {
+    const hiddenIds = await this.deletedMessageIds(userId);
+    const where = {
+      receiverId: userId,
+      readAt: null,
+      ...(hiddenIds.length ? { id: { notIn: hiddenIds } } : {}),
+    };
     const [count, latest] = await Promise.all([
-      this.prisma.message.count({ where: { receiverId: userId, readAt: null } }),
+      this.prisma.message.count({ where }),
       this.prisma.message.findFirst({
-        where: { receiverId: userId, readAt: null },
+        where,
         orderBy: { sentAt: 'desc' },
         include: {
           sender: { select: { id: true, username: true, role: true } },
@@ -68,8 +84,14 @@ export class MessagesService {
   async conversation(userId: string, otherId: string) {
     const other = await this.prisma.user.findUnique({ where: { id: otherId } });
     if (!other) throw new NotFoundException('Destinataire introuvable.');
+    const hiddenIds = await this.deletedMessageIds(userId);
     await this.prisma.message.updateMany({
-      where: { senderId: otherId, receiverId: userId, readAt: null },
+      where: {
+        senderId: otherId,
+        receiverId: userId,
+        readAt: null,
+        ...(hiddenIds.length ? { id: { notIn: hiddenIds } } : {}),
+      },
       data: { readAt: new Date() },
     });
     return this.prisma.message.findMany({
@@ -78,6 +100,7 @@ export class MessagesService {
           { senderId: userId, receiverId: otherId },
           { senderId: otherId, receiverId: userId },
         ],
+        ...(hiddenIds.length ? { id: { notIn: hiddenIds } } : {}),
       },
       orderBy: { sentAt: 'asc' },
       take: 500,
@@ -135,6 +158,30 @@ export class MessagesService {
     });
   }
 
+  async deleteForUser(id: string, userId: string) {
+    const message = await this.prisma.message.findFirst({
+      where: { id, OR: [{ senderId: userId }, { receiverId: userId }] },
+      select: { id: true },
+    });
+    if (!message) throw new NotFoundException('Message introuvable.');
+    await this.prisma.$transaction(async (transaction) => {
+      await transaction.$executeRaw(Prisma.sql`
+        INSERT INTO "MessageDeletion" ("id", "messageId", "userId")
+        VALUES (${randomUUID()}, ${id}, ${userId})
+        ON CONFLICT ("messageId", "userId") DO NOTHING
+      `);
+      await transaction.auditLog.create({
+        data: {
+          userId,
+          action: 'MESSAGE_HIDDEN_BY_USER',
+          entity: 'Message',
+          entityId: id,
+        },
+      });
+    });
+    return { success: true };
+  }
+
   async attachment(id: string, userId: string) {
     const attachment = await this.prisma.messageAttachment.findFirst({
       where: {
@@ -143,7 +190,23 @@ export class MessagesService {
       },
     });
     if (!attachment) throw new NotFoundException('Pièce jointe introuvable.');
+    const hidden = await this.prisma.$queryRaw<Array<{ exists: boolean }>>(Prisma.sql`
+      SELECT EXISTS(
+        SELECT 1 FROM "MessageDeletion"
+        WHERE "messageId" = ${attachment.messageId} AND "userId" = ${userId}
+      ) AS "exists"
+    `);
+    if (hidden[0]?.exists) throw new NotFoundException('Pièce jointe introuvable.');
     return attachment;
+  }
+
+  private async deletedMessageIds(userId: string) {
+    const rows = await this.prisma.$queryRaw<Array<{ messageId: string }>>(Prisma.sql`
+      SELECT "messageId"
+      FROM "MessageDeletion"
+      WHERE "userId" = ${userId}
+    `);
+    return rows.map((row) => row.messageId);
   }
 
   private async assertReceiver(receiverId: string) {
