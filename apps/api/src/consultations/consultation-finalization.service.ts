@@ -6,9 +6,11 @@ import type { ConsultationDecision } from './clinical-report';
 
 export const FINAL_CONSULTATION_DECISIONS = new Set<ConsultationDecision>([
   'PRESCRIPTION',
-  'DISCHARGE',
+  'FOLLOW_UP',
   'COMPLETE',
   'HOSPITALIZATION',
+  // Compatibilité avec les anciens dossiers déjà enregistrés.
+  'DISCHARGE',
 ]);
 
 export function assertLaboratoryResultsComplete(
@@ -42,7 +44,7 @@ export class ConsultationFinalizationService {
     const report = decodeClinicalReport(consultation.report).sections;
     if (!report.decision || !FINAL_CONSULTATION_DECISIONS.has(report.decision)) {
       throw new BadRequestException(
-        'Choisissez une décision finale : prescription, libération, conclusion ou hospitalisation avant de signer.',
+        'Choisissez une décision finale : prescription, hospitalisation ou suivi ambulatoire avant de signer.',
       );
     }
     if (consultation.status !== ConsultationStatus.COMPLETED) {
@@ -52,6 +54,19 @@ export class ConsultationFinalizationService {
     }
 
     assertLaboratoryResultsComplete(consultation.examRequests, 'Signature indisponible');
+
+    if (consultation.examRequests.length > 0) {
+      const postLaboratoryComplete = [
+        report.laboratoryInterpretation,
+        report.postLaboratoryDiagnosis,
+        report.postLaboratoryPlan,
+      ].every((value) => Boolean(value?.trim()));
+      if (!postLaboratoryComplete) {
+        throw new BadRequestException(
+          'Complétez l’interprétation, le diagnostic réévalué et la conduite post-laboratoire avant de signer.',
+        );
+      }
+    }
 
     if (report.decision === 'PRESCRIPTION' && consultation.prescriptions.length === 0) {
       throw new BadRequestException(
