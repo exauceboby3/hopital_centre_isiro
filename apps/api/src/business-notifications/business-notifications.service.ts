@@ -42,7 +42,7 @@ export class BusinessNotificationsService {
     const updated = await this.prisma.$executeRaw(Prisma.sql`
       UPDATE "BusinessNotification"
       SET "readAt" = COALESCE("readAt", CURRENT_TIMESTAMP)
-      WHERE "id" = ${id}::uuid AND "recipientId" = ${userId}::uuid
+      WHERE "id" = ${id} AND "recipientId" = ${userId}
     `);
     if (!updated) throw new NotFoundException('Notification introuvable.');
     return { success: true };
@@ -52,7 +52,7 @@ export class BusinessNotificationsService {
     const updated = await this.prisma.$executeRaw(Prisma.sql`
       UPDATE "BusinessNotification"
       SET "readAt" = CURRENT_TIMESTAMP
-      WHERE "recipientId" = ${userId}::uuid AND "readAt" IS NULL
+      WHERE "recipientId" = ${userId} AND "readAt" IS NULL
     `);
     return { updated };
   }
