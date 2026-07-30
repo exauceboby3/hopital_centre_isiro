@@ -62,6 +62,55 @@
   margin-bottom: 2px;
 }
 
+.page :global(.messages-page-heading) {
+  align-items: center;
+  gap: 18px;
+}
+
+.page :global(.messaging-section-switch) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line, #e4e9ed);
+  border-radius: 13px;
+  background: var(--surface, #fff);
+  box-shadow: 0 8px 24px rgb(18 49 54 / 7%);
+}
+
+.page :global(.messaging-section-switch button) {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 13px;
+  border: 0;
+  border-radius: 9px;
+  color: var(--muted);
+  background: transparent;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.page :global(.messaging-section-switch button.active) {
+  color: var(--primary, #0f666c);
+  background: color-mix(in srgb, var(--primary, #0f666c) 11%, white);
+}
+
+.page :global(.messaging-section-switch button b) {
+  display: grid;
+  min-width: 19px;
+  height: 19px;
+  place-items: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--danger, #c53a3a);
+  font-size: 0.68rem;
+}
+
 .page :global(.alert) {
   flex: 0 0 auto;
   margin-bottom: 10px;
@@ -76,10 +125,10 @@
   max-height: 100%;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
   overflow: hidden;
-  border-radius: 18px;
-  box-shadow: 0 14px 36px rgb(18 49 54 / 9%);
+  border-radius: 20px;
+  box-shadow: 0 18px 44px rgb(18 49 54 / 11%);
 }
 
 .page :global(.contact-list) {
@@ -89,12 +138,34 @@
   flex-direction: column;
   overflow: hidden;
   border-right: 1px solid var(--line, #e4e9ed);
-  background: var(--surface, #fff);
+  background: color-mix(in srgb, var(--canvas, #f4f7f8) 74%, white);
 }
 
 .page :global(.contact-heading),
 .page :global(.contact-search) {
   flex: 0 0 auto;
+}
+
+.page :global(.contact-heading) {
+  padding: 18px 18px 10px;
+}
+
+.page :global(.contact-heading > div) {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.page :global(.contact-heading span) {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.page :global(.contact-search) {
+  margin: 0 14px 10px;
+  border-radius: 11px;
+  background: var(--surface, #fff);
 }
 
 .page :global(.contact-scroll) {
@@ -104,6 +175,62 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+  padding: 4px 8px 12px;
+}
+
+.page :global(.contact) {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 3px;
+  padding: 10px;
+  border: 0;
+  border-radius: 12px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.page :global(.contact:hover),
+.page :global(.contact.active) {
+  background: var(--surface, #fff);
+  box-shadow: 0 7px 20px rgb(18 49 54 / 8%);
+}
+
+.page :global(.contact.active) {
+  outline: 1px solid color-mix(in srgb, var(--primary, #0f666c) 24%, transparent);
+}
+
+.page :global(.contact > span) {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.page :global(.contact strong),
+.page :global(.contact small) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page :global(.contact small) {
+  color: var(--muted);
+  font-size: 0.73rem;
+}
+
+.page :global(.contact > b) {
+  display: grid;
+  min-width: 21px;
+  height: 21px;
+  place-items: center;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--primary, #0f666c);
+  font-size: 0.68rem;
 }
 
 .page :global(.chat-area) {
@@ -113,14 +240,31 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--surface, #fff);
+  background:
+    radial-gradient(circle at 16% 12%, rgb(23 126 132 / 7%), transparent 31%),
+    linear-gradient(180deg, #fbfdfd, #f4f8f8);
 }
 
 .page :global(.chat-header) {
   flex: 0 0 auto;
-  min-height: 68px;
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 18px;
   border-bottom: 1px solid var(--line, #e4e9ed);
-  background: var(--surface, #fff);
+  background: rgb(255 255 255 / 88%);
+  backdrop-filter: blur(12px);
+}
+
+.page :global(.chat-header > div) {
+  display: grid;
+  gap: 2px;
+}
+
+.page :global(.chat-header span) {
+  color: var(--muted);
+  font-size: 0.76rem;
 }
 
 .page :global(.messages-list) {
@@ -133,6 +277,81 @@
   scroll-behavior: smooth;
   scrollbar-gutter: stable;
   touch-action: pan-y;
+  padding: 22px clamp(14px, 3vw, 42px);
+}
+
+.page :global(.bubble) {
+  position: relative;
+  width: fit-content;
+  max-width: min(72%, 680px);
+  margin-bottom: 10px;
+  padding: 11px 13px 8px;
+  border-radius: 16px;
+  box-shadow: 0 7px 18px rgb(18 49 54 / 7%);
+}
+
+.page :global(.bubble.sent) {
+  margin-left: auto;
+  border-bottom-right-radius: 5px;
+  color: #fff;
+  background: linear-gradient(135deg, #126f75, #0b555b);
+}
+
+.page :global(.bubble.received) {
+  margin-right: auto;
+  border-bottom-left-radius: 5px;
+  color: var(--text, #183237);
+  background: #fff;
+}
+
+.page :global(.bubble p) {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.page :global(.message-time) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 5px;
+  color: currentColor;
+  opacity: 0.65;
+  font-size: 0.66rem;
+}
+
+.page :global(.message-delete-button) {
+  position: absolute;
+  top: 5px;
+  right: -29px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  background: rgb(255 255 255 / 90%);
+  box-shadow: 0 4px 14px rgb(18 49 54 / 11%);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.16s ease, color 0.16s ease;
+}
+
+.page :global(.bubble.sent .message-delete-button) {
+  right: auto;
+  left: -29px;
+}
+
+.page :global(.bubble:hover .message-delete-button),
+.page :global(.message-delete-button:focus-visible) {
+  opacity: 1;
+}
+
+.page :global(.message-delete-button:hover) {
+  color: var(--danger, #c53a3a);
 }
 
 .page :global(.message-form) {
@@ -141,15 +360,32 @@
   z-index: 2;
   display: flex;
   align-items: center;
+  gap: 9px;
   flex: 0 0 auto;
   min-width: 0;
+  padding: 12px 16px;
   border-top: 1px solid var(--line, #e4e9ed);
-  background: var(--surface, #fff);
+  background: rgb(255 255 255 / 94%);
+  backdrop-filter: blur(12px);
 }
 
 .page :global(.message-form > input) {
   min-width: 0;
   flex: 1 1 auto;
+  min-height: 42px;
+  padding: 10px 14px;
+  border: 1px solid var(--line, #e4e9ed);
+  border-radius: 13px;
+  background: var(--canvas, #f5f8f8);
+}
+
+.page :global(.message-send-button) {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 13px;
 }
 
 .page :global(.selected-message-file) {
@@ -178,6 +414,98 @@
   cursor: pointer;
 }
 
+.page :global(.business-notifications-panel) {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 20px;
+  box-shadow: 0 18px 44px rgb(18 49 54 / 10%);
+}
+
+.page :global(.business-notifications-header) {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line, #e4e9ed);
+}
+
+.page :global(.business-notifications-header > div) {
+  display: grid;
+  gap: 3px;
+}
+
+.page :global(.business-notifications-header span) {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.page :global(.business-notifications-list) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+  background: var(--canvas, #f5f8f8);
+}
+
+.page :global(.business-notification-card) {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  margin-bottom: 8px;
+  padding: 14px 15px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  color: inherit;
+  background: var(--surface, #fff);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 7px 18px rgb(18 49 54 / 5%);
+}
+
+.page :global(.business-notification-card.unread) {
+  border-color: color-mix(in srgb, var(--primary, #0f666c) 30%, transparent);
+  box-shadow: 0 9px 24px rgb(15 102 108 / 11%);
+}
+
+.page :global(.business-notification-icon) {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: var(--primary, #0f666c);
+  background: color-mix(in srgb, var(--primary, #0f666c) 10%, white);
+}
+
+.page :global(.business-notification-content) {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.page :global(.business-notification-content p) {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.page :global(.business-notification-content small) {
+  color: var(--muted);
+  font-size: 0.69rem;
+}
+
+.page :global(.chat-welcome-state) {
+  max-width: 420px;
+  margin: auto;
+  text-align: center;
+}
+
 @media (max-width: 900px) {
   :global(body.messages-route-active .page-content) {
     padding: 12px;
@@ -194,11 +522,21 @@
   }
 
   .page :global(.messages-page-heading) {
+    align-items: stretch;
     margin-bottom: 8px;
   }
 
   .page :global(.messages-page-heading p) {
     display: none;
+  }
+
+  .page :global(.messaging-section-switch) {
+    align-self: stretch;
+  }
+
+  .page :global(.messaging-section-switch button) {
+    flex: 1;
+    justify-content: center;
   }
 
   .page :global(.messaging-panel) {
@@ -207,12 +545,21 @@
   }
 
   .page :global(.contact-heading span),
-  .page :global(.contact .muted) {
+  .page :global(.contact small) {
     display: none;
   }
 
   .page :global(.selected-message-file) {
     max-width: 110px;
+  }
+
+  .page :global(.bubble) {
+    max-width: 86%;
+  }
+
+  .page :global(.business-notifications-header) {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 
@@ -227,18 +574,12 @@
   }
 
   .page :global(.contact) {
+    grid-template-columns: auto minmax(0, 1fr);
     padding-inline: 8px;
   }
 
-  .page :global(.contact > span) {
-    min-width: 0;
-  }
-
-  .page :global(.contact strong),
-  .page :global(.contact small) {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .page :global(.contact > b) {
+    position: absolute;
   }
 
   .page :global(.message-form) {
@@ -248,5 +589,13 @@
 
   .page :global(.selected-message-file) {
     display: none;
+  }
+
+  .page :global(.message-delete-button),
+  .page :global(.bubble.sent .message-delete-button) {
+    top: -10px;
+    right: 4px;
+    left: auto;
+    opacity: 0.75;
   }
 }
