@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -60,6 +61,14 @@ export class MessagesController {
   ) {
     if (!file) throw new BadRequestException('Sélectionnez un document ou une image.');
     return this.messages.sendAttachment(user.id, dto, file);
+  }
+
+  @Delete(':id')
+  deleteForUser(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.messages.deleteForUser(id, user.id);
   }
 
   @Get('attachments/:id')
