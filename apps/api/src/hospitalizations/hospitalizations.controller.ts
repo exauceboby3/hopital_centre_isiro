@@ -31,6 +31,8 @@ const hospitalizationRoles = [
   Role.RECEPTIONIST,
   Role.SECRETARY,
   Role.NURSE,
+  Role.CASHIER,
+  Role.ACCOUNTANT,
 ];
 
 @ApiTags('hospitalizations')
@@ -61,22 +63,56 @@ export class HospitalizationsController {
   }
 
   @Post()
-  @Roles(...hospitalizationRoles)
+  @Roles(
+    Role.SUPER_ADMIN,
+    Role.ADMIN,
+    Role.DOCTOR,
+    Role.SURGEON,
+    Role.MIDWIFE,
+    Role.RECEPTIONIST,
+    Role.SECRETARY,
+    Role.NURSE,
+  )
   admit(@Body() dto: AdmitPatientDto, @CurrentUser() user: AuthenticatedUser) {
     return this.hospitalizations.admit(dto, user);
   }
 
-  @Patch(':id/discharge')
+  @Patch(':id/medical-discharge')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.DOCTOR, Role.SURGEON, Role.MIDWIFE)
-  discharge(
+  medicalDischarge(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.hospitalizations.discharge(id, user.id);
+    return this.hospitalizations.medicalDischarge(id, user.id);
+  }
+
+  @Patch(':id/discharge')
+  @Roles(
+    Role.SUPER_ADMIN,
+    Role.ADMIN,
+    Role.CASHIER,
+    Role.ACCOUNTANT,
+    Role.RECEPTIONIST,
+    Role.SECRETARY,
+  )
+  administrativeDischarge(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.hospitalizations.administrativeDischarge(id, user.id);
   }
 
   @Patch(':id/transfer')
-  @Roles(...hospitalizationRoles)
+  @Roles(
+    Role.SUPER_ADMIN,
+    Role.ADMIN,
+    Role.DOCTOR,
+    Role.SURGEON,
+    Role.MIDWIFE,
+    Role.RECEPTIONIST,
+    Role.SECRETARY,
+    Role.NURSE,
+  )
   transfer(@Param('id', ParseUUIDPipe) id: string, @Body() dto: TransferPatientDto) {
     return this.hospitalizations.transfer(id, dto.bedId);
   }
