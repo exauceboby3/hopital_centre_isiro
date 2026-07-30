@@ -167,7 +167,7 @@ export class MessagesService {
     await this.prisma.$transaction(async (transaction) => {
       await transaction.$executeRaw(Prisma.sql`
         INSERT INTO "MessageDeletion" ("id", "messageId", "userId")
-        VALUES (${randomUUID()}::uuid, ${id}::uuid, ${userId}::uuid)
+        VALUES (${randomUUID()}, ${id}, ${userId})
         ON CONFLICT ("messageId", "userId") DO NOTHING
       `);
       await transaction.auditLog.create({
@@ -193,7 +193,7 @@ export class MessagesService {
     const hidden = await this.prisma.$queryRaw<Array<{ exists: boolean }>>(Prisma.sql`
       SELECT EXISTS(
         SELECT 1 FROM "MessageDeletion"
-        WHERE "messageId" = ${attachment.messageId}::uuid AND "userId" = ${userId}::uuid
+        WHERE "messageId" = ${attachment.messageId} AND "userId" = ${userId}
       ) AS "exists"
     `);
     if (hidden[0]?.exists) throw new NotFoundException('Pièce jointe introuvable.');
@@ -204,7 +204,7 @@ export class MessagesService {
     const rows = await this.prisma.$queryRaw<Array<{ messageId: string }>>(Prisma.sql`
       SELECT "messageId"
       FROM "MessageDeletion"
-      WHERE "userId" = ${userId}::uuid
+      WHERE "userId" = ${userId}
     `);
     return rows.map((row) => row.messageId);
   }
