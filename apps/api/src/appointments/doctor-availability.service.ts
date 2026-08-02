@@ -6,6 +6,7 @@ import {
   PatientJourneyStage,
   ShiftStatus,
 } from '@prisma/client';
+import { hospitalDayRange } from '../common/hospital-time';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -14,10 +15,7 @@ export class DoctorAvailabilityService {
 
   async list() {
     const now = new Date();
-    const start = new Date(now);
-    start.setUTCHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setUTCDate(end.getUTCDate() + 1);
+    const { start, end } = hospitalDayRange(now);
 
     const doctors = await this.prisma.doctorProfile.findMany({
       where: { user: { isActive: true } },

@@ -1,1 +1,0 @@
-Cette branche contient un correctif de stabilisation compact et un validateur temporaire. Ces fichiers sont supprimés automatiquement uniquement après fusion sans conflit et réussite de tous les contrôles.

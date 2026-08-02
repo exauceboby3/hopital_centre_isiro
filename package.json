@@ -19,7 +19,10 @@
     "db:migrate": "npm run prisma:migrate --workspace @hopital/api",
     "db:deploy": "npm run prisma:deploy --workspace @hopital/api",
     "db:seed": "npm run prisma:seed --workspace @hopital/api",
-    "format": "prettier --write \"apps/**/*.{ts,tsx,js,mjs,cjs,json,css,md}\" \"*.{json,md,yml}\""
+    "db:repair-clinicians": "npm run prisma:repair-clinicians --workspace @hopital/api",
+    "format": "prettier --write \"apps/**/*.{ts,tsx,js,mjs,cjs,json,css,md}\" \"*.{json,md,yml}\"",
+    "check:source": "node scripts/source-integrity-check.mjs",
+    "test:workflows": "node scripts/simulate-20-patient-workflows.mjs"
   },
   "devDependencies": {
     "prettier": "^3.9.5"

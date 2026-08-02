@@ -14,6 +14,7 @@ import {
 import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { PatientFinancialAccessService } from '../billing/patient-financial-access.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { AuthenticatedUser } from '../common/authenticated-user';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -22,6 +23,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CreateVitalSignDto } from '../consultations/dto/create-vital-sign.dto';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { ListPatientsDto } from './dto/list-patients.dto';
+import { PermanentDeletePatientDto } from './dto/permanent-delete-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 import { PatientAccessService } from './patient-access.service';
 import { PatientHistoryService } from './patient-history.service';
@@ -53,6 +55,7 @@ export class PatientsController {
     private readonly trash: PatientTrashService,
     private readonly vitalSigns: PatientVitalSignService,
     private readonly financialAccess: PatientFinancialAccessService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Get()
@@ -101,13 +104,16 @@ export class PatientsController {
 
   @Post()
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.RECEPTIONIST, Role.SECRETARY)
-  async create(@Body() dto: CreatePatientDto, @CurrentUser() user: AuthenticatedUser) {
-    const patient = await this.patients.create(dto);
-    const fileAuthorization = await this.financialAccess.createInitialFileAuthorization(
-      patient.id,
-      user.id,
-    );
-    return { ...patient, fileAuthorization };
+  create(@Body() dto: CreatePatientDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.prisma.$transaction(async (transaction) => {
+      const patient = await this.patients.create(dto, transaction);
+      const fileAuthorization = await this.financialAccess.createInitialFileAuthorization(
+        patient.id,
+        user.id,
+        transaction,
+      );
+      return { ...patient, fileAuthorization };
+    });
   }
 
   @Post(':id/vitals')
@@ -147,13 +153,17 @@ export class PatientsController {
 
   @Delete(':id/permanent')
   @Roles(Role.SUPER_ADMIN)
-  async removePermanently(@Param('id', ParseUUIDPipe) id: string) {
+  async removePermanently(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: PermanentDeletePatientDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     if (!(await this.trash.isInTrash(id))) {
       throw new BadRequestException(
         'La suppression définitive est autorisée uniquement depuis la corbeille.',
       );
     }
-    return this.patients.removePermanently(id);
+    return this.patients.removePermanently(id, user.id, dto.confirmation, dto.reason);
   }
 
   @Delete(':id')
@@ -162,9 +172,6 @@ export class PatientsController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    if (user.role === Role.SUPER_ADMIN && (await this.trash.isInTrash(id))) {
-      return this.patients.removePermanently(id);
-    }
     return this.trash.moveToTrash(id, user.id);
   }
 }

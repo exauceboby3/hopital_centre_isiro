@@ -60,20 +60,20 @@ describe('GraceAwareEnterpriseService', () => {
     const medicationCalls: MedicationClaimArgs[] = [];
     const operationOrder: string[] = [];
 
-    const prescriptionClaim = jest.fn(async (args: PrescriptionClaimArgs) => {
+    const prescriptionClaim = jest.fn((args: PrescriptionClaimArgs) => {
       prescriptionCalls.push(args);
       operationOrder.push('prescription');
-      return { count: 1 };
+      return Promise.resolve({ count: 1 });
     });
-    const batchClaim = jest.fn(async (args: BatchClaimArgs) => {
+    const batchClaim = jest.fn((args: BatchClaimArgs) => {
       batchCalls.push(args);
       operationOrder.push('batch');
-      return { count: 1 };
+      return Promise.resolve({ count: 1 });
     });
-    const medicationClaim = jest.fn(async (args: MedicationClaimArgs) => {
+    const medicationClaim = jest.fn((args: MedicationClaimArgs) => {
       medicationCalls.push(args);
       operationOrder.push('medication');
-      return { count: 1 };
+      return Promise.resolve({ count: 1 });
     });
     const itemClaim = jest.fn().mockResolvedValue({ count: 1 });
     const transaction = {

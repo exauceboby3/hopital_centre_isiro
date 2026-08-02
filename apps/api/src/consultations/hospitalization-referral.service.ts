@@ -35,7 +35,7 @@ export class HospitalizationReferralService {
     });
     if (!consultation) throw new NotFoundException('Consultation introuvable.');
     if (
-      !hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN]) &&
+      !hasAnyRole(user, [Role.DOCTOR, Role.SURGEON, Role.MIDWIFE]) ||
       consultation.doctor.userId !== user.id
     ) {
       throw new ForbiddenException('Cette consultation appartient à un autre médecin.');
@@ -45,6 +45,13 @@ export class HospitalizationReferralService {
       consultation.examRequests,
       'Hospitalisation indisponible',
     );
+    const activeHospitalization = await this.prisma.hospitalization.findFirst({
+      where: { patientId: consultation.patientId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    if (activeHospitalization) {
+      throw new BadRequestException('Ce patient possède déjà une hospitalisation active.');
+    }
 
     const service = await this.prisma.billableService.findUnique({ where: { id: serviceId } });
     if (!service || !service.isActive || service.type !== BillableServiceType.HOSPITALIZATION) {

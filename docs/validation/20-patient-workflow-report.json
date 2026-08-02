@@ -1,0 +1,135 @@
+{
+  "generatedAt": "2026-08-02T10:11:23.923Z",
+  "patientsTested": 20,
+  "successfulScenarios": 20,
+  "failedScenarios": 0,
+  "eventsExecuted": 222,
+  "remainingStock": {
+    "PARACETAMOL": 175,
+    "AMOXICILLIN": 80,
+    "QUININE": 80
+  },
+  "bedStates": {
+    "BED-1": "MAINTENANCE",
+    "BED-2": "MAINTENANCE",
+    "BED-3": "MAINTENANCE",
+    "BED-4": "MAINTENANCE",
+    "BED-5": "MAINTENANCE",
+    "BED-6": "AVAILABLE",
+    "BED-7": "AVAILABLE",
+    "BED-8": "AVAILABLE"
+  },
+  "scenarios": [
+    {
+      "patient": "CHI-2026-000001",
+      "scenario": "prescription-retour-domicile",
+      "ok": true
+    },
+    {
+      "patient": "CHI-2026-000002",
+      "scenario": "prescription-retour-domicile",
+      "ok": true
+    },
+    {
+      "patient": "CHI-2026-000003",
+      "scenario": "prescription-retour-domicile",
+      "ok": true
+    },
+    {
+      "patient": "CHI-2026-000004",
+      "scenario": "prescription-retour-domicile",
+      "ok": true
+    },
+    {
+      "patient": "CHI-2026-000005",
+      "scenario": "prescription-retour-domicile",
+      "ok": true
+    },
+    {
+      "patient": "CHI-2026-000006",
+      "scenario": "laboratoire-retour-médecin",
+      "ok": true
+    },
+    {
+      "patient": "CHI-2026-000007",
+      "scenario": "laboratoire-retour-médecin",
+      "ok": true
+    },
+    {
+      "patient": "CHI-2026-000008",
+      "scenario": "laboratoire-retour-médecin",
+      "ok": true
+    },
+    {
+      "patient": "CHI-2026-000009",
+      "scenario": "laboratoire-retour-médecin",
+      "ok": true
+    },
+    {
+      "patient": "CHI-2026-000010",
+      "scenario": "laboratoire-retour-médecin",
+      "ok": true
+    },
+    {
+      "patient": "CHI-2026-000011",
+      "scenario": "hospitalisation-soins-sortie",
+      "ok": true
+    },
+    {
+      "patient": "CHI-2026-000012",
+      "scenario": "hospitalisation-soins-sortie",
+      "ok": true
+    },
+    {
+      "patient": "CHI-2026-000013",
+      "scenario": "hospitalisation-soins-sortie",
+      "ok": true
+    },
+    {
+      "patient": "CHI-2026-000014",
+      "scenario": "hospitalisation-soins-sortie",
+      "ok": true
+    },
+    {
+      "patient": "CHI-2026-000015",
+      "scenario": "hospitalisation-soins-sortie",
+      "ok": true
+    },
+    {
+      "patient": "CHI-2026-000016",
+      "scenario": "imagerie-retour-médecin",
+      "ok": true
+    },
+    {
+      "patient": "CHI-2026-000017",
+      "scenario": "imagerie-retour-médecin",
+      "ok": true
+    },
+    {
+      "patient": "CHI-2026-000018",
+      "scenario": "imagerie-retour-médecin",
+      "ok": true
+    },
+    {
+      "patient": "CHI-2026-000019",
+      "scenario": "transfert-médical",
+      "ok": true
+    },
+    {
+      "patient": "CHI-2026-000020",
+      "scenario": "annulation",
+      "ok": true
+    }
+  ],
+  "negativeControls": [
+    "doublon avec identité fiable refusé",
+    "homonymes sans identifiant fiable autorisés",
+    "décision finale bloquée tant que le laboratoire est en attente",
+    "double délivrance pharmacie refusée",
+    "modification après signature refusée",
+    "double hospitalisation refusée",
+    "double sortie refusée",
+    "lit placé en maintenance après sortie"
+  ],
+  "scope": "Simulation déterministe de la logique métier; ne remplace pas un test E2E sur PostgreSQL et les API démarrées."
+}

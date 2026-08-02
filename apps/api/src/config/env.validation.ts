@@ -29,5 +29,18 @@ export function validateEnvironment(config: Record<string, unknown>): Record<str
     throw new Error('API_PORT doit être un port valide.');
   }
 
-  return { ...config, API_PORT: port };
+  const hospitalUtcOffsetMinutes = Number(config.HOSPITAL_UTC_OFFSET_MINUTES ?? 120);
+  if (
+    !Number.isInteger(hospitalUtcOffsetMinutes) ||
+    hospitalUtcOffsetMinutes < -720 ||
+    hospitalUtcOffsetMinutes > 840
+  ) {
+    throw new Error('HOSPITAL_UTC_OFFSET_MINUTES doit être compris entre -720 et 840.');
+  }
+
+  return {
+    ...config,
+    API_PORT: port,
+    HOSPITAL_UTC_OFFSET_MINUTES: hospitalUtcOffsetMinutes,
+  };
 }

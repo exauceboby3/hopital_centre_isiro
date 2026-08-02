@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   BedStatus,
   BillableServiceType,
@@ -106,10 +112,29 @@ export class HospitalizationsService {
     let doctorId = dto.doctorId;
     if (hasAnyRole(user, [Role.DOCTOR, Role.SURGEON, Role.MIDWIFE])) {
       doctorId = (await this.prisma.doctorProfile.findUnique({ where: { userId: user.id } }))?.id;
+      if (!doctorId) throw new ForbiddenException('Profil médical requis pour cette admission.');
     }
 
-    return this.prisma.$transaction(async (transaction) => {
-      await this.authorizations.assertAuthorized(
+    return this.prisma.$transaction(
+      async (transaction) => {
+        const active = await transaction.hospitalization.findFirst({
+          where: { patientId: dto.patientId, status: HospitalizationStatus.ACTIVE },
+          select: { id: true },
+        });
+        if (active) {
+          throw new ConflictException('Ce patient possède déjà une hospitalisation active.');
+        }
+        if (doctorId) {
+          const activeDoctor = await transaction.doctorProfile.findFirst({
+            where: { id: doctorId, user: { isActive: true } },
+            select: { id: true },
+          });
+          if (!activeDoctor) {
+            throw new BadRequestException('Le médecin sélectionné est introuvable ou inactif.');
+          }
+        }
+
+        await this.authorizations.assertAuthorized(
         dto.authorizationId,
         dto.patientId,
         BillableServiceType.HOSPITALIZATION,
@@ -119,7 +144,13 @@ export class HospitalizationsService {
       const referralConsultation = await transaction.consultation.findFirst({
         where: {
           patientId: dto.patientId,
-          status: { in: [ConsultationStatus.WAITING, ConsultationStatus.IN_PROGRESS] },
+          status: {
+            in: [
+              ConsultationStatus.WAITING,
+              ConsultationStatus.IN_PROGRESS,
+              ConsultationStatus.COMPLETED,
+            ],
+          },
           appointment: { journeyStage: PatientJourneyStage.HOSPITALIZATION },
         },
         select: {
@@ -203,7 +234,9 @@ export class HospitalizationsService {
         where: { id: hospitalization.id },
         include: hospitalizationInclude,
       });
-    });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
   async medicalDischarge(id: string, userId: string) {
@@ -297,10 +330,15 @@ export class HospitalizationsService {
         );
       }
 
-      const updated = await transaction.hospitalization.update({
-        where: { id },
+      const claimed = await transaction.hospitalization.updateMany({
+        where: { id, status: HospitalizationStatus.ACTIVE },
         data: { status: HospitalizationStatus.DISCHARGED, dischargedAt },
       });
+      if (!claimed.count) {
+        throw new ConflictException(
+          'Cette hospitalisation vient d’être clôturée par un autre utilisateur.',
+        );
+      }
       // Le trigger de gouvernance place automatiquement le lit en maintenance et crée
       // une demande de nettoyage. Le lit ne redevient disponible qu'après validation.
 
@@ -330,14 +368,15 @@ export class HospitalizationsService {
       });
 
       return transaction.hospitalization.findUniqueOrThrow({
-        where: { id: updated.id },
+        where: { id },
         include: hospitalizationInclude,
       });
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async transfer(id: string, bedId: string) {
-    return this.prisma.$transaction(async (transaction) => {
+    return this.prisma.$transaction(
+      async (transaction) => {
       const hospitalization = await transaction.hospitalization.findUnique({ where: { id } });
       if (!hospitalization) throw new NotFoundException('Hospitalisation introuvable.');
       if (hospitalization.status !== HospitalizationStatus.ACTIVE) {
@@ -371,7 +410,9 @@ export class HospitalizationsService {
         where: { id },
         include: hospitalizationInclude,
       });
-    });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
   private billingPreview(hospitalization: HospitalizationRow, at: Date) {

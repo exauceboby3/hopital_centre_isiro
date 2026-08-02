@@ -205,10 +205,17 @@ export default function ArchivesPage() {
       `Cette opération supprimera définitivement l’archive et toutes les données liées.\n\nSaisissez exactement ${patient.medicalRecordNumber} pour confirmer.`,
     );
     if (confirmation?.trim() !== patient.medicalRecordNumber) return;
+    const reason = window.prompt(
+      'Indiquez le motif administratif détaillé de cette suppression définitive (minimum 10 caractères).',
+    );
+    if (!reason || reason.trim().length < 10) return;
     setSubmitting(true);
     setError('');
     try {
-      await api(`/patients/${patient.id}`, { method: 'DELETE' });
+      await api(`/patients/${patient.id}/permanent`, {
+        method: 'DELETE',
+        body: JSON.stringify({ confirmation: confirmation.trim(), reason: reason.trim() }),
+      });
       setNotice(`L’archive ${patient.medicalRecordNumber} a été supprimée définitivement.`);
       setDetail(null);
       await load(query, department, year);

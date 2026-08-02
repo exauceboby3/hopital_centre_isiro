@@ -1,6 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { ConsultationStatus } from '@prisma/client';
-import { IsEnum, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import type { ConsultationDecision } from '../clinical-report';
 
 const decisions: ConsultationDecision[] = [
@@ -14,11 +13,6 @@ const decisions: ConsultationDecision[] = [
 ];
 
 export class UpdateConsultationDto {
-  @ApiPropertyOptional({ enum: ConsultationStatus })
-  @IsOptional()
-  @IsEnum(ConsultationStatus)
-  status?: ConsultationStatus;
-
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

@@ -14,3 +14,6 @@ apps/api/uploads/*
 legacy/uploads/
 packaging/android/.gradle/
 packaging/android/build/
+
+# Rapports de validation générés localement/CI
+artifacts/
