@@ -12,6 +12,7 @@ permissions:
 jobs:
   apply-and-validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16
@@ -51,25 +52,35 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Reconstruire et appliquer le correctif
+      - name: Reconstruire le correctif vérifié
         shell: bash
         run: |
-          set -uo pipefail
+          set -euo pipefail
           cat .automation/stabilization-patch-v2/part-*.txt | tr -d '\r\n' > /tmp/stabilization.patch.gz.b64
           base64 --decode /tmp/stabilization.patch.gz.b64 > /tmp/stabilization.patch.gz
           echo '19428d14a6017fd4887ce104534fc93f23d13008df2941949b6951d260e93038  /tmp/stabilization.patch.gz' | sha256sum --check
           gzip --decompress --stdout /tmp/stabilization.patch.gz > /tmp/stabilization.patch
 
-          if ! git apply --3way --index /tmp/stabilization.patch; then
-            echo '::error::La fusion à trois versions du correctif a échoué.'
-            echo 'Fichiers en conflit :'
-            git diff --name-only --diff-filter=U || true
-            echo 'État Git :'
-            git status --short || true
-            exit 1
-          fi
+      - name: Appliquer les fichiers sans conflit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --index \
+            --exclude=.github/workflows/ci.yml \
+            --exclude=apps/api/src/consultations/consultation-finalization.service.ts \
+            --exclude=apps/api/src/consultations/consultations.service.ts \
+            --exclude=apps/api/src/hospitalizations/hospitalizations.service.ts \
+            /tmp/stabilization.patch
+          git diff --cached --check
 
-          git diff --check
+      - name: Fusionner manuellement les services actuels
+        shell: bash
+        run: |
+          set -euo pipefail
+          node .automation/apply-consultation-overrides.mjs
+          node .automation/apply-hospital-ci-overrides.mjs
+          git add -A
+          git diff --cached --check
 
       - name: Installer npm 11 et les dépendances
         run: |
@@ -117,8 +128,9 @@ jobs:
             printf '# Rapport de stabilisation complète\n\n'
             printf '**Résultat : SUCCÈS sur PostgreSQL isolé.**\n\n'
             printf '## Contrôles validés\n\n'
-            printf -- '- Reconstruction et empreinte SHA-256 du correctif : réussies\n'
-            printf -- '- Fusion à trois versions avec le main actuel : réussie\n'
+            printf -- '- Empreinte SHA-256 du correctif : réussie\n'
+            printf -- '- Application des fichiers sans conflit : réussie\n'
+            printf -- '- Fusion manuelle des services récents : réussie\n'
             printf -- '- Prisma et migrations : réussis\n'
             printf -- '- Invariants sources : réussis\n'
             printf -- '- Lint API et frontend : réussi\n'
@@ -135,6 +147,9 @@ jobs:
           rm -rf .automation/stabilization
           rm -rf .automation/stabilization-patch
           rm -rf .automation/stabilization-patch-v2
+          rm -rf .automation/stabilization-clean-v3
+          rm -f .automation/apply-consultation-overrides.mjs
+          rm -f .automation/apply-hospital-ci-overrides.mjs
           rm -f .github/workflows/apply-full-stabilization.yml
           rm -f STABILIZATION_VALIDATION_REPORT.md
 
