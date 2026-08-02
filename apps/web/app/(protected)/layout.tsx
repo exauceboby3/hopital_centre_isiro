@@ -20,6 +20,7 @@ import { AppointmentDoctorRequirement } from '@/components/appointment-doctor-re
 import { AppointmentFileAccessPresentation } from '@/components/appointment-file-access-presentation';
 import { AppointmentVitalsVisibility } from '@/components/appointment-vitals-visibility';
 import { BiologistAdditionalExamPanel } from '@/components/biologist-additional-exam-panel';
+import { DataExchangeLauncher } from '@/components/data-exchange-launcher';
 import { GraceExpiryNotifications } from '@/components/grace-expiry-notifications';
 import { IdleSessionGuard } from '@/components/idle-session-guard';
 import { LaboratoryBatchValidationPanel } from '@/components/laboratory-batch-validation-panel';
@@ -55,6 +56,7 @@ export default function ProtectedLayout({ children }: Readonly<{ children: React
         <LaboratoryGroupPrintAction />
         <LaboratoryPatientAccess />
         <ProfilePhotoManager />
+        <DataExchangeLauncher />
         {children}
       </ProtectedShell>
     </RoleRouteGuard>

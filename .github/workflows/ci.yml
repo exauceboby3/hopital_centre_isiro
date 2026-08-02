@@ -110,15 +110,19 @@ jobs:
       - name: Tester profils, mesures de grâce, stocks, rapports et RH
         run: npm run test:department-workflows
 
-      - name: Publier les rapports des parcours patients
+      - name: Tester les exports PDF Excel CSV et les imports contrôlés
+        run: npm run test:data-exchange
+
+      - name: Publier les rapports des parcours patients et échanges
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rapports-parcours-patients
+          name: rapports-validation-systeme
           path: |
             artifacts/20-patient-workflow-report.json
             artifacts/advanced-doctor-load-report.json
             artifacts/department-profile-workflow-report.json
+            artifacts/data-exchange-workflow-report.json
           if-no-files-found: ignore
           retention-days: 7
 
