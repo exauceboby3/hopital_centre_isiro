@@ -11,7 +11,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:17-alpine
@@ -102,12 +102,17 @@ jobs:
       - name: Simuler 20 parcours patients
         run: npm run test:workflows
 
-      - name: Publier le rapport des 20 patients
+      - name: Tester la charge médicale et les transferts avancés
+        run: npm run test:advanced-workflows
+
+      - name: Publier les rapports des parcours patients
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rapport-20-patients
-          path: artifacts/20-patient-workflow-report.json
+          name: rapports-parcours-patients
+          path: |
+            artifacts/20-patient-workflow-report.json
+            artifacts/advanced-doctor-load-report.json
           if-no-files-found: ignore
           retention-days: 7
 
