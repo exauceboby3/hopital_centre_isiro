@@ -6,6 +6,10 @@ on:
       - main
     types: [opened, synchronize, reopened]
 
+concurrency:
+  group: full-stabilization-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -161,5 +165,14 @@ jobs:
             .github/workflows/ci.yml \
             .github/workflows/apply-full-stabilization.yml
           git diff --cached --check
+
+          BASE_SHA="$(git rev-parse HEAD)"
+          git fetch origin agent/full-system-stabilization-20260802
+          REMOTE_SHA="$(git rev-parse origin/agent/full-system-stabilization-20260802)"
+          if [ "$REMOTE_SHA" != "$BASE_SHA" ]; then
+            echo "::error::La branche a changé pendant la validation (${BASE_SHA} → ${REMOTE_SHA})."
+            exit 1
+          fi
+
           git commit -m 'Stabiliser l’algorithme et valider 20 parcours patients'
           git push origin HEAD:agent/full-system-stabilization-20260802
