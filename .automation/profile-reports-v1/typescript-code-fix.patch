@@ -1,0 +1,58 @@
+diff --git a/apps/api/src/enterprise/grace-aware-enterprise.service.ts b/apps/api/src/enterprise/grace-aware-enterprise.service.ts
+index abbbdb0..d51c499 100644
+--- a/apps/api/src/enterprise/grace-aware-enterprise.service.ts
++++ b/apps/api/src/enterprise/grace-aware-enterprise.service.ts
+@@ -115,6 +115,12 @@ export class GraceAwareEnterpriseService extends EnterpriseService {
+ 
+           const now = new Date();
+           for (const item of internalItems) {
++            const medicationId = item.medicationId;
++            if (!medicationId) {
++              throw new BadRequestException(
++                `La ligne ${item.medicationName} n’est reliée à aucun produit interne.`,
++              );
++            }
+             let remaining = item.quantity - item.dispensedQuantity;
+             if (remaining <= 0) continue;
+             const quantityToDispense = remaining;
+@@ -139,7 +145,7 @@ export class GraceAwareEnterpriseService extends EnterpriseService {
+               const batchClaim = await transaction.medicationBatch.updateMany({
+                 where: {
+                   id: batch.id,
+-                  medicationId: item.medicationId!,
++                  medicationId,
+                   quantity: { gte: quantity },
+                   expiresAt: { gt: now },
+                   isQuarantined: false,
+@@ -153,7 +159,7 @@ export class GraceAwareEnterpriseService extends EnterpriseService {
+               }
+               await transaction.stockMovement.create({
+                 data: {
+-                  medicationId: item.medicationId!,
++                  medicationId,
+                   batchId: batch.id,
+                   userId,
+                   type: StockMovementType.EXIT,
+@@ -166,7 +172,7 @@ export class GraceAwareEnterpriseService extends EnterpriseService {
+             }
+ 
+             const medicationClaim = await transaction.medication.updateMany({
+-              where: { id: item.medicationId, stockQuantity: { gte: quantityToDispense } },
++              where: { id: medicationId, stockQuantity: { gte: quantityToDispense } },
+               data: { stockQuantity: { decrement: quantityToDispense } },
+             });
+             if (!medicationClaim.count) {
+diff --git a/apps/api/src/patients/patients.service.ts b/apps/api/src/patients/patients.service.ts
+index 79cb454..dd90cf1 100644
+--- a/apps/api/src/patients/patients.service.ts
++++ b/apps/api/src/patients/patients.service.ts
+@@ -337,6 +337,9 @@ export class PatientsService {
+             select: {
+               dosage: true,
+               frequency: true,
++              medicationName: true,
++              strength: true,
++              availability: true,
+               medication: { select: { name: true, strength: true } },
+             },
+           },
