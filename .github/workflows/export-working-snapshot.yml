@@ -1,0 +1,30 @@
+name: Export working snapshot
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Récupérer la branche
+        uses: actions/checkout@v4
+
+      - name: Créer l’archive de travail
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar --exclude=.git --exclude=node_modules --exclude='apps/*/node_modules' -czf /tmp/hopital-current-main.tar.gz .
+
+      - name: Publier l’archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: hopital-current-main
+          path: /tmp/hopital-current-main.tar.gz
+          retention-days: 1
