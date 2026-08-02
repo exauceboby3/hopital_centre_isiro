@@ -49,7 +49,7 @@ jobs:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
 
-      - name: Reconstruire et vérifier le paquet
+      - name: Reconstruire, corriger et vérifier le paquet
         shell: bash
         run: |
           set -euo pipefail
@@ -57,6 +57,7 @@ jobs:
           base64 --decode data_exchange_bundle.b64 > data_exchange_bundle.tar.gz
           echo "69fef7a7155e15d3c7c2a9e64cebe2cbe58d8eb26ae690874623ea4de3863cf9  data_exchange_bundle.tar.gz" | sha256sum --check
           tar --extract --gzip --file data_exchange_bundle.tar.gz
+          python _automation/data-exchange/apply-lint-fix.py
           rm -rf _automation/data-exchange data_exchange_bundle.b64 data_exchange_bundle.tar.gz
 
       - name: Installer Node.js et npm 11
