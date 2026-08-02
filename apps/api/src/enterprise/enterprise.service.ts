@@ -13,6 +13,7 @@ import {
   PayrollEntryStatus,
   PayrollPeriodStatus,
   Prisma,
+  PrescriptionAvailability,
   PrescriptionStatus,
   RadiologyStudyStatus,
   SpecialtyCaseStatus,
@@ -270,27 +271,36 @@ export class EnterpriseService {
       if (existing) return existing;
     }
 
-    const medicationIds = [...new Set(dto.items.map((item) => item.medicationId))];
-    if (medicationIds.length !== dto.items.length) {
+    const itemKeys = dto.items.map((item) =>
+      item.medicationId
+        ? `ID:${item.medicationId}`
+        : `NAME:${item.medicationName?.trim().toLocaleLowerCase('fr') ?? ''}`,
+    );
+    if (new Set(itemKeys).size !== itemKeys.length) {
       throw new BadRequestException('Un médicament ne peut apparaître qu’une fois par ordonnance.');
     }
+    const medicationIds = [
+      ...new Set(dto.items.map((item) => item.medicationId).filter((id): id is string => Boolean(id))),
+    ];
     const [patient, consultation, medications, interactions] = await Promise.all([
       this.prisma.patient.findUnique({ where: { id: dto.patientId } }),
       dto.consultationId
         ? this.prisma.consultation.findUnique({ where: { id: dto.consultationId } })
         : null,
       this.prisma.medication.findMany({ where: { id: { in: medicationIds }, isActive: true } }),
-      this.prisma.drugInteraction.findMany({
-        where: {
-          isActive: true,
-          medicationAId: { in: medicationIds },
-          medicationBId: { in: medicationIds },
-        },
-        include: { medicationA: true, medicationB: true },
-      }),
+      medicationIds.length > 1
+        ? this.prisma.drugInteraction.findMany({
+            where: {
+              isActive: true,
+              medicationAId: { in: medicationIds },
+              medicationBId: { in: medicationIds },
+            },
+            include: { medicationA: true, medicationB: true },
+          })
+        : [],
     ]);
     if (!patient || medications.length !== medicationIds.length) {
-      throw new NotFoundException('Patient ou médicament introuvable.');
+      throw new NotFoundException('Patient ou médicament référencé introuvable.');
     }
     if (consultation && consultation.patientId !== dto.patientId) {
       throw new BadRequestException('La consultation appartient à un autre patient.');
@@ -303,22 +313,54 @@ export class EnterpriseService {
         `Interaction contre-indiquée : ${blockers.map((item) => `${item.medicationA.name} + ${item.medicationB.name}`).join(', ')}. Un motif médical est obligatoire.`,
       );
     }
+
     const byId = new Map(medications.map((medication) => [medication.id, medication]));
-    const unavailable = dto.items.filter((item) => {
-      const medication = byId.get(item.medicationId)!;
-      return medication.stockQuantity < item.quantity || medication.unitPrice.lessThanOrEqualTo(0);
-    });
-    if (unavailable.length) {
-      throw new BadRequestException(
-        `Médicament non disponible, quantité insuffisante ou tarif absent : ${unavailable
-          .map((item) => byId.get(item.medicationId)!.name)
-          .join(', ')}. Mettez le stock à jour ou choisissez un médicament disponible.`,
+    const preparedItems = dto.items.map((item) => {
+      const medication = item.medicationId ? byId.get(item.medicationId) : undefined;
+      const internallyAvailable = Boolean(
+        medication &&
+          medication.stockQuantity >= item.quantity &&
+          medication.unitPrice.greaterThan(0),
       );
-    }
-    const total = dto.items.reduce(
-      (sum, item) => sum + Number(byId.get(item.medicationId)!.unitPrice) * item.quantity,
-      0,
-    );
+      const availability = medication
+        ? item.availability === PrescriptionAvailability.EXTERNAL ||
+          item.availability === PrescriptionAvailability.NON_CATALOGUED
+          ? item.availability
+          : internallyAvailable
+            ? PrescriptionAvailability.INTERNAL
+            : PrescriptionAvailability.EXTERNAL
+        : item.availability === PrescriptionAvailability.EXTERNAL
+          ? PrescriptionAvailability.EXTERNAL
+          : PrescriptionAvailability.NON_CATALOGUED;
+      const medicationName = medication?.name ?? item.medicationName?.trim();
+      if (!medicationName) {
+        throw new BadRequestException('Le nom du médicament externe est obligatoire.');
+      }
+      return {
+        medicationId: medication?.id ?? null,
+        medicationName,
+        form: medication?.form ?? (item.form?.trim() || null),
+        strength: medication?.strength ?? (item.strength?.trim() || null),
+        availability,
+        externalReason:
+          availability === PrescriptionAvailability.INTERNAL
+            ? null
+            : item.externalReason?.trim() ||
+              (medication ? 'Produit indisponible ou quantité insuffisante à la pharmacie.' : 'Produit non référencé dans le stock hospitalier.'),
+        dosage: item.dosage.trim(),
+        frequency: item.frequency.trim(),
+        route: item.route.trim(),
+        durationDays: item.durationDays,
+        quantity: item.quantity,
+        instructions: item.instructions?.trim() || null,
+      };
+    });
+
+    const total = preparedItems.reduce((sum, item) => {
+      if (item.availability !== PrescriptionAvailability.INTERNAL || !item.medicationId) return sum;
+      return sum + Number(byId.get(item.medicationId)!.unitPrice) * item.quantity;
+    }, 0);
+
     return this.prisma.$transaction(async (transaction) => {
       const invoice = await transaction.invoice.create({
         data: {
@@ -327,15 +369,22 @@ export class EnterpriseService {
           issuedById: userId,
           status: total > 0 ? InvoiceStatus.PENDING : InvoiceStatus.PAID,
           total: new Prisma.Decimal(total),
-          notes: 'Ordonnance structurée — paiement avant délivrance',
+          notes:
+            total > 0
+              ? 'Ordonnance structurée — paiement avant délivrance interne'
+              : 'Ordonnance externe ou sans produit facturable par la pharmacie hospitalière',
           items: {
-            create: dto.items.map((item) => {
-              const medication = byId.get(item.medicationId)!;
-              const lineTotal = Number(medication.unitPrice) * item.quantity;
+            create: preparedItems.map((item) => {
+              const medication = item.medicationId ? byId.get(item.medicationId) : undefined;
+              const unitPrice =
+                item.availability === PrescriptionAvailability.INTERNAL && medication
+                  ? medication.unitPrice
+                  : new Prisma.Decimal(0);
+              const lineTotal = Number(unitPrice) * item.quantity;
               return {
-                description: `${medication.name} ${medication.strength ?? ''}`.trim(),
+                description: `${item.medicationName}${item.strength ? ` ${item.strength}` : ''}${item.availability === PrescriptionAvailability.INTERNAL ? '' : ' — achat externe'}`,
                 quantity: item.quantity,
-                unitPrice: medication.unitPrice,
+                unitPrice,
                 total: new Prisma.Decimal(lineTotal),
               };
             }),
@@ -360,7 +409,7 @@ export class EnterpriseService {
             })),
             overrideReason: dto.interactionOverrideReason,
           },
-          items: { create: dto.items },
+          items: { create: preparedItems },
         },
         include: prescriptionInclude,
       });
@@ -379,6 +428,18 @@ export class EnterpriseService {
     ) {
       throw new BadRequestException('Cette ordonnance ne peut plus être délivrée.');
     }
+    const internalItems = prescription.items.filter(
+      (item) =>
+        item.medicationId &&
+        item.medication &&
+        (item.availability === PrescriptionAvailability.INTERNAL ||
+          item.availability === PrescriptionAvailability.PARTIAL),
+    );
+    if (!internalItems.length) {
+      throw new BadRequestException(
+        'Cette ordonnance contient uniquement des produits à acheter à l’extérieur.',
+      );
+    }
     if (!this.invoiceIsCleared(prescription.invoice)) {
       throw new BadRequestException(
         'La part patient doit être payée et la garantie assureur validée avant délivrance.',
@@ -386,12 +447,14 @@ export class EnterpriseService {
     }
     return this.prisma.$transaction(
       async (transaction) => {
-        for (const item of prescription.items) {
+        for (const item of internalItems) {
+          const medicationId = item.medicationId!;
+          const medicationName = item.medicationName;
           let remaining = item.quantity - item.dispensedQuantity;
           if (remaining <= 0) continue;
           const batches = await transaction.medicationBatch.findMany({
             where: {
-              medicationId: item.medicationId,
+              medicationId,
               quantity: { gt: 0 },
               expiresAt: { gt: new Date() },
               isQuarantined: false,
@@ -400,7 +463,7 @@ export class EnterpriseService {
           });
           if (batches.reduce((sum, batch) => sum + batch.quantity, 0) < remaining) {
             throw new BadRequestException(
-              `Lots valides insuffisants pour ${item.medication.name} (${remaining} requis).`,
+              `Lots valides insuffisants pour ${medicationName} (${remaining} requis).`,
             );
           }
           for (const batch of batches) {
@@ -412,7 +475,7 @@ export class EnterpriseService {
             });
             await transaction.stockMovement.create({
               data: {
-                medicationId: item.medicationId,
+                medicationId,
                 batchId: batch.id,
                 userId,
                 type: StockMovementType.EXIT,
@@ -424,7 +487,7 @@ export class EnterpriseService {
             remaining -= quantity;
           }
           await transaction.medication.update({
-            where: { id: item.medicationId },
+            where: { id: medicationId },
             data: { stockQuantity: { decrement: item.quantity - item.dispensedQuantity } },
           });
           await transaction.prescriptionItem.update({
@@ -432,9 +495,19 @@ export class EnterpriseService {
             data: { dispensedQuantity: item.quantity },
           });
         }
+        const hasExternalItems = prescription.items.some(
+          (item) =>
+            item.availability === PrescriptionAvailability.EXTERNAL ||
+            item.availability === PrescriptionAvailability.NON_CATALOGUED,
+        );
         return transaction.prescription.update({
           where: { id },
-          data: { status: PrescriptionStatus.DISPENSED, dispensedAt: new Date() },
+          data: {
+            status: hasExternalItems
+              ? PrescriptionStatus.PARTIALLY_DISPENSED
+              : PrescriptionStatus.DISPENSED,
+            dispensedAt: new Date(),
+          },
           include: prescriptionInclude,
         });
       },

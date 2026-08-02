@@ -161,4 +161,86 @@ describe('PatientsService', () => {
     expect(auditCall?.data.userId).toBe('super-user-1');
     expect(auditCall?.data.action).toBe('PATIENT_PERMANENTLY_DELETED');
   });
+
+  it('enregistre une correction clinique immuable avec son motif et son audit', async () => {
+    type AmendmentCreateInput = {
+      data: {
+        patientId: string;
+        consultationId: string | null;
+        authorId: string;
+        category: string;
+        fieldName: string;
+        previousValue: string | null;
+        newValue: string;
+        reason: string;
+      };
+    };
+    const amendmentInputs: AmendmentCreateInput[] = [];
+    const amendmentCreate = jest.fn<
+      Promise<{
+        id: string;
+        category: string;
+        fieldName: string;
+        previousValue: string;
+        newValue: string;
+        reason: string;
+      }>,
+      [AmendmentCreateInput]
+    >((input) => {
+      amendmentInputs.push(input);
+      return Promise.resolve({
+        id: 'amendment-1',
+        category: 'DIAGNOSTIC',
+        fieldName: 'Diagnostic principal',
+        previousValue: 'Paludisme simple',
+        newValue: 'Paludisme grave',
+        reason: 'Correction après réception des résultats biologiques.',
+      });
+    });
+    const auditCreate = jest.fn().mockResolvedValue({ id: 'audit-1' });
+    const transaction = {
+      patientClinicalAmendment: { create: amendmentCreate },
+      auditLog: { create: auditCreate },
+    };
+    const prisma = {
+      patient: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'patient-1',
+          medicalRecordNumber: 'CHI-2026-000001',
+        }),
+      },
+      consultation: { findFirst: jest.fn().mockResolvedValue({ id: 'consultation-1' }) },
+      $transaction: (callback: (client: typeof transaction) => Promise<unknown>) =>
+        callback(transaction),
+    } as unknown as PrismaService;
+    const service = new PatientsService(prisma, {} as ConfigurationService);
+
+    await service.createClinicalAmendment(
+      'patient-1',
+      {
+        consultationId: 'consultation-1',
+        category: 'diagnostic',
+        fieldName: ' Diagnostic principal ',
+        previousValue: ' Paludisme simple ',
+        newValue: ' Paludisme grave ',
+        reason: ' Correction après réception des résultats biologiques. ',
+      },
+      'doctor-1',
+    );
+
+    const amendmentInput = amendmentInputs.at(0);
+    expect(amendmentInput).toBeDefined();
+    expect(amendmentInput?.data).toMatchObject({
+      patientId: 'patient-1',
+      consultationId: 'consultation-1',
+      authorId: 'doctor-1',
+      category: 'DIAGNOSTIC',
+      fieldName: 'Diagnostic principal',
+      previousValue: 'Paludisme simple',
+      newValue: 'Paludisme grave',
+      reason: 'Correction après réception des résultats biologiques.',
+    });
+    expect(auditCreate).toHaveBeenCalledTimes(1);
+  });
+
 });

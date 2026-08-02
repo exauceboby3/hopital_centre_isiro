@@ -51,7 +51,11 @@ interface Prescription {
     dispensedQuantity: number;
     dosage: string;
     frequency: string;
-    medication: Medication;
+    medicationId?: string;
+    medicationName: string;
+    availability: string;
+    externalReason?: string;
+    medication?: Medication | null;
   }>;
 }
 const emptyMedication = {
@@ -190,7 +194,7 @@ export default function PharmacyPage() {
         patientName(row.patient),
         row.patient.medicalRecordNumber,
         row.invoice.number,
-        row.items.map((item) => item.medication.name).join(' '),
+        row.items.map((item) => item.medicationName || item.medication?.name || '').join(' '),
       ),
   );
   const filteredMedications = items.filter(
@@ -259,12 +263,16 @@ export default function PharmacyPage() {
                   <td>
                     {row.items.map((item) => {
                       const remaining = item.quantity - item.dispensedQuantity;
-                      const available = item.medication.stockQuantity >= remaining;
+                      const internal = item.availability === 'INTERNAL' || item.availability === 'PARTIAL';
+                      const available = Boolean(
+                        internal && item.medication && item.medication.stockQuantity >= remaining,
+                      );
                       return (
-                        <div key={item.id} className={available ? '' : 'stock-unavailable'}>
-                          {item.medication.name} — {item.dosage}, {item.frequency} · {remaining}{' '}
-                          unité(s)
-                          {!available && ' · stock insuffisant / achat extérieur'}
+                        <div key={item.id} className={internal && !available ? 'stock-unavailable' : ''}>
+                          {item.medicationName || item.medication?.name || 'Médicament'} — {item.dosage},{' '}
+                          {item.frequency} · {remaining} unité(s)
+                          {!internal && ' · achat extérieur (aucune sortie de stock)'}
+                          {internal && !available && ' · stock insuffisant'}
                         </div>
                       );
                     })}

@@ -3,6 +3,7 @@ import { BedStatus, CustomFieldEntity, HospitalizationStatus, Prisma } from '@pr
 import { hospitalCalendarYear } from '../common/hospital-time';
 import { ConfigurationService } from '../configuration/configuration.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CreateClinicalAmendmentDto } from './dto/create-clinical-amendment.dto';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { ListPatientsDto } from './dto/list-patients.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
@@ -112,6 +113,11 @@ export class PatientsService {
         consultations: { orderBy: { createdAt: 'desc' }, take: 10 },
         examRequests: { orderBy: { requestedAt: 'desc' }, take: 10 },
         hospitalizations: { orderBy: { admittedAt: 'desc' }, take: 10 },
+        clinicalAmendments: {
+          orderBy: { createdAt: 'desc' },
+          take: 30,
+          include: { author: { select: { id: true, username: true, role: true } } },
+        },
       },
     });
     if (!patient) {
@@ -121,6 +127,76 @@ export class PatientsService {
       ...patient,
       customFields: await this.configuration.values(CustomFieldEntity.PATIENT, patient.id),
     };
+  }
+
+  async clinicalAmendments(patientId: string) {
+    const exists = await this.prisma.patient.count({ where: { id: patientId, archivedAt: null } });
+    if (!exists) throw new NotFoundException('Patient introuvable.');
+    return this.prisma.patientClinicalAmendment.findMany({
+      where: { patientId },
+      include: {
+        author: { select: { id: true, username: true, role: true } },
+        consultation: { select: { id: true, reason: true, status: true, createdAt: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async createClinicalAmendment(
+    patientId: string,
+    dto: CreateClinicalAmendmentDto,
+    authorId: string,
+  ) {
+    const patient = await this.prisma.patient.findFirst({
+      where: { id: patientId, archivedAt: null },
+      select: { id: true, medicalRecordNumber: true },
+    });
+    if (!patient) throw new NotFoundException('Patient introuvable.');
+    if (dto.consultationId) {
+      const consultation = await this.prisma.consultation.findFirst({
+        where: { id: dto.consultationId, patientId },
+        select: { id: true },
+      });
+      if (!consultation) {
+        throw new ConflictException('La consultation sélectionnée ne correspond pas à ce patient.');
+      }
+    }
+
+    return this.prisma.$transaction(async (transaction) => {
+      const amendment = await transaction.patientClinicalAmendment.create({
+        data: {
+          patientId,
+          consultationId: dto.consultationId,
+          authorId,
+          category: dto.category.trim().toUpperCase(),
+          fieldName: dto.fieldName.trim(),
+          previousValue: dto.previousValue?.trim() || null,
+          newValue: dto.newValue.trim(),
+          reason: dto.reason.trim(),
+        },
+        include: {
+          author: { select: { id: true, username: true, role: true } },
+          consultation: { select: { id: true, reason: true, status: true, createdAt: true } },
+        },
+      });
+      await transaction.auditLog.create({
+        data: {
+          userId: authorId,
+          action: 'PATIENT_CLINICAL_AMENDMENT_CREATED',
+          entity: 'Patient',
+          entityId: patientId,
+          metadata: {
+            medicalRecordNumber: patient.medicalRecordNumber,
+            amendmentId: amendment.id,
+            consultationId: dto.consultationId ?? null,
+            category: amendment.category,
+            fieldName: amendment.fieldName,
+            reason: amendment.reason,
+          },
+        },
+      });
+      return amendment;
+    });
   }
 
   create(dto: CreatePatientDto, db?: DatabaseClient) {
@@ -261,6 +337,9 @@ export class PatientsService {
             select: {
               dosage: true,
               frequency: true,
+              medicationName: true,
+              strength: true,
+              availability: true,
               medication: { select: { name: true, strength: true } },
             },
           },
@@ -404,7 +483,7 @@ export class PatientsService {
           row.items
             .map(
               (item) =>
-                `${item.medication.name} ${item.medication.strength ?? ''} — ${item.dosage}, ${item.frequency}`,
+                `${item.medicationName || item.medication?.name || 'Médicament'} ${item.strength || item.medication?.strength || ''} — ${item.dosage}, ${item.frequency}${item.availability !== 'INTERNAL' ? ' — achat extérieur' : ''}`,
             )
             .join(' ; '),
           row.generalInstructions,

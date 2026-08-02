@@ -125,12 +125,9 @@ export class PatientAccessService {
     }
 
     if (hasAnyRole(user, [Role.DOCTOR, Role.SURGEON, Role.MIDWIFE])) {
-      return {
-        OR: [
-          { appointments: { some: { doctor: { userId: user.id } } } },
-          { consultations: { some: { doctor: { userId: user.id } } } },
-        ],
-      };
+      // Les praticiens peuvent consulter tous les dossiers actifs.
+      // Les écritures sont tracées par les services cliniques dédiés.
+      return {};
     }
 
     if (hasAnyRole(user, [Role.LAB_TECHNICIAN, Role.MEDICAL_BIOLOGIST])) {

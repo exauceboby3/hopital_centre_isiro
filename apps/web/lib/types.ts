@@ -13,7 +13,8 @@ export type Role =
   | 'MIDWIFE'
   | 'PHARMACIST'
   | 'ACCOUNTANT'
-  | 'STOREKEEPER';
+  | 'STOREKEEPER'
+  | 'HR';
 
 export interface User {
   id: string;

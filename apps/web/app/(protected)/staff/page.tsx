@@ -384,6 +384,7 @@ export default function StaffPage() {
                       'PHARMACIST',
                       'ACCOUNTANT',
                       'STOREKEEPER',
+                      'HR',
                     ] as Role[]
                   ).map((role) => (
                     <option key={role} value={role}>

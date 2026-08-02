@@ -7,6 +7,7 @@ import {
   LedgerAccountType,
   PayrollEntryStatus,
   PayrollPeriodStatus,
+  PrescriptionAvailability,
   RadiologyModality,
   RadiologyStudyStatus,
   ShiftStatus,
@@ -34,6 +35,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 
@@ -72,8 +74,34 @@ export class UpdateCoverageDto {
 }
 
 export class CreatePrescriptionItemDto {
+  @IsOptional()
   @IsUUID()
-  medicationId: string;
+  medicationId?: string;
+
+  @ValidateIf((item: CreatePrescriptionItemDto) => !item.medicationId)
+  @IsString()
+  @MinLength(2)
+  @MaxLength(160)
+  medicationName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  form?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  strength?: string;
+
+  @IsOptional()
+  @IsEnum(PrescriptionAvailability)
+  availability?: PrescriptionAvailability;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  externalReason?: string;
 
   @IsString()
   @MaxLength(120)

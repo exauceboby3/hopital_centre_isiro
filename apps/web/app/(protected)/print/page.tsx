@@ -177,7 +177,10 @@ interface Prescription {
     durationDays: number;
     quantity: number;
     instructions?: string;
-    medication: { name: string; strength?: string };
+    medicationName: string;
+    strength?: string;
+    availability: string;
+    medication?: { name: string; strength?: string } | null;
   }>;
 }
 interface SpecialtyCase {
@@ -233,7 +236,10 @@ interface Inventory {
     expectedQuantity: number;
     countedQuantity: number;
     difference: number;
-    medication: { name: string; strength?: string };
+    medicationName: string;
+    strength?: string;
+    availability: string;
+    medication?: { name: string; strength?: string } | null;
   }>;
 }
 interface Shift {
@@ -1123,9 +1129,9 @@ function PrescriptionDocument({ prescription }: { prescription: Prescription }) 
         </thead>
         <tbody>
           {prescription.items.map((item, index) => (
-            <tr key={`${item.medication.name}-${index}`}>
+            <tr key={`${item.medicationName || item.medication?.name || 'medicament'}-${index}`}>
               <td>
-                {item.medication.name} {item.medication.strength}
+                {item.medicationName || item.medication?.name || 'Médicament'} {item.strength || item.medication?.strength}{item.availability !== 'INTERNAL' ? ' — achat extérieur' : ''}
               </td>
               <td>{item.dosage}</td>
               <td>{item.frequency}</td>
@@ -1302,16 +1308,22 @@ function InventoryDocument({ inventory }: { inventory: Inventory }) {
           </tr>
         </thead>
         <tbody>
-          {inventory.lines.map((line) => (
-            <tr key={`${line.medication.name}-${line.medication.strength ?? ''}`}>
-              <td>
-                {line.medication.name} {line.medication.strength}
-              </td>
-              <td>{line.expectedQuantity}</td>
-              <td>{line.countedQuantity}</td>
-              <td>{line.difference}</td>
-            </tr>
-          ))}
+          {inventory.lines.map((line, index) => {
+            const medicationName =
+              line.medication?.name ?? line.medicationName ?? 'Médicament non référencé';
+            const strength = line.medication?.strength ?? line.strength ?? '';
+
+            return (
+              <tr key={`${medicationName}-${strength}-${index}`}>
+                <td>
+                  {medicationName} {strength}
+                </td>
+                <td>{line.expectedQuantity}</td>
+                <td>{line.countedQuantity}</td>
+                <td>{line.difference}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
       {inventory.notes && <p className="print-validation">Notes : {inventory.notes}</p>}

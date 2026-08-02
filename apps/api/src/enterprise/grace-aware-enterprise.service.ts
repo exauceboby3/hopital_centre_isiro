@@ -10,6 +10,7 @@ import {
   InvoiceStatus,
   PaymentPayer,
   Prisma,
+  PrescriptionAvailability,
   PrescriptionStatus,
   StockMovementType,
 } from '@prisma/client';
@@ -57,6 +58,26 @@ export class GraceAwareEnterpriseService extends EnterpriseService {
           ) {
             throw new BadRequestException('Cette ordonnance ne peut plus être délivrée.');
           }
+          const internalItems = prescription.items.filter(
+            (item) =>
+              item.medicationId &&
+              item.medication &&
+              (item.availability === PrescriptionAvailability.INTERNAL ||
+                item.availability === PrescriptionAvailability.PARTIAL),
+          );
+          if (!internalItems.length) {
+            throw new BadRequestException(
+              'Cette ordonnance contient uniquement des produits à acheter à l’extérieur.',
+            );
+          }
+          const hasExternalItems = prescription.items.some(
+            (item) =>
+              item.availability === PrescriptionAvailability.EXTERNAL ||
+              item.availability === PrescriptionAvailability.NON_CATALOGUED,
+          );
+          const targetStatus = hasExternalItems
+            ? PrescriptionStatus.PARTIALLY_DISPENSED
+            : PrescriptionStatus.DISPENSED;
 
           const grace = await this.patientAccess.activeGrace(
             prescription.patientId,
@@ -84,7 +105,7 @@ export class GraceAwareEnterpriseService extends EnterpriseService {
                 in: [PrescriptionStatus.ACTIVE, PrescriptionStatus.PARTIALLY_DISPENSED],
               },
             },
-            data: { status: PrescriptionStatus.DISPENSED, dispensedAt: new Date() },
+            data: { status: targetStatus, dispensedAt: new Date() },
           });
           if (!claimed.count) {
             throw new ConflictException(
@@ -93,13 +114,19 @@ export class GraceAwareEnterpriseService extends EnterpriseService {
           }
 
           const now = new Date();
-          for (const item of prescription.items) {
+          for (const item of internalItems) {
+            const medicationId = item.medicationId;
+            if (!medicationId) {
+              throw new BadRequestException(
+                `La ligne ${item.medicationName} n’est reliée à aucun produit interne.`,
+              );
+            }
             let remaining = item.quantity - item.dispensedQuantity;
             if (remaining <= 0) continue;
             const quantityToDispense = remaining;
             const batches = await transaction.medicationBatch.findMany({
               where: {
-                medicationId: item.medicationId,
+                medicationId: item.medicationId!,
                 quantity: { gt: 0 },
                 expiresAt: { gt: now },
                 isQuarantined: false,
@@ -108,7 +135,7 @@ export class GraceAwareEnterpriseService extends EnterpriseService {
             });
             if (batches.reduce((sum, batch) => sum + batch.quantity, 0) < remaining) {
               throw new BadRequestException(
-                `Lots valides insuffisants pour ${item.medication.name} (${remaining} requis).`,
+                `Lots valides insuffisants pour ${item.medicationName} (${remaining} requis).`,
               );
             }
 
@@ -118,7 +145,7 @@ export class GraceAwareEnterpriseService extends EnterpriseService {
               const batchClaim = await transaction.medicationBatch.updateMany({
                 where: {
                   id: batch.id,
-                  medicationId: item.medicationId,
+                  medicationId,
                   quantity: { gte: quantity },
                   expiresAt: { gt: now },
                   isQuarantined: false,
@@ -127,12 +154,12 @@ export class GraceAwareEnterpriseService extends EnterpriseService {
               });
               if (!batchClaim.count) {
                 throw new ConflictException(
-                  `Le lot ${batch.lotNumber} de ${item.medication.name} vient d’être modifié. Recommencez la délivrance.`,
+                  `Le lot ${batch.lotNumber} de ${item.medicationName} vient d’être modifié. Recommencez la délivrance.`,
                 );
               }
               await transaction.stockMovement.create({
                 data: {
-                  medicationId: item.medicationId,
+                  medicationId,
                   batchId: batch.id,
                   userId,
                   type: StockMovementType.EXIT,
@@ -145,12 +172,12 @@ export class GraceAwareEnterpriseService extends EnterpriseService {
             }
 
             const medicationClaim = await transaction.medication.updateMany({
-              where: { id: item.medicationId, stockQuantity: { gte: quantityToDispense } },
+              where: { id: medicationId, stockQuantity: { gte: quantityToDispense } },
               data: { stockQuantity: { decrement: quantityToDispense } },
             });
             if (!medicationClaim.count) {
               throw new ConflictException(
-                `Le stock global de ${item.medication.name} vient d’être modifié. Recommencez la délivrance.`,
+                `Le stock global de ${item.medicationName} vient d’être modifié. Recommencez la délivrance.`,
               );
             }
 
@@ -160,7 +187,7 @@ export class GraceAwareEnterpriseService extends EnterpriseService {
             });
             if (!itemClaim.count) {
               throw new ConflictException(
-                `La ligne ${item.medication.name} vient déjà d’être délivrée.`,
+                `La ligne ${item.medicationName} vient déjà d’être délivrée.`,
               );
             }
           }

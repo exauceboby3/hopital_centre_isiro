@@ -78,7 +78,10 @@ interface Prescription {
     route: string;
     durationDays: number;
     quantity: number;
-    medication: Medication;
+    medicationId?: string;
+    medicationName: string;
+    availability: string;
+    medication?: Medication | null;
   }>;
 }
 interface Batch {
@@ -966,7 +969,7 @@ function PrescriptionSection(props: {
             <td>
               {row.items.map((item) => (
                 <div key={item.id}>
-                  {item.medication.name} — {item.dosage}, {item.frequency}, {item.durationDays} j
+                  {item.medicationName || item.medication?.name || 'Médicament'}{item.availability !== 'INTERNAL' ? ' · achat extérieur' : ''} — {item.dosage}, {item.frequency}, {item.durationDays} j
                 </div>
               ))}
             </td>

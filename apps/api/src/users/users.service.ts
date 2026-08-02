@@ -111,56 +111,95 @@ export class UsersService {
       },
     });
     if (!user) throw new NotFoundException('Utilisateur introuvable.');
-    const common = {
-      lastName: dto.lastName?.trim(),
-      postName: dto.postName?.trim(),
-      firstName: dto.firstName?.trim(),
-      phone: dto.phone?.trim(),
-      address: dto.address?.trim(),
+
+    const requiredLastName = dto.lastName?.trim();
+    if (!requiredLastName || requiredLastName.length < 2) {
+      throw new BadRequestException('Le nom doit contenir au moins 2 caractères.');
+    }
+    const optional = (value?: string) => {
+      const normalized = value?.trim();
+      return normalized ? normalized : null;
     };
-    if (user.doctorProfile) {
-      await this.prisma.doctorProfile.update({
-        where: { userId },
-        data: {
-          ...common,
-          specialty: dto.specialty?.trim(),
-          grade: dto.grade?.trim(),
-          licenseNumber: dto.licenseNumber?.trim().toUpperCase(),
-        },
+    const common = {
+      lastName: requiredLastName,
+      postName: optional(dto.postName),
+      firstName: optional(dto.firstName),
+      phone: optional(dto.phone),
+      address: optional(dto.address),
+    };
+
+    try {
+      await this.prisma.$transaction(async (transaction) => {
+        if (user.doctorProfile) {
+          const specialty = optional(dto.specialty) ?? user.doctorProfile.specialty;
+          await transaction.doctorProfile.update({
+            where: { userId },
+            data: {
+              ...common,
+              specialty,
+              grade: optional(dto.grade),
+              licenseNumber: optional(dto.licenseNumber)?.toUpperCase() ?? null,
+            },
+          });
+        } else if (user.nurseProfile) {
+          await transaction.nurseProfile.update({
+            where: { userId },
+            data: { ...common, specialty: optional(dto.specialty) },
+          });
+        } else if (user.secretaryProfile) {
+          await transaction.secretaryProfile.update({
+            where: { userId },
+            data: { ...common, educationLevel: optional(dto.educationLevel) },
+          });
+        } else if (user.labProfile) {
+          await transaction.labTechnicianProfile.update({
+            where: { userId },
+            data: { ...common, specialty: optional(dto.specialty) },
+          });
+        } else if (user.staffProfile) {
+          await transaction.staffProfile.update({
+            where: { userId },
+            data: { ...common, specialty: optional(dto.specialty), grade: optional(dto.grade) },
+          });
+        } else {
+          await transaction.staffProfile.create({
+            data: {
+              userId,
+              ...common,
+              specialty: optional(dto.specialty),
+              grade: optional(dto.grade),
+            },
+          });
+        }
+        await transaction.auditLog.create({
+          data: {
+            userId,
+            action: 'OWN_PROFILE_UPDATED',
+            entity: 'User',
+            entityId: userId,
+            metadata: {
+              profileType: user.doctorProfile
+                ? 'DOCTOR'
+                : user.nurseProfile
+                  ? 'NURSE'
+                  : user.secretaryProfile
+                    ? 'SECRETARY'
+                    : user.labProfile
+                      ? 'LABORATORY'
+                      : 'STAFF',
+            },
+          },
+        });
       });
-    } else if (user.nurseProfile) {
-      await this.prisma.nurseProfile.update({
-        where: { userId },
-        data: { ...common, specialty: dto.specialty?.trim() },
-      });
-    } else if (user.secretaryProfile) {
-      await this.prisma.secretaryProfile.update({
-        where: { userId },
-        data: { ...common, educationLevel: dto.educationLevel?.trim() },
-      });
-    } else if (user.labProfile) {
-      await this.prisma.labTechnicianProfile.update({
-        where: { userId },
-        data: { ...common, specialty: dto.specialty?.trim() },
-      });
-    } else if (user.staffProfile) {
-      await this.prisma.staffProfile.update({
-        where: { userId },
-        data: { ...common, specialty: dto.specialty?.trim(), grade: dto.grade?.trim() },
-      });
-    } else {
-      await this.prisma.staffProfile.create({
-        data: {
-          userId,
-          lastName: dto.lastName?.trim() || user.username,
-          postName: dto.postName?.trim(),
-          firstName: dto.firstName?.trim(),
-          specialty: dto.specialty?.trim(),
-          grade: dto.grade?.trim(),
-          phone: dto.phone?.trim(),
-          address: dto.address?.trim(),
-        },
-      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const target = Array.isArray(error.meta?.target) ? error.meta.target.join(',') : '';
+        if (target.includes('licenseNumber')) {
+          throw new BadRequestException('Ce numéro professionnel est déjà utilisé par un autre compte.');
+        }
+        throw new BadRequestException('Une information unique du profil est déjà utilisée.');
+      }
+      throw error;
     }
     return this.findOwnProfile(userId);
   }

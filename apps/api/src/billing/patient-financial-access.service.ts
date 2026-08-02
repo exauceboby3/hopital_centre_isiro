@@ -115,26 +115,51 @@ export class PatientFinancialAccessService {
       );
     }
 
-    await this.expireInternalGrace(patientId, now);
     const metadata: GraceMetadata = {
       kind: 'INTERNAL_GRACE',
       scope: dto.scope,
       reason: dto.reason.trim(),
       createdById,
     };
-    return this.prisma.careVoucher.create({
-      data: {
-        number: `GRACE-${new Date().getFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`,
-        patientId,
-        createdById,
-        issuerName: GRACE_ISSUER,
-        coveragePercent: new Prisma.Decimal(100),
-        validFrom: now,
-        validUntil: expiresAt,
-        status: CareVoucherStatus.ACTIVE,
-        notes: JSON.stringify(metadata),
-      },
-      include: { patient: true, createdBy: { select: { id: true, username: true } } },
+    return this.prisma.$transaction(async (transaction) => {
+      await this.expireInternalGrace(patientId, now, transaction);
+      await transaction.careVoucher.updateMany({
+        where: {
+          patientId,
+          issuerName: GRACE_ISSUER,
+          status: CareVoucherStatus.ACTIVE,
+        },
+        data: { status: CareVoucherStatus.CANCELLED },
+      });
+      const grace = await transaction.careVoucher.create({
+        data: {
+          number: `GRACE-${new Date().getFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`,
+          patientId,
+          createdById,
+          issuerName: GRACE_ISSUER,
+          coveragePercent: new Prisma.Decimal(100),
+          validFrom: now,
+          validUntil: expiresAt,
+          status: CareVoucherStatus.ACTIVE,
+          notes: JSON.stringify(metadata),
+        },
+        include: { patient: true, createdBy: { select: { id: true, username: true } } },
+      });
+      await transaction.auditLog.create({
+        data: {
+          userId: createdById,
+          action: 'PATIENT_GRACE_GRANTED',
+          entity: 'CareVoucher',
+          entityId: grace.id,
+          metadata: {
+            patientId,
+            scope: dto.scope,
+            validUntil: expiresAt.toISOString(),
+            reason: dto.reason.trim(),
+          },
+        },
+      });
+      return grace;
     });
   }
 
@@ -343,6 +368,7 @@ export class PatientFinancialAccessService {
     ignoreScope = false,
   ) {
     const now = new Date();
+    await this.expireInternalGrace(patientId, now, db);
     const vouchers = await db.careVoucher.findMany({
       where: {
         patientId,
@@ -564,8 +590,12 @@ export class PatientFinancialAccessService {
     });
   }
 
-  private async expireInternalGrace(patientId: string, now: Date) {
-    await this.prisma.careVoucher.updateMany({
+  private async expireInternalGrace(
+    patientId: string,
+    now: Date,
+    db: DatabaseClient = this.prisma,
+  ) {
+    await db.careVoucher.updateMany({
       where: {
         patientId,
         issuerName: GRACE_ISSUER,

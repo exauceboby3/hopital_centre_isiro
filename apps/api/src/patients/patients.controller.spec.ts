@@ -19,14 +19,12 @@ describe('PatientsController', () => {
     expect(routeRoles('remove')).toEqual([Role.SUPER_ADMIN, Role.ADMIN]);
   });
 
-  it('autorise les rôles prévus à corriger les informations mal saisies', () => {
+  it('réserve la correction démographique aux rôles administratifs habilités', () => {
     expect(routeRoles('update')).toEqual([
       Role.SUPER_ADMIN,
       Role.ADMIN,
       Role.RECEPTIONIST,
       Role.SECRETARY,
-      Role.DOCTOR,
-      Role.MEDICAL_BIOLOGIST,
     ]);
   });
 });

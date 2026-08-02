@@ -1,0 +1,239 @@
+{
+  "generatedAt": "2026-08-02T13:37:12.662Z",
+  "title": "Validation profils, dossier patient, pharmacie, rapports, réquisitions et RH",
+  "departmentsTested": 13,
+  "doctorsTested": 5,
+  "patientsVisiblePerDoctor": 20,
+  "amendmentsTested": 20,
+  "internalPrescriptions": 10,
+  "externalPrescriptions": 10,
+  "assertionsExecuted": 55,
+  "passedAssertions": 55,
+  "failedAssertions": 0,
+  "checks": [
+    {
+      "name": "treize départements produisent un rapport journalier",
+      "ok": true
+    },
+    {
+      "name": "NURSING calcule le total des patients",
+      "ok": true
+    },
+    {
+      "name": "NURSING calcule le stock final sans ajouter la commande en cours",
+      "ok": true
+    },
+    {
+      "name": "URGENCES calcule le total des patients",
+      "ok": true
+    },
+    {
+      "name": "URGENCES calcule le stock final sans ajouter la commande en cours",
+      "ok": true
+    },
+    {
+      "name": "MEDECINE_INTERNE calcule le total des patients",
+      "ok": true
+    },
+    {
+      "name": "MEDECINE_INTERNE calcule le stock final sans ajouter la commande en cours",
+      "ok": true
+    },
+    {
+      "name": "PEDIATRIE calcule le total des patients",
+      "ok": true
+    },
+    {
+      "name": "PEDIATRIE calcule le stock final sans ajouter la commande en cours",
+      "ok": true
+    },
+    {
+      "name": "GYNECO_OBSTETRIQUE calcule le total des patients",
+      "ok": true
+    },
+    {
+      "name": "GYNECO_OBSTETRIQUE calcule le stock final sans ajouter la commande en cours",
+      "ok": true
+    },
+    {
+      "name": "MATERNITE calcule le total des patients",
+      "ok": true
+    },
+    {
+      "name": "MATERNITE calcule le stock final sans ajouter la commande en cours",
+      "ok": true
+    },
+    {
+      "name": "CHIRURGIE calcule le total des patients",
+      "ok": true
+    },
+    {
+      "name": "CHIRURGIE calcule le stock final sans ajouter la commande en cours",
+      "ok": true
+    },
+    {
+      "name": "LABORATOIRE calcule le total des patients",
+      "ok": true
+    },
+    {
+      "name": "LABORATOIRE calcule le stock final sans ajouter la commande en cours",
+      "ok": true
+    },
+    {
+      "name": "PHARMACIE calcule le total des patients",
+      "ok": true
+    },
+    {
+      "name": "PHARMACIE calcule le stock final sans ajouter la commande en cours",
+      "ok": true
+    },
+    {
+      "name": "IMAGERIE calcule le total des patients",
+      "ok": true
+    },
+    {
+      "name": "IMAGERIE calcule le stock final sans ajouter la commande en cours",
+      "ok": true
+    },
+    {
+      "name": "RECEPTION calcule le total des patients",
+      "ok": true
+    },
+    {
+      "name": "RECEPTION calcule le stock final sans ajouter la commande en cours",
+      "ok": true
+    },
+    {
+      "name": "CAISSE calcule le total des patients",
+      "ok": true
+    },
+    {
+      "name": "CAISSE calcule le stock final sans ajouter la commande en cours",
+      "ok": true
+    },
+    {
+      "name": "RESSOURCES_HUMAINES calcule le total des patients",
+      "ok": true
+    },
+    {
+      "name": "RESSOURCES_HUMAINES calcule le stock final sans ajouter la commande en cours",
+      "ok": true
+    },
+    {
+      "name": "le tableau comptable consolide tous les départements",
+      "ok": true
+    },
+    {
+      "name": "le tableau comptable ne présente aucun écart sur les rapports cohérents",
+      "ok": true
+    },
+    {
+      "name": "dix prescriptions internes diminuent le stock central",
+      "ok": true
+    },
+    {
+      "name": "dix prescriptions externes restent enregistrées sans mouvement de stock",
+      "ok": true
+    },
+    {
+      "name": "vingt corrections médicales conservent la valeur originale",
+      "ok": true
+    },
+    {
+      "name": "vingt corrections médicales possèdent un motif",
+      "ok": true
+    },
+    {
+      "name": "vingt corrections médicales identifient leur auteur",
+      "ok": true
+    },
+    {
+      "name": "les cinq médecins peuvent lire les vingt dossiers",
+      "ok": true
+    },
+    {
+      "name": "les écritures restent limitées aux quatre dossiers affectés ou à un avenant motivé",
+      "ok": true
+    },
+    {
+      "name": "la fiche de réquisition contient le service et le demandeur",
+      "ok": true
+    },
+    {
+      "name": "aucune quantité approuvée ne dépasse la quantité demandée",
+      "ok": true
+    },
+    {
+      "name": "aucune quantité livrée ne dépasse la quantité approuvée",
+      "ok": true
+    },
+    {
+      "name": "la réquisition partielle reste ouverte",
+      "ok": true
+    },
+    {
+      "name": "le rôle RH accède au personnel et aux rapports",
+      "ok": true
+    },
+    {
+      "name": "le rôle RH reste exclu des dossiers patients et de la pharmacie",
+      "ok": true
+    },
+    {
+      "name": "la grâce générale couvre les soins et la pharmacie",
+      "ok": true
+    },
+    {
+      "name": "la grâce médicale ne couvre pas la pharmacie",
+      "ok": true
+    },
+    {
+      "name": "la grâce pharmacie ne couvre pas les autres soins",
+      "ok": true
+    },
+    {
+      "name": "une grâce expirée ne couvre plus aucun acte",
+      "ok": true
+    },
+    {
+      "name": "les profils convertissent les champs optionnels vides en null",
+      "ok": true
+    },
+    {
+      "name": "les profils exigent toujours un nom exploitable",
+      "ok": true
+    },
+    {
+      "name": "le cadre mobile est centré sur 480 px",
+      "ok": true
+    },
+    {
+      "name": "les contrôles tactiles mobiles mesurent au moins 44 px",
+      "ok": true
+    },
+    {
+      "name": "le dossier patient présente une chronologie et des avenants",
+      "ok": true
+    },
+    {
+      "name": "le rapport reprend MIH, MIF, PED, G-O, maternité et chirurgie",
+      "ok": true
+    },
+    {
+      "name": "la fiche de réquisition comporte demandeur, fonction, unité et motif",
+      "ok": true
+    },
+    {
+      "name": "la prescription permet un produit non référencé",
+      "ok": true
+    },
+    {
+      "name": "la prescription externe ne bloque pas le bouton de création",
+      "ok": true
+    }
+  ],
+  "limitations": [
+    "Simulation déterministe complétée par les tests Jest, Prisma et PostgreSQL de la CI.",
+    "Les essais humains multi-navigateurs sur le serveur de production restent distincts de cette campagne."
+  ]
+}

@@ -16,6 +16,7 @@ export const roleLabels: Record<Role, string> = {
   PHARMACIST: 'Pharmacien',
   ACCOUNTANT: 'Comptable',
   STOREKEEPER: 'Gestionnaire de stock',
+  HR: 'Ressources humaines',
 };
 
 export const assignableAdditionalRoles = (Object.keys(roleLabels) as Role[]).filter(
