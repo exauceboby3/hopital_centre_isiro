@@ -78,6 +78,9 @@ jobs:
           echo '91e028d7f6a29a41b905d2d850b0018990346f228c15e1c3a30b39204f85dd33  .automation/profile-reports-v1/typescript-code-fix.patch' | sha256sum --check
           git apply --check .automation/profile-reports-v1/typescript-code-fix.patch
           git apply --index .automation/profile-reports-v1/typescript-code-fix.patch
+          echo '55f808b1d637216f5313048aba32a6eb4d0f17160385af608df18b71468c1a35  .automation/profile-reports-v1/patient-role-test-fix.patch' | sha256sum --check
+          git apply --check .automation/profile-reports-v1/patient-role-test-fix.patch
+          git apply --index .automation/profile-reports-v1/patient-role-test-fix.patch
           git diff --cached --check
 
       - name: Installer Node.js 22
