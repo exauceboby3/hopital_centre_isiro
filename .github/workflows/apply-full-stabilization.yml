@@ -6,6 +6,9 @@ on:
       - agent/full-system-stabilization-20260802
     paths:
       - '.github/workflows/apply-full-stabilization.yml'
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
