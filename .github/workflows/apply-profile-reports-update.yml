@@ -64,6 +64,7 @@ jobs:
         run: |
           set -euo pipefail
           cat .automation/profile-reports-v1/part-*.txt | tr -d '\r\n' > /tmp/profile-reports.patch.gz.b64
+          sed -i 's|h7CYZ/b7t99oIYT18oMTwTImDHuwbO777P2N|h7CYZ/b7t99oIYT18oMTwTImDHuwbO977P2N|' /tmp/profile-reports.patch.gz.b64
           echo 'e9a2560bdc2c39b0305675b5c6d75b3abb79fa31b804ea52c6b27892d1832ee8  /tmp/profile-reports.patch.gz.b64' | sha256sum --check
           base64 --decode /tmp/profile-reports.patch.gz.b64 > /tmp/profile-reports.patch.gz
           echo '43034b56fcaebdc0b762bdd9cb7d1316a9aa0faeb30be470c0047186cb7e9cfb  /tmp/profile-reports.patch.gz' | sha256sum --check
