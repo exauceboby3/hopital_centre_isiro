@@ -66,12 +66,11 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Installer les dépendances documentaires
+      - name: Installer le monorepo complet
         shell: bash
         run: |
           npm install --global npm@11
-          npm install --workspace @hopital/api fflate pdfkit
-          npm install --workspace @hopital/api --save-dev @types/pdfkit
+          npm ci
 
       - name: Générer Prisma et préparer PostgreSQL
         run: |
