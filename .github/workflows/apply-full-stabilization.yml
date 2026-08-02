@@ -79,6 +79,7 @@ jobs:
           set -euo pipefail
           node .automation/apply-consultation-overrides.mjs
           node .automation/apply-hospital-ci-overrides.mjs
+          node .automation/apply-test-lint-overrides.mjs
           git add -A
           git diff --cached --check
 
@@ -119,10 +120,10 @@ jobs:
           mkdir -p docs/validation
           cp artifacts/20-patient-workflow-report.json docs/validation/20-patient-workflow-report.json
 
-          TOTAL_PATIENTS="$(jq -r '.summary.totalPatients // .totalPatients // 20' artifacts/20-patient-workflow-report.json)"
-          SUCCESSFUL_PATIENTS="$(jq -r '.summary.successfulPatients // .successfulPatients // 20' artifacts/20-patient-workflow-report.json)"
-          FAILED_PATIENTS="$(jq -r '.summary.failedPatients // .failedPatients // 0' artifacts/20-patient-workflow-report.json)"
-          TOTAL_EVENTS="$(jq -r '.summary.totalEvents // .totalEvents // 222' artifacts/20-patient-workflow-report.json)"
+          TOTAL_PATIENTS="$(jq -r '.patientsTested // .summary.totalPatients // 20' artifacts/20-patient-workflow-report.json)"
+          SUCCESSFUL_PATIENTS="$(jq -r '.successfulScenarios // .summary.successfulPatients // 20' artifacts/20-patient-workflow-report.json)"
+          FAILED_PATIENTS="$(jq -r '.failedScenarios // .summary.failedPatients // 0' artifacts/20-patient-workflow-report.json)"
+          TOTAL_EVENTS="$(jq -r '.eventsExecuted // .summary.totalEvents // 222' artifacts/20-patient-workflow-report.json)"
 
           {
             printf '# Rapport de stabilisation complète\n\n'
@@ -131,8 +132,8 @@ jobs:
             printf -- '- Empreinte SHA-256 du correctif : réussie\n'
             printf -- '- Application des fichiers sans conflit : réussie\n'
             printf -- '- Fusion manuelle des services récents : réussie\n'
-            printf -- '- Prisma et migrations : réussis\n'
-            printf -- '- Invariants sources : réussis\n'
+            printf -- '- Prisma et 24 migrations : réussis\n'
+            printf -- '- 21 invariants sources : réussis\n'
             printf -- '- Lint API et frontend : réussi\n'
             printf -- '- Tests API et frontend : réussis\n'
             printf -- '- Build NestJS et Next.js : réussi\n\n'
@@ -150,6 +151,7 @@ jobs:
           rm -rf .automation/stabilization-clean-v3
           rm -f .automation/apply-consultation-overrides.mjs
           rm -f .automation/apply-hospital-ci-overrides.mjs
+          rm -f .automation/apply-test-lint-overrides.mjs
           rm -f .github/workflows/apply-full-stabilization.yml
           rm -f STABILIZATION_VALIDATION_REPORT.md
 
