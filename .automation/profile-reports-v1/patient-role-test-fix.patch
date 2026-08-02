@@ -1,0 +1,20 @@
+diff --git a/apps/api/src/patients/patients.controller.spec.ts b/apps/api/src/patients/patients.controller.spec.ts
+index b34dd70..fa4a296 100644
+--- a/apps/api/src/patients/patients.controller.spec.ts
++++ b/apps/api/src/patients/patients.controller.spec.ts
+@@ -19,14 +19,12 @@ describe('PatientsController', () => {
+     expect(routeRoles('remove')).toEqual([Role.SUPER_ADMIN, Role.ADMIN]);
+   });
+ 
+-  it('autorise les rôles prévus à corriger les informations mal saisies', () => {
++  it('réserve la correction démographique aux rôles administratifs habilités', () => {
+     expect(routeRoles('update')).toEqual([
+       Role.SUPER_ADMIN,
+       Role.ADMIN,
+       Role.RECEPTIONIST,
+       Role.SECRETARY,
+-      Role.DOCTOR,
+-      Role.MEDICAL_BIOLOGIST,
+     ]);
+   });
+ });
