@@ -27,6 +27,61 @@ export function assertLaboratoryResultsComplete(
   }
 }
 
+export interface SignableConsultationSnapshot {
+  status: ConsultationStatus;
+  report: string | null;
+  examRequests: ReadonlyArray<{ status: ExamStatus }>;
+  prescriptions: ReadonlyArray<{ id: string }>;
+}
+
+export function assertCanSignConsultation(consultation: SignableConsultationSnapshot) {
+  const report = decodeClinicalReport(consultation.report).sections;
+  const required = [
+    report.chiefComplaint,
+    report.presentIllnessHistory,
+    report.physicalExamination,
+    report.diagnosis,
+    report.treatmentPlan,
+    report.decision,
+  ];
+  if (required.some((value) => !value?.trim())) {
+    throw new BadRequestException(
+      'Complétez la plainte, l’histoire de la maladie, l’examen physique, le diagnostic, la conduite thérapeutique et la décision finale avant de signer.',
+    );
+  }
+  if (!report.decision || !FINAL_CONSULTATION_DECISIONS.has(report.decision)) {
+    throw new BadRequestException(
+      'Choisissez une décision finale : prescription, hospitalisation ou suivi ambulatoire avant de signer.',
+    );
+  }
+  if (consultation.status !== ConsultationStatus.COMPLETED) {
+    throw new BadRequestException(
+      'La consultation doit être clôturée par une décision finale avant la signature.',
+    );
+  }
+
+  assertLaboratoryResultsComplete(consultation.examRequests, 'Signature indisponible');
+
+  if (consultation.examRequests.length > 0) {
+    const postLaboratoryComplete = [
+      report.laboratoryInterpretation,
+      report.postLaboratoryDiagnosis,
+      report.postLaboratoryPlan,
+    ].every((value) => Boolean(value?.trim()));
+    if (!postLaboratoryComplete) {
+      throw new BadRequestException(
+        'Complétez l’interprétation, le diagnostic réévalué et la conduite post-laboratoire avant de signer.',
+      );
+    }
+  }
+
+  if (report.decision === 'PRESCRIPTION' && consultation.prescriptions.length === 0) {
+    throw new BadRequestException(
+      'Créez l’ordonnance structurée et sa facture avant de signer une consultation conclue par prescription.',
+    );
+  }
+}
+
 @Injectable()
 export class ConsultationFinalizationService {
   constructor(private readonly prisma: PrismaService) {}
@@ -35,43 +90,12 @@ export class ConsultationFinalizationService {
     const consultation = await this.prisma.consultation.findUnique({
       where: { id: consultationId },
       include: {
-        examRequests: { select: { type: true, status: true } },
-        prescriptions: { select: { id: true, number: true } },
+        examRequests: { select: { status: true } },
+        prescriptions: { select: { id: true } },
       },
     });
     if (!consultation) throw new NotFoundException('Consultation introuvable.');
 
-    const report = decodeClinicalReport(consultation.report).sections;
-    if (!report.decision || !FINAL_CONSULTATION_DECISIONS.has(report.decision)) {
-      throw new BadRequestException(
-        'Choisissez une décision finale : prescription, hospitalisation ou suivi ambulatoire avant de signer.',
-      );
-    }
-    if (consultation.status !== ConsultationStatus.COMPLETED) {
-      throw new BadRequestException(
-        'La consultation doit être clôturée par une décision finale avant la signature.',
-      );
-    }
-
-    assertLaboratoryResultsComplete(consultation.examRequests, 'Signature indisponible');
-
-    if (consultation.examRequests.length > 0) {
-      const postLaboratoryComplete = [
-        report.laboratoryInterpretation,
-        report.postLaboratoryDiagnosis,
-        report.postLaboratoryPlan,
-      ].every((value) => Boolean(value?.trim()));
-      if (!postLaboratoryComplete) {
-        throw new BadRequestException(
-          'Complétez l’interprétation, le diagnostic réévalué et la conduite post-laboratoire avant de signer.',
-        );
-      }
-    }
-
-    if (report.decision === 'PRESCRIPTION' && consultation.prescriptions.length === 0) {
-      throw new BadRequestException(
-        'Créez l’ordonnance structurée et sa facture avant de signer une consultation conclue par prescription.',
-      );
-    }
+    assertCanSignConsultation(consultation);
   }
 }
