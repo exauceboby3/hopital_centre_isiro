@@ -75,6 +75,9 @@ jobs:
           echo '8a61b9b64af0355a14449b824e53555ff40181de8d2933e9c96f7e74c34e27cd  .automation/profile-reports-v1/lint-test-fix.patch' | sha256sum --check
           git apply --check .automation/profile-reports-v1/lint-test-fix.patch
           git apply --index .automation/profile-reports-v1/lint-test-fix.patch
+          echo '91e028d7f6a29a41b905d2d850b0018990346f228c15e1c3a30b39204f85dd33  .automation/profile-reports-v1/typescript-code-fix.patch' | sha256sum --check
+          git apply --check .automation/profile-reports-v1/typescript-code-fix.patch
+          git apply --index .automation/profile-reports-v1/typescript-code-fix.patch
           git diff --cached --check
 
       - name: Installer Node.js 22
