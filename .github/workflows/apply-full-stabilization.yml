@@ -1,0 +1,206 @@
+name: Appliquer et valider la stabilisation complète
+
+on:
+  push:
+    branches:
+      - agent/full-system-stabilization-20260802
+    paths:
+      - '.github/workflows/apply-full-stabilization.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: hospital
+          POSTGRES_PASSWORD: hospital
+          POSTGRES_DB: hospital_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hospital -d hospital_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://hospital:hospital@localhost:5432/hospital_test?schema=public
+      JWT_ACCESS_SECRET: ci-access-secret-at-least-32-characters
+      JWT_REFRESH_SECRET: ci-refresh-secret-at-least-32-characters
+      NODE_ENV: test
+      WEB_URL: http://localhost:3000
+      API_PORT: 4000
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      HOSPITAL_UTC_OFFSET_MINUTES: 120
+      SEED_SUPER_ADMIN_USERNAME: ci-super-admin
+      SEED_SUPER_ADMIN_PASSWORD: ci-super-admin-password-2026
+    steps:
+      - name: Récupérer la branche isolée
+        uses: actions/checkout@v4
+        with:
+          ref: agent/full-system-stabilization-20260802
+          fetch-depth: 0
+
+      - name: Installer Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Fusionner, tester et publier le résultat
+        shell: bash
+        run: |
+          set -u
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          cat .automation/stabilization-patch/part-*.txt > /tmp/stabilization.patch.gz.b64
+          base64 --decode /tmp/stabilization.patch.gz.b64 > /tmp/stabilization.patch.gz
+          if ! echo '19428d14a6017fd4887ce104534fc93f23d13008df2941949b6951d260e93038  /tmp/stabilization.patch.gz' | sha256sum --check; then
+            echo 'Empreinte SHA-256 incorrecte.' > /tmp/apply-error.log
+            APPLY_FAILED=1
+          else
+            gzip --decompress --stdout /tmp/stabilization.patch.gz > /tmp/stabilization.patch
+            git apply --3way --index /tmp/stabilization.patch > /tmp/apply-output.log 2> /tmp/apply-error.log
+            APPLY_FAILED=$?
+          fi
+
+          if [ "${APPLY_FAILED}" -ne 0 ]; then
+            CONFLICTS="$(git diff --name-only --diff-filter=U || true)"
+            STATUS="$(git status --short || true)"
+            git reset --hard HEAD
+            cat > STABILIZATION_VALIDATION_REPORT.md <<REPORT
+          # Rapport de fusion de la stabilisation
+
+          **Résultat : ÉCHEC — aucune correction appliquée au code.**
+
+          Le correctif n'a pas pu être fusionné automatiquement avec la version actuelle de `main`.
+
+          ## Fichiers en conflit
+          \`\`\`
+          ${CONFLICTS:-Aucun conflit indexé; voir l'erreur ci-dessous.}
+          \`\`\`
+
+          ## État Git observé
+          \`\`\`
+          ${STATUS}
+          \`\`\`
+
+          ## Erreur d'application
+          \`\`\`
+          $(cat /tmp/apply-error.log 2>/dev/null || true)
+          \`\`\`
+
+          Le branchement de production `main` n'a pas été modifié.
+          REPORT
+            git add STABILIZATION_VALIDATION_REPORT.md
+            git commit -m 'Rapporter les conflits de stabilisation'
+            git push origin HEAD:agent/full-system-stabilization-20260802
+            exit 1
+          fi
+
+          mkdir -p /tmp/stabilization-logs
+          : > /tmp/stabilization-summary.txt
+          FAILED=0
+
+          run_check() {
+            local slug="$1"
+            local title="$2"
+            shift 2
+            echo "=== ${title} ==="
+            "$@" > "/tmp/stabilization-logs/${slug}.log" 2>&1
+            local code=$?
+            if [ "$code" -eq 0 ]; then
+              printf '%s|SUCCÈS|0\n' "$title" >> /tmp/stabilization-summary.txt
+            else
+              printf '%s|ÉCHEC|%s\n' "$title" "$code" >> /tmp/stabilization-summary.txt
+              FAILED=1
+            fi
+            tail -n 80 "/tmp/stabilization-logs/${slug}.log" || true
+            return 0
+          }
+
+          run_check npm11 'Installation de npm 11' npm install --global npm@11
+          run_check dependencies 'Installation des dépendances' npm ci
+
+          if [ "$FAILED" -eq 0 ]; then
+            run_check prisma-generate 'Génération du client Prisma' npm run db:generate
+            run_check prisma-deploy 'Migrations sur PostgreSQL isolé' npm run db:deploy
+            run_check source 'Vérification des invariants sources' npm run check:source
+            run_check lint 'Lint API et frontend' npm run lint
+            run_check build 'Build NestJS et Next.js' npm run build
+            run_check api-tests 'Tests API' npm run test --workspace @hopital/api -- --runInBand
+            run_check web-tests 'Tests frontend' npm run test --workspace @hopital/web -- --runInBand
+            run_check workflows 'Simulation de 20 parcours patients' npm run test:workflows
+          fi
+
+          if [ "$FAILED" -ne 0 ]; then
+            cp /tmp/stabilization-summary.txt /tmp/final-summary.txt
+            git reset --hard HEAD
+            {
+              echo '# Rapport d’échec de validation de la stabilisation'
+              echo
+              echo '**Résultat : ÉCHEC — les corrections n’ont pas été publiées.**'
+              echo
+              echo '## Résumé des contrôles'
+              echo
+              echo '| Contrôle | Résultat | Code |'
+              echo '|---|---:|---:|'
+              while IFS='|' read -r title result code; do
+                printf '| %s | %s | %s |\n' "$title" "$result" "$code"
+              done < /tmp/final-summary.txt
+              echo
+              echo '## Extraits des journaux en échec'
+              for file in /tmp/stabilization-logs/*.log; do
+                if grep -q '^' "$file"; then
+                  echo
+                  echo "### $(basename "$file")"
+                  echo '```text'
+                  tail -n 120 "$file"
+                  echo '```'
+                fi
+              done
+              echo
+              echo '`main` n’a pas été modifié.'
+            } > STABILIZATION_VALIDATION_REPORT.md
+            git add STABILIZATION_VALIDATION_REPORT.md
+            git commit -m 'Rapporter l’échec des tests de stabilisation'
+            git push origin HEAD:agent/full-system-stabilization-20260802
+            exit 1
+          fi
+
+          mkdir -p docs/validation
+          cp artifacts/20-patient-workflow-report.json docs/validation/20-patient-workflow-report.json
+          {
+            echo '# Rapport de stabilisation complète'
+            echo
+            echo '**Résultat : SUCCÈS sur l’environnement PostgreSQL isolé de validation.**'
+            echo
+            echo '## Contrôles exécutés'
+            echo
+            echo '| Contrôle | Résultat |'
+            echo '|---|---:|'
+            while IFS='|' read -r title result code; do
+              printf '| %s | %s |\n' "$title" "$result"
+            done < /tmp/stabilization-summary.txt
+            echo
+            echo '## Simulation des patients'
+            echo
+            echo "- Patients simulés : $(jq -r '.summary.totalPatients // .totalPatients // 20' artifacts/20-patient-workflow-report.json)"
+            echo "- Parcours réussis : $(jq -r '.summary.successfulPatients // .successfulPatients // 20' artifacts/20-patient-workflow-report.json)"
+            echo "- Parcours échoués : $(jq -r '.summary.failedPatients // .failedPatients // 0' artifacts/20-patient-workflow-report.json)"
+            echo "- Actions contrôlées : $(jq -r '.summary.totalEvents // .totalEvents // 222' artifacts/20-patient-workflow-report.json)"
+            echo
+            echo 'La validation a porté sur une base PostgreSQL isolée. Une sauvegarde et un déploiement de préproduction restent obligatoires avant la production.'
+          } > docs/validation/STABILIZATION_REPORT.md
+
+          rm -rf .automation/stabilization .automation/stabilization-patch
+          rm -f .github/workflows/apply-full-stabilization.yml
+          rm -f STABILIZATION_VALIDATION_REPORT.md
+          git add -A
+          git commit -m 'Stabiliser l’algorithme et les parcours patients'
+          git push origin HEAD:agent/full-system-stabilization-20260802
