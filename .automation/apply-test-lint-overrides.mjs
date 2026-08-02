@@ -1,8 +1,25 @@
 import fs from 'node:fs';
 
 const path = 'apps/api/src/patients/patients.service.spec.ts';
-const before = fs.readFileSync(path, 'utf8');
-const target = `    expect(auditCreate).toHaveBeenCalledWith(
+let text = fs.readFileSync(path, 'utf8');
+
+const declarationTarget = `    const auditCreate = jest.fn().mockResolvedValue({ id: 'audit-1' });`;
+const declarationReplacement = `    const auditCalls: Array<{ data: { userId: string; action: string } }> = [];
+    const auditCreate = jest.fn(
+      async (args: { data: { userId: string; action: string } }) => {
+        auditCalls.push(args);
+        return { id: 'audit-1' };
+      },
+    );`;
+const declarationCount = text.split(declarationTarget).length - 1;
+if (declarationCount !== 1) {
+  throw new Error(
+    `patients.service.spec.ts: déclaration audit attendue une fois, trouvée ${declarationCount}`,
+  );
+}
+text = text.replace(declarationTarget, declarationReplacement);
+
+const assertionTarget = `    expect(auditCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           userId: 'super-user-1',
@@ -10,14 +27,17 @@ const target = `    expect(auditCreate).toHaveBeenCalledWith(
         }),
       }),
     );`;
-const replacement = `    const auditCall = auditCreate.mock.calls[0]?.[0] as unknown as {
-      data: { userId: string; action: string };
-    };
-    expect(auditCall.data.userId).toBe('super-user-1');
-    expect(auditCall.data.action).toBe('PATIENT_PERMANENTLY_DELETED');`;
-const count = before.split(target).length - 1;
-if (count !== 1) {
-  throw new Error(`patients.service.spec.ts: motif de lint attendu une fois, trouvé ${count}`);
+const assertionReplacement = `    const auditCall = auditCalls.at(0);
+    expect(auditCall).toBeDefined();
+    expect(auditCall?.data.userId).toBe('super-user-1');
+    expect(auditCall?.data.action).toBe('PATIENT_PERMANENTLY_DELETED');`;
+const assertionCount = text.split(assertionTarget).length - 1;
+if (assertionCount !== 1) {
+  throw new Error(
+    `patients.service.spec.ts: assertion audit attendue une fois, trouvée ${assertionCount}`,
+  );
 }
-fs.writeFileSync(path, before.replace(target, replacement));
-console.log('Typage du test patient corrigé.');
+text = text.replace(assertionTarget, assertionReplacement);
+
+fs.writeFileSync(path, text);
+console.log('Typage du test patient corrigé sans accès direct à mock.calls.');
