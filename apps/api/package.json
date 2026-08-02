@@ -13,7 +13,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
-    "prisma:seed": "prisma db seed"
+    "prisma:seed": "prisma db seed",
+    "prisma:repair-clinicians": "tsx prisma/repair-clinician-profiles.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.28",

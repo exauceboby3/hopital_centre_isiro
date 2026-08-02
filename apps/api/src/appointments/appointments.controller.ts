@@ -56,6 +56,12 @@ export class AppointmentsController {
     return this.appointments.list(from, to, status, scope === 'history' ? 'history' : 'active');
   }
 
+  @Post('maintenance/mark-no-shows')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.RECEPTIONIST, Role.SECRETARY)
+  markNoShows() {
+    return this.appointments.markPastScheduledAsNoShow();
+  }
+
   @Get('doctors/availability')
   @Roles(
     Role.SUPER_ADMIN,

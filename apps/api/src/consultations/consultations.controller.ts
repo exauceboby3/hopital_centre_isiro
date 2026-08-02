@@ -17,7 +17,6 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { ConsultationFinalizationService } from './consultation-finalization.service';
 import { ConsultationsService } from './consultations.service';
 import {
   CreateConsultationDto,
@@ -37,7 +36,6 @@ export class ConsultationsController {
   constructor(
     private readonly consultations: ConsultationsService,
     private readonly hospitalizationReferrals: HospitalizationReferralService,
-    private readonly finalization: ConsultationFinalizationService,
   ) {}
 
   @Get()
@@ -51,7 +49,7 @@ export class ConsultationsController {
   }
 
   @Post()
-  @Roles(Role.DOCTOR)
+  @Roles(Role.ADMIN, Role.DOCTOR, Role.SURGEON, Role.MIDWIFE)
   create(@Body() dto: CreateConsultationDto, @CurrentUser() user: AuthenticatedUser) {
     return this.consultations.create(dto, user);
   }
@@ -68,12 +66,11 @@ export class ConsultationsController {
 
   @Patch(':id/sign')
   @Roles(Role.DOCTOR, Role.SURGEON, Role.MIDWIFE)
-  async sign(
+  sign(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SignConsultationDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    await this.finalization.assertCanSign(id);
     return this.consultations.sign(id, dto, user);
   }
 

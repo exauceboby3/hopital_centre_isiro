@@ -41,8 +41,8 @@ export class AppointmentAcknowledgementService {
       return this.appointments.acknowledge(id, user);
     }
 
-    const canReceiveAnyPatient = hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN]);
-    if (!canReceiveAnyPatient && appointment.doctor?.userId !== user.id) {
+    const clinician = hasAnyRole(user, [Role.DOCTOR, Role.SURGEON, Role.MIDWIFE]);
+    if (!clinician || appointment.doctor?.userId !== user.id) {
       throw new ForbiddenException('Ce patient est attribué à un autre médecin.');
     }
     if (appointment.status !== AppointmentStatus.CHECKED_IN) {

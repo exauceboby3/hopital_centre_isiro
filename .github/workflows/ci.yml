@@ -11,7 +11,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:17-alpine
@@ -33,6 +33,7 @@ jobs:
       WEB_URL: http://localhost:3000
       NEXT_PUBLIC_API_URL: http://localhost:4000/api
       NEXT_TELEMETRY_DISABLED: 1
+      HOSPITAL_UTC_OFFSET_MINUTES: 120
       SEED_SUPER_ADMIN_USERNAME: ci-superadmin
       SEED_SUPER_ADMIN_PASSWORD: ci-only-strong-password
 
@@ -58,6 +59,9 @@ jobs:
         run: |
           npm run db:deploy
           npm run db:seed
+
+      - name: Vérifier les invariants sources
+        run: npm run check:source
 
       - name: Vérifier le code
         shell: bash
@@ -94,6 +98,18 @@ jobs:
         run: |
           set -o pipefail
           npm run build 2>&1 | tee build.log
+
+      - name: Simuler 20 parcours patients
+        run: npm run test:workflows
+
+      - name: Publier le rapport des 20 patients
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-20-patients
+          path: artifacts/20-patient-workflow-report.json
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Conserver les diagnostics de compilation
         if: failure()

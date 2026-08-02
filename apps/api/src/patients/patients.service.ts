@@ -1,10 +1,13 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { BedStatus, CustomFieldEntity, HospitalizationStatus, Prisma } from '@prisma/client';
+import { hospitalCalendarYear } from '../common/hospital-time';
 import { ConfigurationService } from '../configuration/configuration.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { ListPatientsDto } from './dto/list-patients.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
+
+type DatabaseClient = Prisma.TransactionClient | PrismaService;
 
 @Injectable()
 export class PatientsService {
@@ -120,36 +123,39 @@ export class PatientsService {
     };
   }
 
-  create(dto: CreatePatientDto) {
-    const year = new Date().getFullYear();
+  create(dto: CreatePatientDto, db?: DatabaseClient) {
+    if (db) return this.createWithDatabase(dto, db);
+    return this.prisma.$transaction((transaction) => this.createWithDatabase(dto, transaction));
+  }
+
+  private async createWithDatabase(dto: CreatePatientDto, db: DatabaseClient) {
+    const year = hospitalCalendarYear();
     const { customFields, ...patientData } = dto;
-    return this.prisma.$transaction(async (transaction) => {
-      const identityKey = this.identityKey(patientData);
-      await this.ensureUniqueIdentity(transaction, identityKey);
-      const sequence = await transaction.patientNumberSequence.upsert({
-        where: { year },
-        update: { lastValue: { increment: 1 } },
-        create: { year, lastValue: 1 },
-      });
-      const medicalRecordNumber = `CHI-${year}-${String(sequence.lastValue).padStart(6, '0')}`;
-      const patient = await transaction.patient.create({
-        data: {
-          ...patientData,
-          medicalRecordNumber,
-          identityKey,
-          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
-        },
-        omit: { identityKey: true },
-      });
-      await this.configuration.saveValues(
-        CustomFieldEntity.PATIENT,
-        patient.id,
-        customFields,
-        transaction,
-        true,
-      );
-      return patient;
+    const identityKey = this.identityKey(patientData);
+    await this.ensureUniqueIdentity(db, identityKey);
+    const sequence = await db.patientNumberSequence.upsert({
+      where: { year },
+      update: { lastValue: { increment: 1 } },
+      create: { year, lastValue: 1 },
     });
+    const medicalRecordNumber = `CHI-${year}-${String(sequence.lastValue).padStart(6, '0')}`;
+    const patient = await db.patient.create({
+      data: {
+        ...patientData,
+        medicalRecordNumber,
+        identityKey,
+        dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
+      },
+      omit: { identityKey: true },
+    });
+    await this.configuration.saveValues(
+      CustomFieldEntity.PATIENT,
+      patient.id,
+      customFields,
+      db,
+      true,
+    );
+    return patient;
   }
 
   async history(id: string) {
@@ -511,7 +517,12 @@ export class PatientsService {
     });
   }
 
-  async removePermanently(id: string): Promise<{
+  async removePermanently(
+    id: string,
+    actorId: string,
+    confirmation: string,
+    reason: string,
+  ): Promise<{
     success: true;
     deletedRecords: number;
     patient: { id: string; medicalRecordNumber: string; displayName: string };
@@ -527,6 +538,12 @@ export class PatientsService {
       },
     });
     if (!patient) throw new NotFoundException('Patient introuvable.');
+    if (confirmation.trim() !== patient.medicalRecordNumber) {
+      throw new ConflictException('Le numéro de dossier saisi ne correspond pas au patient.');
+    }
+    if (reason.trim().length < 10) {
+      throw new ConflictException('Un motif détaillé est obligatoire pour la suppression définitive.');
+    }
 
     const deletedRecords = await this.prisma.$transaction(async (transaction) => {
       const activeHospitalizations = await transaction.hospitalization.findMany({
@@ -615,6 +632,22 @@ export class PatientsService {
       count(await transaction.consultation.deleteMany({ where: { patientId: id } }));
       count(await transaction.appointment.deleteMany({ where: { patientId: id } }));
       await transaction.patient.delete({ where: { id } });
+      await transaction.auditLog.create({
+        data: {
+          userId: actorId,
+          action: 'PATIENT_PERMANENTLY_DELETED',
+          entity: 'Patient',
+          entityId: id,
+          metadata: {
+            medicalRecordNumber: patient.medicalRecordNumber,
+            displayName: [patient.lastName, patient.postName, patient.firstName]
+              .filter(Boolean)
+              .join(' '),
+            reason: reason.trim(),
+            deletedRecords: deleted + 1,
+          },
+        },
+      });
 
       return deleted + 1;
     });
@@ -645,7 +678,7 @@ export class PatientsService {
     firstName?: string | null;
     dateOfBirth?: string | Date | null;
     phone?: string | null;
-  }): string {
+  }): string | null {
     const name = [patient.lastName, patient.postName, patient.firstName]
       .filter((value): value is string => Boolean(value?.trim()))
       .map((value) => value.normalize('NFKC').trim().toLocaleLowerCase('fr'))
@@ -655,14 +688,16 @@ export class PatientsService {
       ? new Date(patient.dateOfBirth).toISOString().slice(0, 10)
       : '';
     const phone = patient.phone?.replace(/[^0-9+]/g, '') ?? '';
-    return `${name}|${birthDate || phone || 'sans-identifiant'}`;
+    if (!birthDate && !phone) return null;
+    return `${name}|${birthDate || phone}`;
   }
 
   private async ensureUniqueIdentity(
-    transaction: Prisma.TransactionClient,
-    identityKey: string,
+    transaction: DatabaseClient,
+    identityKey: string | null,
     excludedPatientId?: string,
   ): Promise<void> {
+    if (!identityKey) return;
     const existing = await transaction.patient.findFirst({
       where: {
         identityKey,

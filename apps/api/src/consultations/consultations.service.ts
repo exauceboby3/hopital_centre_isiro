@@ -25,6 +25,7 @@ import {
 } from './clinical-report';
 import type { ClinicalReportSections, ConsultationDecision } from './clinical-report';
 import {
+  assertCanSignConsultation,
   assertLaboratoryResultsComplete,
   FINAL_CONSULTATION_DECISIONS,
 } from './consultation-finalization.service';
@@ -197,20 +198,6 @@ export class ConsultationsService {
   }
 
   async update(id: string, dto: UpdateConsultationDto, user: AuthenticatedUser) {
-    const consultation = await this.prisma.consultation.findUnique({
-      where: { id },
-      include: { doctor: true },
-    });
-    if (!consultation) throw new NotFoundException('Consultation introuvable.');
-    this.assertAssignedDoctor(consultation.doctor.userId, user);
-
-    const signature = decodeMedicalSignature(consultation.certificate);
-    if (signature && !dto.amendmentReason) {
-      throw new ConflictException(
-        'Ce dossier est signé. Une raison d’amendement est obligatoire pour toute correction.',
-      );
-    }
-
     const {
       chiefComplaint,
       presentIllnessHistory,
@@ -227,19 +214,29 @@ export class ConsultationsService {
       decision,
       amendmentReason,
       report,
-      status,
       orientation,
       prescription,
     } = dto;
 
     return this.prisma.$transaction(async (transaction) => {
-      const current = await transaction.consultation.findUniqueOrThrow({
+      const current = await transaction.consultation.findUnique({
         where: { id },
         include: {
+          doctor: { select: { userId: true } },
           examRequests: { select: { status: true } },
           appointment: { select: { journeyStage: true } },
         },
       });
+      if (!current) throw new NotFoundException('Consultation introuvable.');
+      this.assertAssignedDoctor(current.doctor.userId, user);
+      if (decodeMedicalSignature(current.certificate)) {
+        throw new ConflictException(
+          'Ce dossier est signé et immuable. Créez une note clinique complémentaire au lieu de modifier le document signé.',
+        );
+      }
+      if (current.status === ConsultationStatus.CANCELLED) {
+        throw new ConflictException('Une consultation annulée ne peut plus être modifiée.');
+      }
       const currentSections = decodeClinicalReport(current.report).sections;
       const hasLaboratoryHistory =
         current.examRequests.length > 0 ||
@@ -287,31 +284,38 @@ export class ConsultationsService {
         this.assertPostLaboratoryInterpretationComplete(mergedSections);
       }
 
-      const effectiveStatus = this.resolveStatus(current.status, status, decision);
+      const effectiveStatus = this.resolveStatus(current.status, decision);
       const effectiveOrientation = orientation ?? this.decisionLabel(decision) ?? current.orientation;
-      const updated = await transaction.consultation.update({
-        where: { id },
+      const claimed = await transaction.consultation.updateMany({
+        where: { id, certificate: null, updatedAt: current.updatedAt },
         data: {
           report: clinicalReport,
           orientation: effectiveOrientation,
           prescription: prescription === undefined ? current.prescription : prescription,
-          certificate: signature ? null : undefined,
           status: effectiveStatus,
           completedAt:
             effectiveStatus === ConsultationStatus.COMPLETED
               ? current.completedAt ?? new Date()
               : null,
         },
+      });
+      if (!claimed.count) {
+        throw new ConflictException(
+          'La consultation a été modifiée ou signée pendant l’enregistrement. Rechargez le dossier.',
+        );
+      }
+      const updated = await transaction.consultation.findUniqueOrThrow({
+        where: { id },
         include: consultationInclude,
       });
 
-      if (consultation.appointmentId) {
+      if (current.appointmentId) {
         const awaitingLaboratory = current.examRequests.some(
           (exam) => !['VALIDATED', 'CANCELLED'].includes(exam.status),
         );
         const journey = this.resolveJourney(decision, effectiveStatus, awaitingLaboratory);
         await transaction.appointment.update({
-          where: { id: consultation.appointmentId },
+          where: { id: current.appointmentId },
           data: {
             status:
               journey === PatientJourneyStage.COMPLETED
@@ -326,7 +330,7 @@ export class ConsultationsService {
       await transaction.auditLog.create({
         data: {
           userId: user.id,
-          action: signature ? 'CONSULTATION_AMENDED' : 'CONSULTATION_UPDATED',
+          action: 'CONSULTATION_UPDATED',
           entity: 'Consultation',
           entityId: id,
           metadata: {
@@ -334,12 +338,6 @@ export class ConsultationsService {
             status: effectiveStatus,
             initialAssessmentLocked: hasLaboratoryHistory || decision === 'LABORATORY',
             amendmentReason: amendmentReason ?? null,
-            ...(signature
-              ? {
-                  previousSignedReport: current.report,
-                  previousSignature: current.certificate,
-                }
-              : {}),
           },
         },
       });
@@ -348,92 +346,104 @@ export class ConsultationsService {
   }
 
   async sign(id: string, dto: SignConsultationDto, user: AuthenticatedUser) {
-    const consultation = await this.prisma.consultation.findUnique({
-      where: { id },
-      include: { doctor: true, examRequests: { select: { id: true } } },
-    });
-    if (!consultation) throw new NotFoundException('Consultation introuvable.');
-    this.assertAssignedDoctor(consultation.doctor.userId, user);
-    if (decodeMedicalSignature(consultation.certificate)) {
-      throw new ConflictException('Cette consultation est déjà signée.');
-    }
+    return this.prisma.$transaction(
+      async (transaction) => {
+        const consultation = await transaction.consultation.findUnique({
+          where: { id },
+          include: {
+            doctor: true,
+            examRequests: { select: { status: true } },
+            prescriptions: { select: { id: true } },
+          },
+        });
+        if (!consultation) throw new NotFoundException('Consultation introuvable.');
+        this.assertAssignedDoctor(consultation.doctor.userId, user);
+        if (decodeMedicalSignature(consultation.certificate)) {
+          throw new ConflictException('Cette consultation est déjà signée.');
+        }
 
-    const report = decodeClinicalReport(consultation.report);
-    const required = [
-      report.sections.chiefComplaint,
-      report.sections.presentIllnessHistory,
-      report.sections.physicalExamination,
-      report.sections.diagnosis,
-      report.sections.treatmentPlan,
-      report.sections.decision,
-    ];
-    if (required.some((value) => !value)) {
-      throw new BadRequestException(
-        'Complétez la plainte, l’histoire de la maladie, l’examen physique, le diagnostic, la conduite thérapeutique et la décision finale avant de signer.',
-      );
-    }
-    if (consultation.examRequests.length > 0 || report.sections.preLaboratoryLockedAt) {
-      this.assertPostLaboratoryInterpretationComplete(report.sections);
-    }
+        assertCanSignConsultation(consultation);
+        const signedAt = new Date();
+        const doctorName = [
+          consultation.doctor.lastName,
+          consultation.doctor.postName,
+          consultation.doctor.firstName,
+        ]
+          .filter(Boolean)
+          .join(' ');
+        const signature = createMedicalSignature({
+          doctorUserId: user.id,
+          doctorName,
+          licenseNumber: consultation.doctor.licenseNumber,
+          signedAt,
+          report: consultation.report ?? '',
+        });
 
-    const signedAt = new Date();
-    const doctorName = [
-      consultation.doctor.lastName,
-      consultation.doctor.postName,
-      consultation.doctor.firstName,
-    ]
-      .filter(Boolean)
-      .join(' ');
-    const signature = createMedicalSignature({
-      doctorUserId: user.id,
-      doctorName,
-      licenseNumber: consultation.doctor.licenseNumber,
-      signedAt,
-      report: consultation.report ?? '',
-    });
-
-    return this.prisma.$transaction(async (transaction) => {
-      const updated = await transaction.consultation.update({
-        where: { id },
-        data: {
-          certificate: JSON.stringify({
-            ...signature,
-            confirmation: dto.confirmation?.trim() || undefined,
-          }),
-        },
-        include: consultationInclude,
-      });
-      await transaction.auditLog.create({
-        data: {
-          userId: user.id,
-          action: 'CONSULTATION_SIGNED',
-          entity: 'Consultation',
-          entityId: id,
-          metadata: { signedAt: signature.signedAt, hash: signature.hash },
-        },
-      });
-      return this.present(updated);
-    });
+        const claimed = await transaction.consultation.updateMany({
+          where: { id, certificate: null, updatedAt: consultation.updatedAt },
+          data: {
+            certificate: JSON.stringify({
+              ...signature,
+              confirmation: dto.confirmation?.trim() || undefined,
+            }),
+          },
+        });
+        if (!claimed.count) {
+          throw new ConflictException(
+            'La consultation a été modifiée pendant la signature. Rechargez le dossier et recommencez.',
+          );
+        }
+        await transaction.auditLog.create({
+          data: {
+            userId: user.id,
+            action: 'CONSULTATION_SIGNED',
+            entity: 'Consultation',
+            entityId: id,
+            metadata: { signedAt: signature.signedAt, hash: signature.hash },
+          },
+        });
+        const updated = await transaction.consultation.findUniqueOrThrow({
+          where: { id },
+          include: consultationInclude,
+        });
+        return this.present(updated);
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
   async addVitalSign(consultationId: string, dto: CreateVitalSignDto, userId: string) {
-    const consultation = await this.prisma.consultation.findUnique({ where: { id: consultationId } });
-    if (!consultation) throw new NotFoundException('Consultation introuvable.');
-    const { respiratoryRate, bloodGlucoseMgDl, notes, ...vitals } = dto;
-    const row = await this.prisma.vitalSign.create({
-      data: {
-        ...vitals,
-        notes: encodeVitalSignMetadata({
-          respiratoryRate,
-          bloodGlucoseMgDl,
-          clinicalNotes: notes,
-        }),
-        patientId: consultation.patientId,
-        consultationId,
-        recordedById: userId,
-      },
+    return this.prisma.$transaction(async (transaction) => {
+      const consultation = await transaction.consultation.findUnique({
+        where: { id: consultationId },
+        select: { patientId: true, status: true, certificate: true },
+      });
+      if (!consultation) throw new NotFoundException('Consultation introuvable.');
+      if (
+        consultation.status === ConsultationStatus.COMPLETED ||
+        consultation.status === ConsultationStatus.CANCELLED ||
+        decodeMedicalSignature(consultation.certificate)
+      ) {
+        throw new ConflictException(
+          'Les constantes ne peuvent plus être ajoutées à une consultation clôturée ou signée.',
+        );
+      }
+      const { respiratoryRate, bloodGlucoseMgDl, notes, ...vitals } = dto;
+      const row = await transaction.vitalSign.create({
+        data: {
+          ...vitals,
+          notes: encodeVitalSignMetadata({
+            respiratoryRate,
+            bloodGlucoseMgDl,
+            clinicalNotes: notes,
+          }),
+          patientId: consultation.patientId,
+          consultationId,
+          recordedById: userId,
+        },
+      });
+      return presentVitalSign(row);
     });
-    return presentVitalSign(row);
   }
 
   private present(row: ConsultationRow) {
@@ -446,7 +456,6 @@ export class ConsultationsService {
   }
 
   private assertAssignedDoctor(assignedUserId: string, user: AuthenticatedUser) {
-    if (hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN])) return;
     if (
       !hasAnyRole(user, [Role.DOCTOR, Role.SURGEON, Role.MIDWIFE]) ||
       assignedUserId !== user.id
@@ -486,11 +495,7 @@ export class ConsultationsService {
     }
   }
 
-  private resolveStatus(
-    current: ConsultationStatus,
-    requested?: ConsultationStatus,
-    decision?: ConsultationDecision,
-  ) {
+  private resolveStatus(current: ConsultationStatus, decision?: ConsultationDecision) {
     if (
       decision &&
       ['HOSPITALIZATION', 'DISCHARGE', 'COMPLETE', 'PRESCRIPTION', 'FOLLOW_UP'].includes(decision)
@@ -503,7 +508,7 @@ export class ConsultationsService {
     if (decision && ['CONTINUE', 'TRANSFER'].includes(decision)) {
       return ConsultationStatus.IN_PROGRESS;
     }
-    return requested ?? current;
+    return current;
   }
 
   private resolveJourney(

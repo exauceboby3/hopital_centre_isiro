@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -6,16 +7,15 @@ import {
 } from '@nestjs/common';
 import {
   AppointmentStatus,
-  AttendanceStatus,
   BillableServiceType,
   ConsultationStatus,
   PatientJourneyStage,
   Prisma,
   Role,
-  ShiftStatus,
 } from '@prisma/client';
 import { FinancialAuthorizationService } from '../billing/financial-authorization.service';
 import { AuthenticatedUser, hasAnyRole } from '../common/authenticated-user';
+import { hospitalDayRange } from '../common/hospital-time';
 import { encodeVitalSignMetadata, presentVitalSign } from '../common/vital-sign-metadata';
 import { mergeClinicalReport } from '../consultations/clinical-report';
 import { CreateVitalSignDto } from '../consultations/dto/create-vital-sign.dto';
@@ -55,18 +55,7 @@ export class AppointmentsService {
     status?: AppointmentStatus,
     scope: 'active' | 'history' = 'active',
   ) {
-    const now = new Date();
-    const startToday = new Date(now);
-    startToday.setHours(0, 0, 0, 0);
-
-    await this.prisma.appointment.updateMany({
-      where: { status: AppointmentStatus.SCHEDULED, scheduledAt: { lt: startToday } },
-      data: {
-        status: AppointmentStatus.NO_SHOW,
-        journeyStage: PatientJourneyStage.CANCELLED,
-        journeyUpdatedAt: now,
-      },
-    });
+    const { start: startToday } = hospitalDayRange();
 
     const scopeWhere: Prisma.AppointmentWhereInput =
       scope === 'history'
@@ -116,6 +105,22 @@ export class AppointmentsService {
     return rows.map((row) => this.present(row));
   }
 
+
+  async markPastScheduledAsNoShow(reference = new Date()) {
+    const { start } = hospitalDayRange(reference);
+    return this.prisma.appointment.updateMany({
+      where: {
+        status: AppointmentStatus.SCHEDULED,
+        scheduledAt: { lt: start },
+      },
+      data: {
+        status: AppointmentStatus.NO_SHOW,
+        journeyStage: PatientJourneyStage.CANCELLED,
+        journeyUpdatedAt: reference,
+      },
+    });
+  }
+
   async waitingRoom(userId: string) {
     const doctor = await this.prisma.doctorProfile.findUnique({
       where: { userId },
@@ -135,72 +140,17 @@ export class AppointmentsService {
     return rows.map((row) => this.present(row));
   }
 
-  async doctorAvailability() {
-    const now = new Date();
-    const start = new Date(now);
-    start.setUTCHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setUTCDate(end.getUTCDate() + 1);
-    const doctors = await this.prisma.doctorProfile.findMany({
-      where: { user: { isActive: true } },
-      include: {
-        user: {
-          select: {
-            id: true,
-            username: true,
-            attendanceRecords: { where: { date: { gte: start, lt: end } }, take: 1 },
-            staffShifts: {
-              where: {
-                startsAt: { lte: now },
-                endsAt: { gte: now },
-                status: { in: [ShiftStatus.PLANNED, ShiftStatus.CONFIRMED] },
-              },
-              take: 1,
-            },
-          },
-        },
-        consultations: {
-          where: { status: ConsultationStatus.IN_PROGRESS },
-          include: { patient: true },
-          orderBy: { startedAt: 'desc' },
-          take: 1,
-        },
-        appointments: {
-          where: {
-            status: AppointmentStatus.CHECKED_IN,
-            scheduledAt: { gte: start, lt: end },
-          },
-          include: { patient: true },
-          orderBy: { scheduledAt: 'asc' },
-        },
-      },
-      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
-    });
-    return doctors.map((doctor) => {
-      const attendance = doctor.user.attendanceRecords[0];
-      const activeConsultation = doctor.consultations[0];
-      const present =
-        attendance?.status === AttendanceStatus.PRESENT ||
-        attendance?.status === AttendanceStatus.LATE ||
-        doctor.user.staffShifts.length > 0;
-      return {
-        id: doctor.id,
-        userId: doctor.user.id,
-        username: doctor.user.username,
-        name: [doctor.lastName, doctor.postName, doctor.firstName].filter(Boolean).join(' '),
-        specialty: doctor.specialty,
-        availability: activeConsultation ? 'BUSY' : present ? 'AVAILABLE' : 'UNKNOWN',
-        attendanceStatus: attendance?.status ?? null,
-        onDuty: doctor.user.staffShifts.length > 0,
-        currentPatient: activeConsultation?.patient ?? null,
-        waitingPatients: doctor.appointments.map((appointment) => appointment.patient),
-      };
-    });
-  }
 
   create(dto: CreateAppointmentDto, createdById: string) {
     return this.prisma.$transaction(async (transaction) => {
       const { billableServiceId, ...appointmentData } = dto;
+      const scheduledAt = new Date(dto.scheduledAt);
+      if (Number.isNaN(scheduledAt.getTime())) {
+        throw new BadRequestException('La date du rendez-vous est invalide.');
+      }
+      if (scheduledAt.getTime() < Date.now() - 5 * 60_000) {
+        throw new BadRequestException('Un nouveau rendez-vous ne peut pas être programmé dans le passé.');
+      }
       if (dto.doctorId) await this.assertActiveDoctor(transaction, dto.doctorId);
 
       const activeEpisode = await transaction.appointment.findFirst({
@@ -220,7 +170,7 @@ export class AppointmentsService {
       const appointment = await transaction.appointment.create({
         data: {
           ...appointmentData,
-          scheduledAt: new Date(dto.scheduledAt),
+          scheduledAt,
           createdById,
         },
       });
@@ -500,8 +450,7 @@ export class AppointmentsService {
   }
 
   private assertAssignedDoctor(assignedUserId: string | undefined, user: AuthenticatedUser) {
-    if (hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN])) return;
-    if (!assignedUserId || assignedUserId !== user.id) {
+    if (!hasAnyRole(user, [Role.DOCTOR, Role.SURGEON, Role.MIDWIFE]) || !assignedUserId || assignedUserId !== user.id) {
       throw new ForbiddenException('Ce patient est attribué à un autre médecin.');
     }
   }

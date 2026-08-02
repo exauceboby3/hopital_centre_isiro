@@ -45,6 +45,19 @@ describe('RolesGuard', () => {
     expect(guard.canActivate(context(Role.SUPER_ADMIN))).toBe(true);
   });
 
+
+  it('refuse un administrateur lorsque le rôle métier n’est pas explicitement autorisé', () => {
+    getAllAndOverride.mockReturnValue([Role.CASHIER]);
+
+    expect(() => guard.canActivate(context(Role.ADMIN))).toThrow(ForbiddenException);
+  });
+
+  it('autorise un administrateur uniquement lorsque ADMIN est déclaré', () => {
+    getAllAndOverride.mockReturnValue([Role.ADMIN]);
+
+    expect(guard.canActivate(context(Role.ADMIN))).toBe(true);
+  });
+
   it('réserve les actions super-administrateur au super-administrateur', () => {
     getAllAndOverride.mockReturnValue([Role.SUPER_ADMIN]);
 

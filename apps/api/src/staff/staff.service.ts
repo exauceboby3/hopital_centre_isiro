@@ -10,6 +10,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { publicUserSelect } from '../users/users.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
 
+const clinicianRoles: Role[] = [Role.DOCTOR, Role.SURGEON, Role.MIDWIFE];
+
 const staffRoles: Role[] = [
   Role.CASHIER,
   Role.RECEPTIONIST,
@@ -42,8 +44,8 @@ export class StaffService {
     if (!staffRoles.includes(dto.role)) {
       throw new BadRequestException('Ce rôle ne peut pas être créé depuis le module du personnel.');
     }
-    if (dto.role === Role.DOCTOR && !dto.specialty) {
-      throw new BadRequestException('La spécialité du médecin est obligatoire.');
+    if (clinicianRoles.includes(dto.role) && !dto.specialty?.trim()) {
+      throw new BadRequestException('La spécialité du praticien est obligatoire.');
     }
     const username = dto.username.trim();
     if (username.length < 3) {
@@ -74,7 +76,7 @@ export class StaffService {
           address: dto.address,
         };
 
-        if (dto.role === Role.DOCTOR) {
+        if (clinicianRoles.includes(dto.role)) {
           await transaction.doctorProfile.create({
             data: {
               ...common,

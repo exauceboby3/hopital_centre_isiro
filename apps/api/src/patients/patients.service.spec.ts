@@ -37,7 +37,8 @@ describe('PatientsService', () => {
     if (!sequencePayload || !patientPayload) throw new Error('Création du patient non exécutée.');
     expect(sequencePayload.update).toEqual({ lastValue: { increment: 1 } });
     expect(patientPayload.data.medicalRecordNumber).toMatch(/^CHI-\d{4}-000042$/);
-    expect(patientPayload.data).toMatchObject({ identityKey: 'malu|sans-identifiant' });
+    expect(patientPayload.data).toMatchObject({ identityKey: null });
+    expect(transaction.patient.findFirst).not.toHaveBeenCalled();
   });
 
   it('refuse un second dossier portant la même identité normalisée', async () => {
@@ -102,6 +103,13 @@ describe('PatientsService', () => {
       ]),
     ) as Record<(typeof deletableModels)[number], { deleteMany: jest.Mock }>;
     const patientDelete = jest.fn().mockResolvedValue({ id: 'patient-1' });
+    const auditCalls: Array<{ data: { userId: string; action: string } }> = [];
+    const auditCreate = jest.fn(
+      (args: { data: { userId: string; action: string } }) => {
+        auditCalls.push(args);
+        return Promise.resolve({ id: 'audit-1' });
+      },
+    );
     const bedUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
     const transaction = {
       ...delegates,
@@ -111,6 +119,7 @@ describe('PatientsService', () => {
       },
       bed: { updateMany: bedUpdateMany },
       patient: { delete: patientDelete },
+      auditLog: { create: auditCreate },
     };
     const prisma = {
       patient: {
@@ -127,7 +136,12 @@ describe('PatientsService', () => {
     } as unknown as PrismaService;
     const service = new PatientsService(prisma, {} as ConfigurationService);
 
-    const result = await service.removePermanently('patient-1');
+    const result = await service.removePermanently(
+      'patient-1',
+      'super-user-1',
+      'CHI-2026-000001',
+      'Suppression demandée après contrôle administratif complet.',
+    );
 
     expect(result).toMatchObject({
       success: true,
@@ -142,5 +156,9 @@ describe('PatientsService', () => {
     expect(bedUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: { status: 'AVAILABLE' } }),
     );
+    const auditCall = auditCalls.at(0);
+    expect(auditCall).toBeDefined();
+    expect(auditCall?.data.userId).toBe('super-user-1');
+    expect(auditCall?.data.action).toBe('PATIENT_PERMANENTLY_DELETED');
   });
 });
