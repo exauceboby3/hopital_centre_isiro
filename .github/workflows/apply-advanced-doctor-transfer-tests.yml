@@ -65,7 +65,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Reconstruire et vérifier le correctif
+      - name: Reconstruire, corriger et vérifier le correctif
         if: steps.state.outputs.applied != 'true'
         shell: bash
         run: |
@@ -77,6 +77,8 @@ jobs:
           echo 'f2ddf933775a3a07d69dfa78b5abbc26b523be4c6d64c58000b4511888ca5d86  /tmp/advanced-transfer.patch' | sha256sum --check
           git apply --check /tmp/advanced-transfer.patch
           git apply --index /tmp/advanced-transfer.patch
+          node .automation/apply-advanced-transfer-typescript-fixes.mjs
+          git add -A
           git diff --cached --check
 
       - name: Installer les dépendances
@@ -131,6 +133,8 @@ jobs:
           set -euo pipefail
           test -f artifacts/advanced-doctor-load-report.json
           test "$(jq -r '.failedAssertions' artifacts/advanced-doctor-load-report.json)" = "0"
+          rm -rf .automation/advanced-transfer-patch
+          rm -f .automation/apply-advanced-transfer-typescript-fixes.mjs
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
