@@ -1,0 +1,20 @@
+--- a/apps/web/app/(protected)/service-reports/page.tsx
++++ b/apps/web/app/(protected)/service-reports/page.tsx
+@@ -84,7 +84,16 @@
+     closingValue: number;
+     variance: number;
+   }>;
+-  totals: Record<string, number>;
++  totals: {
++    patients: number;
++    openingValue: number;
++    receivedValue: number;
++    returnedValue: number;
++    usedValue: number;
++    lostValue: number;
++    closingValue: number;
++    variance: number;
++  };
+ };
+ 
+ const departments = [
