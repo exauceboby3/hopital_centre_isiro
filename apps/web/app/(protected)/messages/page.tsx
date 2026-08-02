@@ -70,6 +70,7 @@ const roleLabels: Record<string, string> = {
   PHARMACIST: 'Pharmacien',
   ACCOUNTANT: 'Comptable',
   STOREKEEPER: 'Gestionnaire de stock',
+  HR: 'Ressources humaines',
 };
 
 const formatTime = (value: string) =>

@@ -15,6 +15,7 @@ import { BillingModule } from './billing/billing.module';
 import { PharmacyModule } from './pharmacy/pharmacy.module';
 import { MessagesModule } from './messages/messages.module';
 import { StaffModule } from './staff/staff.module';
+import { ServiceReportsModule } from './service-reports/service-reports.module';
 import { PatientsModule } from './patients/patients.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
@@ -52,6 +53,7 @@ import { BusinessNotificationsModule } from './business-notifications/business-n
     PatientsModule,
     DashboardModule,
     StaffModule,
+    ServiceReportsModule,
     ClinicalGovernanceModule,
     ClinicalSafetyModule,
     AppointmentsModule,

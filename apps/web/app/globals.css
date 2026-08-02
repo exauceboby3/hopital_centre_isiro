@@ -3364,3 +3364,51 @@ input[type='checkbox'] {
     justify-self: start;
   }
 }
+
+/* Cadre d’affichage stable et centré, y compris sur les téléphones étroits. */
+.page-content {
+  width: 100%;
+  max-width: 1440px;
+  margin-inline: auto;
+}
+
+@media (max-width: 720px) {
+  .content-shell {
+    min-width: 0;
+  }
+
+  .page-content {
+    width: min(100%, 480px);
+    min-height: 100dvh;
+    margin-inline: auto;
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
+    overflow-x: clip;
+  }
+
+  button,
+  .primary-button,
+  .secondary-button,
+  .text-button,
+  input,
+  select {
+    min-height: 44px;
+  }
+
+  textarea {
+    min-height: 88px;
+  }
+
+  .modal-card {
+    width: min(calc(100vw - 24px), 480px);
+    max-height: calc(100dvh - 24px);
+    margin-inline: auto;
+    overflow-y: auto;
+  }
+
+  .table-scroll {
+    max-width: 100%;
+    overscroll-behavior-inline: contain;
+  }
+}

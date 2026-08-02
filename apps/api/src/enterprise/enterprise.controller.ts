@@ -66,7 +66,7 @@ const clinicalRoles = [
 ];
 const pharmacyRoles = [Role.SUPER_ADMIN, Role.ADMIN, Role.PHARMACIST, Role.STOREKEEPER];
 const radiologyRoles = [Role.SUPER_ADMIN, Role.ADMIN, Role.RADIOLOGIST, Role.DOCTOR];
-const hrRoles = [Role.SUPER_ADMIN, Role.ADMIN, Role.ACCOUNTANT];
+const hrRoles = [Role.SUPER_ADMIN, Role.ADMIN, Role.ACCOUNTANT, Role.HR];
 const accountingRoles = [Role.SUPER_ADMIN, Role.ADMIN, Role.ACCOUNTANT];
 
 @ApiTags('enterprise')

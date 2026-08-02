@@ -30,6 +30,7 @@ const departmentLabels: Partial<Record<Role, string>> = {
   PHARMACIST: 'Pharmacie',
   CASHIER: 'Caisse',
   ACCOUNTANT: 'Comptabilité',
+  HR: 'Ressources humaines',
 };
 
 @Injectable()
@@ -43,7 +44,7 @@ export class PatientHistoryService {
     });
     if (!patient) throw new NotFoundException('Patient introuvable.');
 
-    const [appointments, consultations, exams, hospitalizations, vitalSigns, prescriptions, invoices] =
+    const [appointments, consultations, exams, hospitalizations, vitalSigns, prescriptions, invoices, amendments] =
       await Promise.all([
         this.prisma.appointment.findMany({
           where: { patientId: id },
@@ -95,6 +96,11 @@ export class PatientHistoryService {
             },
           },
           orderBy: { issuedAt: 'asc' },
+        }),
+        this.prisma.patientClinicalAmendment.findMany({
+          where: { patientId: id },
+          include: { author: { select: { username: true, role: true } } },
+          orderBy: { createdAt: 'asc' },
         }),
       ]);
 
@@ -229,7 +235,7 @@ export class PatientHistoryService {
           row.items
             .map(
               (item) =>
-                `${item.medication.name}${item.medication.strength ? ` ${item.medication.strength}` : ''} — ${item.dosage}, ${item.frequency}`,
+                `${item.medicationName}${item.strength ? ` ${item.strength}` : ''} — ${item.dosage}, ${item.frequency}${item.availability === 'EXTERNAL' || item.availability === 'NON_CATALOGUED' ? ' · achat externe' : ''}`,
             )
             .join(' ; '),
         ]
@@ -238,6 +244,23 @@ export class PatientHistoryService {
         status: row.status,
         author: row.prescribedBy.username,
         department: departmentLabels[row.prescribedBy.role],
+      });
+    });
+
+    amendments.forEach((row) => {
+      push({
+        id: row.id,
+        kind: 'AMENDMENT',
+        date: row.createdAt,
+        title: `Avenant clinique · ${row.fieldName}`,
+        description: [
+          row.previousValue ? `Ancienne valeur : ${row.previousValue}` : undefined,
+          `Nouvelle valeur : ${row.newValue}`,
+          `Motif : ${row.reason}`,
+        ].filter(Boolean).join(' — '),
+        status: 'RECORDED',
+        author: row.author.username,
+        department: departmentLabels[row.author.role] ?? 'Médecine',
       });
     });
 

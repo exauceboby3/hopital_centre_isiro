@@ -26,6 +26,7 @@ const staffRoles: Role[] = [
   Role.PHARMACIST,
   Role.ACCOUNTANT,
   Role.STOREKEEPER,
+  Role.HR,
 ];
 
 @Injectable()

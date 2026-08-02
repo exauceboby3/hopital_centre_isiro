@@ -62,6 +62,7 @@ export class RolesGuard implements CanActivate {
         PHARMACIST: 'Pharmacien',
         ACCOUNTANT: 'Comptable',
         STOREKEEPER: 'Gestionnaire de stock',
+        HR: 'Ressources humaines',
       };
       throw new ForbiddenException({
         code: 'ROLE_REQUIRED',

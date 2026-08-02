@@ -92,6 +92,7 @@ const historyLabels: Record<string, string> = {
   CLINICAL_ORDER: 'Acte clinique',
   SPECIALTY: 'Dossier spécialisé',
   RADIOLOGY: 'Imagerie médicale',
+  AMENDMENT: 'Avenant médical',
 };
 
 const emptyForm: PatientForm = {
@@ -541,7 +542,10 @@ export default function PatientsPage() {
                       <td>
                         <div className="row-actions compact-actions">
                           <Link className="text-button" href={`/print?kind=patient&id=${patient.id}`}>
-                            <Printer size={15} /> Dossier
+                            <Printer size={15} /> Imprimer
+                          </Link>
+                          <Link className="text-button" href={`/patients/${patient.id}`}>
+                            <UserRound size={15} /> Dossier médical
                           </Link>
                           <button
                             className="text-button"

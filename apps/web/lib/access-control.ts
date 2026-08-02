@@ -17,9 +17,12 @@ export const ALL_ROLES: readonly Role[] = [
   'PHARMACIST',
   'ACCOUNTANT',
   'STOREKEEPER',
+  'HR',
 ];
 
 export const ADMIN_ROLES: readonly Role[] = ['SUPER_ADMIN', 'ADMIN'];
+export const HR_ROLES: readonly Role[] = ['SUPER_ADMIN', 'ADMIN', 'HR'];
+export const SERVICE_REPORT_ROLES: readonly Role[] = ALL_ROLES;
 export const RECEPTION_ROLES: readonly Role[] = [
   'SUPER_ADMIN',
   'ADMIN',
@@ -97,6 +100,7 @@ export const ENTERPRISE_ROLES: readonly Role[] = [
   'STOREKEEPER',
   'RADIOLOGIST',
   'ACCOUNTANT',
+  'HR',
 ];
 
 interface RouteRule {
@@ -125,7 +129,8 @@ const routeRules: RouteRule[] = [
   { prefix: '/pharmacy', roles: PHARMACY_ROLES },
   { prefix: '/operations', roles: OPERATIONS_ROLES },
   { prefix: '/enterprise', roles: ENTERPRISE_ROLES },
-  { prefix: '/staff', roles: ADMIN_ROLES },
+  { prefix: '/service-reports', roles: SERVICE_REPORT_ROLES },
+  { prefix: '/staff', roles: HR_ROLES },
   { prefix: '/admin', roles: ADMIN_ROLES },
   { prefix: '/dashboard', roles: ALL_ROLES },
   { prefix: '/messages', roles: ALL_ROLES },
@@ -162,6 +167,7 @@ export function defaultRouteForUser(
     return '/laboratory';
   }
   if (roles.includes('PHARMACIST') || roles.includes('STOREKEEPER')) return '/pharmacy';
+  if (roles.includes('HR')) return '/staff';
   if (roles.includes('RADIOLOGIST')) return '/operations';
   return '/dashboard';
 }

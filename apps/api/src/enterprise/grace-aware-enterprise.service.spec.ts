@@ -3,6 +3,7 @@ import {
   InvoiceStatus,
   PaymentPayer,
   Prisma,
+  PrescriptionAvailability,
   PrescriptionStatus,
 } from '@prisma/client';
 import { FinancialAuthorizationService } from '../billing/financial-authorization.service';
@@ -46,6 +47,8 @@ function prescriptionFixture() {
         medicationId: 'medication-1',
         quantity: 5,
         dispensedQuantity: 0,
+        medicationName: 'Paracétamol',
+        availability: PrescriptionAvailability.INTERNAL,
         medication: { id: 'medication-1', name: 'Paracétamol' },
       },
     ],

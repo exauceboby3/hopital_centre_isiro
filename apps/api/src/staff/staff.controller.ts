@@ -21,7 +21,7 @@ import { StaffService } from './staff.service';
 @ApiTags('staff')
 @ApiCookieAuth('hospital_access')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.SUPER_ADMIN, Role.ADMIN)
+@Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.HR)
 @Controller('staff')
 export class StaffController {
   constructor(private readonly staff: StaffService) {}

@@ -108,4 +108,184 @@ describe('UsersService', () => {
       }),
     ).rejects.toThrow('Le mot de passe actuel est incorrect.');
   });
+
+  it('enregistre les champs vides du profil comme null et évite le conflit du numéro professionnel vide', async () => {
+    const profile = {
+      id: 'doctor-profile-1',
+      userId: 'doctor-user-1',
+      lastName: 'MALU',
+      postName: null,
+      firstName: null,
+      specialty: 'Médecine générale',
+      grade: null,
+      licenseNumber: null,
+      phone: null,
+      address: null,
+    };
+    const user = {
+      id: 'doctor-user-1',
+      username: 'doctor1',
+      role: Role.DOCTOR,
+      additionalRoles: [],
+      doctorProfile: profile,
+      nurseProfile: null,
+      secretaryProfile: null,
+      labProfile: null,
+      staffProfile: null,
+    };
+    const doctorUpdate = jest.fn().mockResolvedValue(profile);
+    const auditCreate = jest.fn().mockResolvedValue({ id: 'audit-1' });
+    const transaction = {
+      doctorProfile: { update: doctorUpdate },
+      nurseProfile: { update: jest.fn() },
+      secretaryProfile: { update: jest.fn() },
+      labTechnicianProfile: { update: jest.fn() },
+      staffProfile: { update: jest.fn(), create: jest.fn() },
+      auditLog: { create: auditCreate },
+    };
+    const prisma = {
+      user: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValueOnce({
+            id: user.id,
+            username: user.username,
+            role: user.role,
+            additionalRoles: [],
+            doctorProfile: profile,
+          })
+          .mockResolvedValueOnce(user)
+          .mockResolvedValueOnce(user)
+          .mockResolvedValueOnce(user),
+      },
+      customFieldValue: { findMany: jest.fn().mockResolvedValue([]) },
+      $transaction: jest.fn((callback: (client: typeof transaction) => unknown) =>
+        callback(transaction),
+      ),
+    } as unknown as PrismaService;
+    const service = new UsersService(prisma);
+
+    await service.updateOwnProfile(user.id, {
+      lastName: '  MALU  ',
+      postName: ' ',
+      firstName: '',
+      specialty: ' Médecine interne ',
+      grade: '',
+      licenseNumber: ' ',
+      phone: '',
+      address: ' Isiro ',
+    });
+
+    expect(doctorUpdate).toHaveBeenCalledWith({
+      where: { userId: user.id },
+      data: {
+        lastName: 'MALU',
+        postName: null,
+        firstName: null,
+        phone: null,
+        address: 'Isiro',
+        specialty: 'Médecine interne',
+        grade: null,
+        licenseNumber: null,
+      },
+    });
+    expect(auditCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuse un nom vide lors de la mise à jour du profil', async () => {
+    const prisma = {
+      user: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValueOnce({
+            id: 'user-1',
+            username: 'doctor',
+            role: Role.DOCTOR,
+            additionalRoles: [],
+            doctorProfile: {},
+          })
+          .mockResolvedValueOnce({
+            id: 'user-1',
+            username: 'doctor',
+            role: Role.DOCTOR,
+            doctorProfile: {},
+            nurseProfile: null,
+            secretaryProfile: null,
+            labProfile: null,
+            staffProfile: null,
+          }),
+      },
+    } as unknown as PrismaService;
+    const service = new UsersService(prisma);
+
+    await expect(service.updateOwnProfile('user-1', { lastName: ' ' })).rejects.toThrow(
+      'Le nom doit contenir au moins 2 caractères.',
+    );
+  });
+
+  it.each([
+    ['médecin', Role.DOCTOR, 'doctorProfile', 'doctorProfile'],
+    ['infirmier', Role.NURSE, 'nurseProfile', 'nurseProfile'],
+    ['secrétaire', Role.SECRETARY, 'secretaryProfile', 'secretaryProfile'],
+    ['laboratoire', Role.LAB_TECHNICIAN, 'labProfile', 'labTechnicianProfile'],
+    ['ressources humaines', Role.HR, 'staffProfile', 'staffProfile'],
+  ] as const)(
+    'met à jour le profil %s avec journalisation',
+    async (_label, role, profileKey, repositoryKey) => {
+      const profile = {
+        id: `profile-${role}`,
+        userId: `user-${role}`,
+        lastName: 'MALU',
+        postName: null,
+        firstName: 'Jean',
+        specialty: 'Service test',
+        grade: null,
+        licenseNumber: null,
+        educationLevel: null,
+        phone: null,
+        address: null,
+      };
+      const user = {
+        id: profile.userId,
+        username: role.toLowerCase(),
+        role,
+        additionalRoles: [],
+        doctorProfile: null,
+        nurseProfile: null,
+        secretaryProfile: null,
+        labProfile: null,
+        staffProfile: null,
+        [profileKey]: profile,
+      };
+      const repositories = {
+        doctorProfile: { update: jest.fn().mockResolvedValue(profile) },
+        nurseProfile: { update: jest.fn().mockResolvedValue(profile) },
+        secretaryProfile: { update: jest.fn().mockResolvedValue(profile) },
+        labTechnicianProfile: { update: jest.fn().mockResolvedValue(profile) },
+        staffProfile: {
+          update: jest.fn().mockResolvedValue(profile),
+          create: jest.fn().mockResolvedValue(profile),
+        },
+        auditLog: { create: jest.fn().mockResolvedValue({ id: 'audit-1' }) },
+      };
+      const prisma = {
+        user: { findUnique: jest.fn().mockResolvedValue(user) },
+        customFieldValue: { findMany: jest.fn().mockResolvedValue([]) },
+        $transaction: jest.fn((callback: (client: typeof repositories) => unknown) =>
+          callback(repositories),
+        ),
+      } as unknown as PrismaService;
+      const service = new UsersService(prisma);
+
+      await service.updateOwnProfile(user.id, {
+        lastName: ' MALU ',
+        firstName: ' Jean ',
+        specialty: ' Service test ',
+      });
+
+      expect(repositories[repositoryKey].update).toHaveBeenCalledTimes(1);
+      expect(repositories.auditLog.create).toHaveBeenCalledTimes(1);
+    },
+  );
+
 });

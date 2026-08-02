@@ -11,7 +11,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     services:
       postgres:
         image: postgres:17-alpine
@@ -47,8 +47,10 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Installer les dépendances
-        run: npm ci
+      - name: Installer npm 11 et les dépendances
+        run: |
+          npm install --global npm@11
+          npm ci
 
       - name: Générer et valider le client Prisma
         run: |
@@ -105,6 +107,9 @@ jobs:
       - name: Tester la charge médicale et les transferts avancés
         run: npm run test:advanced-workflows
 
+      - name: Tester profils, mesures de grâce, stocks, rapports et RH
+        run: npm run test:department-workflows
+
       - name: Publier les rapports des parcours patients
         if: always()
         uses: actions/upload-artifact@v4
@@ -113,6 +118,7 @@ jobs:
           path: |
             artifacts/20-patient-workflow-report.json
             artifacts/advanced-doctor-load-report.json
+            artifacts/department-profile-workflow-report.json
           if-no-files-found: ignore
           retention-days: 7
 

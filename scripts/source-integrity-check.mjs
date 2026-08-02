@@ -57,4 +57,32 @@ check('Un seul patient actif par lit', migration.includes('Hospitalization_one_a
 check('Une seule consultation active par patient', migration.includes('Consultation_one_active_per_patient'));
 check('Un seul rendez-vous actif par patient', migration.includes('Appointment_one_active_episode_per_patient'));
 
+
+const profileService = read('apps/api/src/users/users.service.ts');
+check('Profil convertit les champs optionnels vides en null', profileService.includes('return normalized ? normalized : null'));
+check('Profil journalise chaque modification', profileService.includes('OWN_PROFILE_UPDATED'));
+
+const patientAccess = read('apps/api/src/patients/patient-access.service.ts');
+check('Médecin peut lire tous les dossiers actifs', patientAccess.includes('Les praticiens peuvent consulter tous les dossiers actifs'));
+check('Corrections cliniques immuables avec motif', patients.includes('patientClinicalAmendment.create') && patients.includes('reason: dto.reason.trim()'));
+check('Médecin corrige le dossier uniquement par avenant motivé', !controller.slice(controller.indexOf("@Patch(':id')"), controller.indexOf("@Delete(':id/permanent')")).includes('Role.DOCTOR'));
+
+const prescription = read('apps/api/src/enterprise/enterprise.service.ts');
+check('Prescription accepte un médicament non référencé', prescription.includes('PrescriptionAvailability.NON_CATALOGUED'));
+check('Prescription externe ne facture pas le stock interne', prescription.includes("' — achat externe'"));
+
+const reports = read('apps/api/src/service-reports/service-reports.service.ts');
+check('Rapport journalier calcule les retours dans le reste', reports.includes('item.returnedQuantity -'));
+check('Commande en cours ne gonfle pas le stock final', !reports.slice(reports.indexOf('const closingStock'), reports.indexOf('if (closingStock < 0)')).includes('pendingOrder'));
+check('Coût comptable repris du catalogue pour les médicaments référencés', reports.includes('medication?.unitPrice ??'));
+check('Réquisition transfère le stock central vers le département', reports.includes('departmentStock.upsert') && reports.includes('PHARMACIE_CENTRALE'));
+
+const schema = read('apps/api/prisma/schema.prisma');
+check('Rôle RH indépendant présent', schema.includes('\n  HR\n'));
+check('Stocks des services séparés du stock central', schema.includes('model DepartmentStock'));
+check('Rapports et réquisitions persistés', schema.includes('model DepartmentDailyReport') && schema.includes('model InternalRequisition'));
+
+const mobile = read('apps/web/app/globals.css');
+check('Écran mobile centré et limité à 480 px', mobile.includes('width: min(100%, 480px)'));
+
 console.log(JSON.stringify({ checks: checks.length, passed: checks }, null, 2));

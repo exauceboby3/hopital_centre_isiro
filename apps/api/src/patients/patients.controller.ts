@@ -21,6 +21,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CreateVitalSignDto } from '../consultations/dto/create-vital-sign.dto';
+import { CreateClinicalAmendmentDto } from './dto/create-clinical-amendment.dto';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { ListPatientsDto } from './dto/list-patients.dto';
 import { PermanentDeletePatientDto } from './dto/permanent-delete-patient.dto';
@@ -93,6 +94,27 @@ export class PatientsController {
     return this.historyService.history(id);
   }
 
+  @Get(':id/amendments')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.DOCTOR, Role.SURGEON, Role.MIDWIFE)
+  async amendments(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    await this.access.assertCanAccess(id, user);
+    return this.patients.clinicalAmendments(id);
+  }
+
+  @Post(':id/amendments')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.DOCTOR, Role.SURGEON, Role.MIDWIFE)
+  async createAmendment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateClinicalAmendmentDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    await this.access.assertCanAccess(id, user);
+    return this.patients.createClinicalAmendment(id, dto, user.id);
+  }
+
   @Get(':id')
   async findOne(
     @Param('id', ParseUUIDPipe) id: string,
@@ -134,14 +156,7 @@ export class PatientsController {
   }
 
   @Patch(':id')
-  @Roles(
-    Role.SUPER_ADMIN,
-    Role.ADMIN,
-    Role.RECEPTIONIST,
-    Role.SECRETARY,
-    Role.DOCTOR,
-    Role.MEDICAL_BIOLOGIST,
-  )
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.RECEPTIONIST, Role.SECRETARY)
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdatePatientDto,

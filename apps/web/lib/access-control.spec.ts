@@ -32,4 +32,14 @@ describe('access-control', () => {
     expect(canAccessPath(administratorDoctor, '/consultations')).toBe(true);
     expect(canAccessPath(administratorDoctor, '/admin')).toBe(true);
   });
+
+  it('donne au rôle RH le personnel et les rapports sans accès clinique ni pharmacie', () => {
+    expect(canAccessPath(user('HR'), '/staff')).toBe(true);
+    expect(canAccessPath(user('HR'), '/service-reports')).toBe(true);
+    expect(canAccessPath(user('HR'), '/enterprise')).toBe(true);
+    expect(canAccessPath(user('HR'), '/patients')).toBe(false);
+    expect(canAccessPath(user('HR'), '/pharmacy')).toBe(false);
+    expect(defaultRouteForUser(user('HR'))).toBe('/staff');
+  });
+
 });
