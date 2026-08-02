@@ -1,4 +1,0 @@
-bundle=data_exchange_bundle.tar.gz
-sha256=69fef7a7155e15d3c7c2a9e64cebe2cbe58d8eb26ae690874623ea4de3863cf9
-parts=9
-scope=PDF,XLSX,CSV,templates,preview,controlled-import,audit
