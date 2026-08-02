@@ -14,8 +14,9 @@ function text(value: unknown): string {
   if (value === null || value === undefined) return '';
   if (value instanceof Date) return value.toISOString();
   if (typeof value === 'boolean') return value ? 'Oui' : 'Non';
-  if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'bigint') return String(value);
+  return JSON.stringify(value);
 }
 
 function xmlEscape(value: string): string {
@@ -116,10 +117,13 @@ export class TabularCodecService {
     }
     row.push(field.replace(/\r$/, '').trim());
     if (row.some((cell) => cell !== '')) rows.push(row);
-    if (!rows.length) throw new BadRequestException('Aucune ligne exploitable dans le fichier CSV.');
-    const headers = rows[0].map((header) => header.trim());
+    const [headerRow, ...dataRows] = rows;
+    if (!headerRow) throw new BadRequestException('Aucune ligne exploitable dans le fichier CSV.');
+    const headers = headerRow.map((header) => header.trim());
     if (!headers.some(Boolean)) throw new BadRequestException('La ligne des en-têtes est vide.');
-    const objects = rows.slice(1).map((cells) => Object.fromEntries(headers.map((header, index) => [header, cells[index] ?? ''])));
+    const objects = dataRows.map((cells) =>
+      Object.fromEntries(headers.map((header, index) => [header, cells[index] ?? ''])),
+    );
     if (objects.length > 5000) throw new BadRequestException('Un import est limité à 5 000 lignes.');
     return { headers, rows: objects, format: 'csv' };
   }
@@ -174,15 +178,18 @@ export class TabularCodecService {
     if (!sheetBytes) throw new BadRequestException('La première feuille Excel est introuvable.');
     const sharedBytes = archive['xl/sharedStrings.xml'];
     const shared = sharedBytes
-      ? [...strFromU8(sharedBytes).matchAll(/<si[^>]*>([\s\S]*?)<\/si>/g)].map((match) => stripXml(match[1]))
+      ? [...strFromU8(sharedBytes).matchAll(/<si[^>]*>([\s\S]*?)<\/si>/g)].map((match) =>
+          stripXml(match[1] ?? ''),
+        )
       : [];
     const sheet = strFromU8(sheetBytes);
     const table: string[][] = [];
     for (const rowMatch of sheet.matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g)) {
       const cells: string[] = [];
-      for (const cellMatch of rowMatch[1].matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)) {
-        const attributes = cellMatch[1];
-        const body = cellMatch[2];
+      const rowBody = rowMatch[1] ?? '';
+      for (const cellMatch of rowBody.matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)) {
+        const attributes = cellMatch[1] ?? '';
+        const body = cellMatch[2] ?? '';
         const ref = /\br="([A-Z]+)\d+"/.exec(attributes)?.[1] ?? 'A';
         let index = 0;
         for (const character of ref) index = index * 26 + character.charCodeAt(0) - 64;
@@ -194,9 +201,12 @@ export class TabularCodecService {
       }
       if (cells.some((cell) => cell !== undefined && cell !== '')) table.push(cells.map((cell) => cell ?? ''));
     }
-    if (!table.length) throw new BadRequestException('La feuille Excel ne contient aucune donnée.');
-    const headers = table[0].map((value) => value.trim());
-    const rows = table.slice(1).map((cells) => Object.fromEntries(headers.map((header, index) => [header, cells[index]?.trim() ?? ''])));
+    const [headerRow, ...dataRows] = table;
+    if (!headerRow) throw new BadRequestException('La feuille Excel ne contient aucune donnée.');
+    const headers = headerRow.map((value) => value.trim());
+    const rows = dataRows.map((cells) =>
+      Object.fromEntries(headers.map((header, index) => [header, cells[index]?.trim() ?? ''])),
+    );
     if (rows.length > 5000) throw new BadRequestException('Un import est limité à 5 000 lignes.');
     return { headers, rows, format: 'xlsx' };
   }
@@ -232,7 +242,7 @@ export class TabularCodecService {
         const match = document.branding?.logoDataUrl?.match(/^data:image\/[^;]+;base64,(.+)$/);
         if (!match) return null;
         try {
-          return Buffer.from(match[1], 'base64');
+          return Buffer.from(match[1] ?? '', 'base64');
         } catch {
           return null;
         }
@@ -287,26 +297,48 @@ export class TabularCodecService {
         let x = pdf.page.margins.left;
         pdf.fontSize(7).font('Helvetica-Bold');
         document.columns.forEach((column, index) => {
-          pdf.rect(x, y, widths[index], 22).fillAndStroke(accent, '#d6e3e0');
-          pdf.fillColor('#ffffff').text(column.label, x + 3, y + 5, { width: widths[index] - 6, height: 15, ellipsis: true });
-          x += widths[index];
+          const columnWidth = widths[index] ?? 48;
+          pdf.rect(x, y, columnWidth, 22).fillAndStroke(accent, '#d6e3e0');
+          pdf.fillColor('#ffffff').text(column.label, x + 3, y + 5, {
+            width: columnWidth - 6,
+            height: 15,
+            ellipsis: true,
+          });
+          x += columnWidth;
         });
         pdf.y = y + 22;
       };
       drawHeader();
       document.rows.forEach((row, rowIndex) => {
         const values = document.columns.map((column) => text(row[column.key]));
-        const height = Math.max(18, ...values.map((value, index) => pdf.heightOfString(value, { width: widths[index] - 6 }) + 6));
+        const height = Math.max(
+          18,
+          ...values.map(
+            (value, index) =>
+              pdf.heightOfString(value, { width: (widths[index] ?? 48) - 6 }) + 6,
+          ),
+        );
         if (pdf.y + height > pdf.page.height - pdf.page.margins.bottom - 14) {
           pdf.addPage();
           drawHeader();
         }
         const y = pdf.y;
         let x = pdf.page.margins.left;
-        document.columns.forEach((column, index) => {
-          pdf.rect(x, y, widths[index], height).fillAndStroke(rowIndex % 2 ? '#f7faf9' : '#ffffff', '#d6e3e0');
-          pdf.fillColor('#1d2b29').font('Helvetica').fontSize(6.5).text(values[index], x + 3, y + 4, { width: widths[index] - 6, height: height - 6, ellipsis: true });
-          x += widths[index];
+        document.columns.forEach((_column, index) => {
+          const columnWidth = widths[index] ?? 48;
+          pdf
+            .rect(x, y, columnWidth, height)
+            .fillAndStroke(rowIndex % 2 ? '#f7faf9' : '#ffffff', '#d6e3e0');
+          pdf
+            .fillColor('#1d2b29')
+            .font('Helvetica')
+            .fontSize(6.5)
+            .text(values[index] ?? '', x + 3, y + 4, {
+              width: columnWidth - 6,
+              height: height - 6,
+              ellipsis: true,
+            });
+          x += columnWidth;
         });
         pdf.y = y + height;
       });

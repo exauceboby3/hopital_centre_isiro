@@ -41,7 +41,6 @@ check('Suppression définitive exige confirmation et motif', controller.includes
 const staff = read('apps/api/src/staff/staff.service.ts');
 check('Chirurgien et sage-femme reçoivent un DoctorProfile', staff.includes('Role.SURGEON, Role.MIDWIFE') && staff.includes('clinicianRoles.includes(dto.role)'));
 
-
 const patientController = read('apps/api/src/patients/patients.controller.ts');
 check('Création patient et fiche initiale dans une seule transaction', patientController.includes('this.prisma.$transaction(async (transaction)'));
 
@@ -56,7 +55,6 @@ check('Une seule hospitalisation active par patient', migration.includes('Hospit
 check('Un seul patient actif par lit', migration.includes('Hospitalization_one_active_per_bed'));
 check('Une seule consultation active par patient', migration.includes('Consultation_one_active_per_patient'));
 check('Un seul rendez-vous actif par patient', migration.includes('Appointment_one_active_episode_per_patient'));
-
 
 const profileService = read('apps/api/src/users/users.service.ts');
 check('Profil convertit les champs optionnels vides en null', profileService.includes('return normalized ? normalized : null'));
@@ -84,5 +82,20 @@ check('Rapports et réquisitions persistés', schema.includes('model DepartmentD
 
 const mobile = read('apps/web/app/globals.css');
 check('Écran mobile centré et limité à 480 px', mobile.includes('width: min(100%, 480px)'));
+
+const exchangeController = read('apps/api/src/data-exchange/data-exchange.controller.ts');
+const exchangeService = read('apps/api/src/data-exchange/data-exchange.service.ts');
+const exchangeCodec = read('apps/api/src/data-exchange/tabular-codec.service.ts');
+const exchangePage = read('apps/web/app/(protected)/data-exchange/page.tsx');
+check('Exports PDF Excel CSV centralisés', exchangeController.includes("export/:dataset/:format") && exchangeService.includes("['csv', 'xlsx', 'pdf']"));
+check('Imports séparés en prévisualisation et confirmation', exchangeController.includes('preview') && exchangeController.includes('commit'));
+check('Imports limités à 10 Mo et 5000 lignes', exchangeCodec.includes('10 * 1024 * 1024') && exchangeCodec.includes('5 000 lignes'));
+check('PDF reprend l’établissement et le logo', exchangeCodec.includes('hospitalName') && exchangeCodec.includes('logoDataUrl'));
+check('Excel utilise OpenXML avec filtre et ligne figée', exchangeCodec.includes('autoFilter') && exchangeCodec.includes('state="frozen"'));
+check('CSV échappe les guillemets', exchangeCodec.includes("replaceAll('\"', '\"\"')"));
+check('Import patient ne remplace pas une fiche existante', exchangeService.includes('Les modifications de patient doivent passer par la fiche individuelle'));
+check('Import stock crée des mouvements traçables', exchangeService.includes("type: 'ADJUSTMENT'") && exchangeService.includes("type: 'ENTRY'"));
+check('Imports et exports sont audités', exchangeService.includes('DATA_IMPORTED') && exchangeService.includes('DATA_EXPORTED'));
+check('Interface globale propose modèles et validation ligne par ligne', exchangePage.includes('downloadTemplate') && exchangePage.includes('row.errors.map'));
 
 console.log(JSON.stringify({ checks: checks.length, passed: checks }, null, 2));

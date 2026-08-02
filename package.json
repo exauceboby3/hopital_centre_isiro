@@ -24,8 +24,9 @@
     "check:source": "node scripts/source-integrity-check.mjs",
     "test:workflows": "node scripts/simulate-20-patient-workflows.mjs",
     "test:advanced-workflows": "node scripts/simulate-advanced-doctor-workflows.mjs",
-    "test:all-workflows": "npm run test:workflows && npm run test:advanced-workflows && npm run test:department-workflows",
-    "test:department-workflows": "node scripts/simulate-department-profile-workflows.mjs"
+    "test:department-workflows": "node scripts/simulate-department-profile-workflows.mjs",
+    "test:data-exchange": "node scripts/simulate-data-exchange-workflows.mjs",
+    "test:all-workflows": "npm run test:workflows && npm run test:advanced-workflows && npm run test:department-workflows && npm run test:data-exchange"
   },
   "devDependencies": {
     "prettier": "^3.9.5"

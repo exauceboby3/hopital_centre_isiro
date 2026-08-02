@@ -130,6 +130,7 @@ const routeRules: RouteRule[] = [
   { prefix: '/operations', roles: OPERATIONS_ROLES },
   { prefix: '/enterprise', roles: ENTERPRISE_ROLES },
   { prefix: '/service-reports', roles: SERVICE_REPORT_ROLES },
+  { prefix: '/data-exchange', roles: ALL_ROLES },
   { prefix: '/staff', roles: HR_ROLES },
   { prefix: '/admin', roles: ADMIN_ROLES },
   { prefix: '/dashboard', roles: ALL_ROLES },

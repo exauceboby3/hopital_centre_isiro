@@ -1,0 +1,224 @@
+{
+  "generatedAt": "2026-08-02T16:15:25.730Z",
+  "title": "Validation PDF, Excel, CSV et imports contrôlés",
+  "datasets": 14,
+  "exportFormats": 3,
+  "importFormats": 2,
+  "assertionsExecuted": 52,
+  "passedAssertions": 52,
+  "failedAssertions": 0,
+  "checks": [
+    {
+      "name": "patients est déclaré",
+      "ok": true
+    },
+    {
+      "name": "medications est déclaré",
+      "ok": true
+    },
+    {
+      "name": "staff est déclaré",
+      "ok": true
+    },
+    {
+      "name": "service-reports est déclaré",
+      "ok": true
+    },
+    {
+      "name": "requisitions est déclaré",
+      "ok": true
+    },
+    {
+      "name": "billable-services est déclaré",
+      "ok": true
+    },
+    {
+      "name": "accounting est déclaré",
+      "ok": true
+    },
+    {
+      "name": "laboratory est déclaré",
+      "ok": true
+    },
+    {
+      "name": "invoices est déclaré",
+      "ok": true
+    },
+    {
+      "name": "hospitalizations est déclaré",
+      "ok": true
+    },
+    {
+      "name": "appointments est déclaré",
+      "ok": true
+    },
+    {
+      "name": "consultations est déclaré",
+      "ok": true
+    },
+    {
+      "name": "prescriptions est déclaré",
+      "ok": true
+    },
+    {
+      "name": "department-stocks est déclaré",
+      "ok": true
+    },
+    {
+      "name": "les trois formats d’export sont activés",
+      "ok": true
+    },
+    {
+      "name": "les imports sont limités à CSV et XLSX",
+      "ok": true
+    },
+    {
+      "name": "la taille maximale est de 10 Mo",
+      "ok": true
+    },
+    {
+      "name": "la limite est de 5 000 lignes",
+      "ok": true
+    },
+    {
+      "name": "le CSV protège les guillemets",
+      "ok": true
+    },
+    {
+      "name": "Excel est produit en OpenXML compressé",
+      "ok": true
+    },
+    {
+      "name": "Excel fige la ligne des en-têtes",
+      "ok": true
+    },
+    {
+      "name": "Excel applique un filtre automatique",
+      "ok": true
+    },
+    {
+      "name": "le PDF porte le nom de l’établissement",
+      "ok": true
+    },
+    {
+      "name": "le PDF accepte le logo configuré",
+      "ok": true
+    },
+    {
+      "name": "le PDF pagine les tableaux",
+      "ok": true
+    },
+    {
+      "name": "tous les exports sont audités",
+      "ok": true
+    },
+    {
+      "name": "tous les imports confirmés sont audités",
+      "ok": true
+    },
+    {
+      "name": "un import passe d’abord par la prévisualisation",
+      "ok": true
+    },
+    {
+      "name": "un import possède une confirmation distincte",
+      "ok": true
+    },
+    {
+      "name": "les colonnes obligatoires sont contrôlées",
+      "ok": true
+    },
+    {
+      "name": "les enums sont contrôlés",
+      "ok": true
+    },
+    {
+      "name": "les dates Excel numériques sont converties",
+      "ok": true
+    },
+    {
+      "name": "les doublons du fichier sont détectés",
+      "ok": true
+    },
+    {
+      "name": "les patients existants ne sont pas écrasés en masse",
+      "ok": true
+    },
+    {
+      "name": "les changements de rôle sont bloqués à l’import",
+      "ok": true
+    },
+    {
+      "name": "le stock produit un mouvement d’ajustement",
+      "ok": true
+    },
+    {
+      "name": "le stock initial produit une entrée",
+      "ok": true
+    },
+    {
+      "name": "les rapports sont groupés par service, date et garde",
+      "ok": true
+    },
+    {
+      "name": "la commande en cours ne gonfle pas le stock final",
+      "ok": true
+    },
+    {
+      "name": "les réquisitions sont groupées",
+      "ok": true
+    },
+    {
+      "name": "les données cliniques sensibles restent en export seul",
+      "ok": true
+    },
+    {
+      "name": "les permissions sont évaluées côté serveur",
+      "ok": true
+    },
+    {
+      "name": "les départements sont limités selon le rôle",
+      "ok": true
+    },
+    {
+      "name": "la page propose PDF",
+      "ok": true
+    },
+    {
+      "name": "la page propose Excel",
+      "ok": true
+    },
+    {
+      "name": "la page propose CSV",
+      "ok": true
+    },
+    {
+      "name": "la page permet de télécharger les modèles",
+      "ok": true
+    },
+    {
+      "name": "la page affiche les erreurs ligne par ligne",
+      "ok": true
+    },
+    {
+      "name": "la confirmation est bloquée si le fichier est invalide",
+      "ok": true
+    },
+    {
+      "name": "les téléchargements renouvellent une session expirée",
+      "ok": true
+    },
+    {
+      "name": "un accès global est disponible depuis toutes les pages",
+      "ok": true
+    },
+    {
+      "name": "les imports acceptent FormData",
+      "ok": true
+    }
+  ],
+  "limitations": [
+    "Les imports cliniques destructifs restent volontairement désactivés.",
+    "Un test humain sur le serveur réel reste nécessaire pour vérifier les téléchargements dans Safari, Chrome et Firefox."
+  ]
+}
