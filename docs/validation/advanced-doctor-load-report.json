@@ -1,0 +1,167 @@
+{
+  "generatedAt": "2026-08-02T10:59:13.025Z",
+  "title": "Test avancé de charge médicale et transferts",
+  "patientsSimulated": 20,
+  "doctorsTested": 5,
+  "initialPatientsPerDoctor": 4,
+  "assertionsExecuted": 31,
+  "passedAssertions": 31,
+  "failedAssertions": 0,
+  "transferEvents": 6,
+  "initialLoad": {
+    "DOC-A": 4,
+    "DOC-B": 4,
+    "DOC-C": 4,
+    "SURGEON-A": 4,
+    "MIDWIFE-A": 4
+  },
+  "finalActiveLoad": {
+    "DOC-A": 2,
+    "DOC-B": 5,
+    "DOC-C": 6,
+    "SURGEON-A": 2,
+    "MIDWIFE-A": 2
+  },
+  "checks": [
+    {
+      "name": "DOC-A accepte quatre patients actifs",
+      "ok": true
+    },
+    {
+      "name": "DOC-B accepte quatre patients actifs",
+      "ok": true
+    },
+    {
+      "name": "DOC-C accepte quatre patients actifs",
+      "ok": true
+    },
+    {
+      "name": "SURGEON-A accepte quatre patients actifs",
+      "ok": true
+    },
+    {
+      "name": "MIDWIFE-A accepte quatre patients actifs",
+      "ok": true
+    },
+    {
+      "name": "le transfert conserve la même consultation",
+      "ok": true
+    },
+    {
+      "name": "le transfert conserve l’heure initiale de prise en charge",
+      "ok": true
+    },
+    {
+      "name": "le transfert conserve toutes les notes cliniques antérieures",
+      "ok": true
+    },
+    {
+      "name": "le médecin B peut recevoir un cinquième patient sans écraser les quatre autres",
+      "ok": true
+    },
+    {
+      "name": "l’ancien médecin ne peut plus écrire après transfert",
+      "ok": true
+    },
+    {
+      "name": "le nouveau médecin reprend le traitement sans perdre le début initial",
+      "ok": true
+    },
+    {
+      "name": "un examen demandé avant transfert conserve son médecin demandeur",
+      "ok": true
+    },
+    {
+      "name": "les résultats validés reviennent au nouveau médecin affecté",
+      "ok": true
+    },
+    {
+      "name": "une chaîne de transferts garde un seul épisode clinique",
+      "ok": true
+    },
+    {
+      "name": "un second transfert concurrent est rejeté",
+      "ok": true
+    },
+    {
+      "name": "un seul médecin gagne le transfert concurrent",
+      "ok": true
+    },
+    {
+      "name": "transfert vers le même médecin refusé",
+      "ok": true
+    },
+    {
+      "name": "motif trop court refusé",
+      "ok": true
+    },
+    {
+      "name": "médecin inactif refusé",
+      "ok": true
+    },
+    {
+      "name": "un autre médecin ne peut pas transférer le patient",
+      "ok": true
+    },
+    {
+      "name": "consultation terminée non transférable",
+      "ok": true
+    },
+    {
+      "name": "consultation signée non transférable",
+      "ok": true
+    },
+    {
+      "name": "consultation annulée non transférable",
+      "ok": true
+    },
+    {
+      "name": "le nouveau médecin ne peut pas écrire avant reconnaissance du patient",
+      "ok": true
+    },
+    {
+      "name": "le nouveau médecin peut écrire après reconnaissance",
+      "ok": true
+    },
+    {
+      "name": "les quatre dossiers initiaux de DOC-A restent uniques",
+      "ok": true
+    },
+    {
+      "name": "les quatre dossiers initiaux de DOC-B restent uniques",
+      "ok": true
+    },
+    {
+      "name": "les quatre dossiers initiaux de DOC-C restent uniques",
+      "ok": true
+    },
+    {
+      "name": "les quatre dossiers initiaux de SURGEON-A restent uniques",
+      "ok": true
+    },
+    {
+      "name": "les quatre dossiers initiaux de MIDWIFE-A restent uniques",
+      "ok": true
+    },
+    {
+      "name": "chaque transfert produit une trace d’audit complète",
+      "ok": true
+    }
+  ],
+  "coverageMatrix": [
+    "quatre patients simultanés par médecin",
+    "cinquième patient reçu après transfert",
+    "transfert après début du traitement",
+    "conservation de startedAt et de l’historique clinique",
+    "retrait immédiat des droits de l’ancien médecin",
+    "reprise par le nouveau médecin après reconnaissance",
+    "transfert avec laboratoire en attente",
+    "chaîne de transferts sans duplication de consultation",
+    "conflit de transferts concurrents",
+    "médecin identique, inactif ou non autorisé",
+    "motif de transfert invalide",
+    "consultation terminée, signée ou annulée",
+    "audit de chaque transfert"
+  ],
+  "scope": "Simulation déterministe de la matrice de charge et de transfert. La CI ajoute des tests Jest sur PostgreSQL réel pour les services concernés."
+}

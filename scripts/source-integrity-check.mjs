@@ -13,6 +13,16 @@ const listBlock = appointment.slice(appointment.indexOf('async list('), appointm
 check('GET rendez-vous ne modifie plus la base', !listBlock.includes('updateMany'));
 check('Traitement NO_SHOW explicite', appointment.includes('markPastScheduledAsNoShow'));
 
+const transferBlock = appointment.slice(
+  appointment.indexOf('async transfer('),
+  appointment.indexOf('private present('),
+);
+check('Transfert conserve le début clinique', !transferBlock.includes('startedAt: null'));
+check('Transfert revendique atomiquement le rendez-vous', transferBlock.includes('appointment.updateMany'));
+check('Transfert revendique atomiquement la consultation', transferBlock.includes('consultation.updateMany'));
+check('Transfert refuse les consultations clôturées ou signées', transferBlock.includes('clôturée ou signée'));
+check('Transfert exige un motif exploitable', transferBlock.includes('transferReason.length < 5'));
+
 const consultationDto = read('apps/api/src/consultations/dto/update-consultation.dto.ts');
 check('Statut consultation non modifiable directement par le client', !consultationDto.includes('status?: ConsultationStatus'));
 
@@ -30,6 +40,7 @@ check('Suppression définitive exige confirmation et motif', controller.includes
 
 const staff = read('apps/api/src/staff/staff.service.ts');
 check('Chirurgien et sage-femme reçoivent un DoctorProfile', staff.includes('Role.SURGEON, Role.MIDWIFE') && staff.includes('clinicianRoles.includes(dto.role)'));
+
 
 const patientController = read('apps/api/src/patients/patients.controller.ts');
 check('Création patient et fiche initiale dans une seule transaction', patientController.includes('this.prisma.$transaction(async (transaction)'));

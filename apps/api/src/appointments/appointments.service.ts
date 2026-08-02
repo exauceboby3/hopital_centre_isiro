@@ -357,6 +357,11 @@ export class AppointmentsService {
   }
 
   async transfer(id: string, doctorId: string, reason: string, user: AuthenticatedUser) {
+    const transferReason = reason.trim();
+    if (transferReason.length < 5) {
+      throw new BadRequestException('Le motif du transfert doit contenir au moins 5 caractères.');
+    }
+
     return this.prisma.$transaction(async (transaction) => {
       const appointment = await transaction.appointment.findUnique({
         where: { id },
@@ -364,28 +369,77 @@ export class AppointmentsService {
       });
       if (!appointment) throw new NotFoundException('Rendez-vous introuvable.');
       this.assertAssignedDoctor(appointment.doctor?.userId, user);
+      if (
+        appointment.status !== AppointmentStatus.CHECKED_IN ||
+        appointment.journeyStage === PatientJourneyStage.COMPLETED ||
+        appointment.journeyStage === PatientJourneyStage.CANCELLED
+      ) {
+        throw new ConflictException(
+          'Seul un patient actif dans la file médicale ou en consultation peut être transféré.',
+        );
+      }
+      if (
+        appointment.consultation &&
+        (appointment.consultation.certificate ||
+          appointment.consultation.status === ConsultationStatus.COMPLETED ||
+          appointment.consultation.status === ConsultationStatus.CANCELLED)
+      ) {
+        throw new ConflictException(
+          'Une consultation clôturée ou signée ne peut plus être transférée.',
+        );
+      }
+
       await this.assertActiveDoctor(transaction, doctorId);
       if (appointment.doctorId === doctorId) {
         throw new ConflictException('Le patient est déjà affecté à ce médecin.');
       }
       const previousDoctorId = appointment.doctorId;
-      const updated = await transaction.appointment.update({
-        where: { id },
+      if (!previousDoctorId) throw new ConflictException('Aucun médecin n’est affecté à ce patient.');
+
+      const claimed = await transaction.appointment.updateMany({
+        where: {
+          id,
+          doctorId: previousDoctorId,
+          status: AppointmentStatus.CHECKED_IN,
+          journeyStage: {
+            notIn: [PatientJourneyStage.COMPLETED, PatientJourneyStage.CANCELLED],
+          },
+        },
         data: {
           doctorId,
           doctorAcknowledgedAt: null,
           journeyStage: PatientJourneyStage.WAITING_DOCTOR,
           journeyUpdatedAt: new Date(),
-          notes: [appointment.notes, `Transfert : ${reason.trim()}`].filter(Boolean).join('\n'),
+          notes: [appointment.notes, `Transfert : ${transferReason}`].filter(Boolean).join('\n'),
         },
-        include: appointmentInclude,
       });
-      if (appointment.consultation) {
-        await transaction.consultation.update({
-          where: { id: appointment.consultation.id },
-          data: { doctorId, status: ConsultationStatus.WAITING, startedAt: null },
-        });
+      if (!claimed.count) {
+        throw new ConflictException(
+          'L’affectation du patient a changé pendant le transfert. Rechargez la file médicale.',
+        );
       }
+
+      if (appointment.consultation) {
+        const consultationMoved = await transaction.consultation.updateMany({
+          where: {
+            id: appointment.consultation.id,
+            doctorId: previousDoctorId,
+            status: { in: [ConsultationStatus.WAITING, ConsultationStatus.IN_PROGRESS] },
+            certificate: null,
+          },
+          data: {
+            doctorId,
+            status: ConsultationStatus.WAITING,
+            completedAt: null,
+          },
+        });
+        if (!consultationMoved.count) {
+          throw new ConflictException(
+            'La consultation a été clôturée ou réaffectée pendant le transfert.',
+          );
+        }
+      }
+
       await transaction.auditLog.create({
         data: {
           userId: user.id,
@@ -396,11 +450,17 @@ export class AppointmentsService {
             patientId: appointment.patientId,
             fromDoctorId: previousDoctorId,
             toDoctorId: doctorId,
-            reason: reason.trim(),
+            reason: transferReason,
+            consultationId: appointment.consultation?.id ?? null,
+            consultationStartedAt: appointment.consultation?.startedAt?.toISOString() ?? null,
           },
         },
       });
       await this.notifyDoctor(transaction, user.id, id);
+      const updated = await transaction.appointment.findUniqueOrThrow({
+        where: { id },
+        include: appointmentInclude,
+      });
       return this.present(updated);
     });
   }

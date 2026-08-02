@@ -22,7 +22,9 @@
     "db:repair-clinicians": "npm run prisma:repair-clinicians --workspace @hopital/api",
     "format": "prettier --write \"apps/**/*.{ts,tsx,js,mjs,cjs,json,css,md}\" \"*.{json,md,yml}\"",
     "check:source": "node scripts/source-integrity-check.mjs",
-    "test:workflows": "node scripts/simulate-20-patient-workflows.mjs"
+    "test:workflows": "node scripts/simulate-20-patient-workflows.mjs",
+    "test:advanced-workflows": "node scripts/simulate-advanced-doctor-workflows.mjs",
+    "test:all-workflows": "npm run test:workflows && npm run test:advanced-workflows"
   },
   "devDependencies": {
     "prettier": "^3.9.5"
