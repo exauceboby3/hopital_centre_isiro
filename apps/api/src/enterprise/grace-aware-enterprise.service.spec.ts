@@ -90,18 +90,21 @@ describe('GraceAwareEnterpriseService', () => {
 
     await service.dispensePrescription('rx-1', {}, 'pharmacist-1');
 
-    expect(prescriptionClaim).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ id: 'rx-1' }),
-        data: expect.objectContaining({ status: PrescriptionStatus.DISPENSED }),
-      }),
-    );
-    expect(batchClaim).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ quantity: { gte: 5 } }) }),
-    );
-    expect(medicationClaim).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ stockQuantity: { gte: 5 } }) }),
-    );
+    const prescriptionCall = prescriptionClaim.mock.calls[0]?.[0] as unknown as {
+      where: { id: string };
+      data: { status: PrescriptionStatus };
+    };
+    const batchCall = batchClaim.mock.calls[0]?.[0] as unknown as {
+      where: { quantity: { gte: number } };
+    };
+    const medicationCall = medicationClaim.mock.calls[0]?.[0] as unknown as {
+      where: { stockQuantity: { gte: number } };
+    };
+
+    expect(prescriptionCall.where.id).toBe('rx-1');
+    expect(prescriptionCall.data.status).toBe(PrescriptionStatus.DISPENSED);
+    expect(batchCall.where.quantity.gte).toBe(5);
+    expect(medicationCall.where.stockQuantity.gte).toBe(5);
     expect(prescriptionClaim.mock.invocationCallOrder[0]).toBeLessThan(
       batchClaim.mock.invocationCallOrder[0],
     );
