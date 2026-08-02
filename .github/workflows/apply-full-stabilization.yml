@@ -152,12 +152,14 @@ jobs:
           rm -f .automation/apply-consultation-overrides.mjs
           rm -f .automation/apply-hospital-ci-overrides.mjs
           rm -f .automation/apply-test-lint-overrides.mjs
-          rm -f .github/workflows/apply-full-stabilization.yml
           rm -f STABILIZATION_VALIDATION_REPORT.md
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
+          git restore --source=HEAD --staged --worktree \
+            .github/workflows/ci.yml \
+            .github/workflows/apply-full-stabilization.yml
           git diff --cached --check
           git commit -m 'Stabiliser l’algorithme et valider 20 parcours patients'
           git push origin HEAD:agent/full-system-stabilization-20260802
