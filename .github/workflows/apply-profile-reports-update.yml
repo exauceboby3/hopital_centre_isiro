@@ -81,6 +81,9 @@ jobs:
           echo '55f808b1d637216f5313048aba32a6eb4d0f17160385af608df18b71468c1a35  .automation/profile-reports-v1/patient-role-test-fix.patch' | sha256sum --check
           git apply --check .automation/profile-reports-v1/patient-role-test-fix.patch
           git apply --index .automation/profile-reports-v1/patient-role-test-fix.patch
+          echo '3238cfa0bd2f77f6819edb50da7413d216377534d0926b776949164170ce9287  .automation/profile-reports-v1/print-external-medication-fix.patch' | sha256sum --check
+          git apply --check .automation/profile-reports-v1/print-external-medication-fix.patch
+          git apply --index .automation/profile-reports-v1/print-external-medication-fix.patch
           git diff --cached --check
 
       - name: Installer Node.js 22
