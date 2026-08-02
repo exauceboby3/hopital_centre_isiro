@@ -10,6 +10,19 @@ import { PatientFinancialAccessService } from '../billing/patient-financial-acce
 import { PrismaService } from '../prisma/prisma.service';
 import { GraceAwareEnterpriseService } from './grace-aware-enterprise.service';
 
+interface PrescriptionClaimArgs {
+  where: { id: string };
+  data: { status: PrescriptionStatus };
+}
+
+interface BatchClaimArgs {
+  where: { quantity: { gte: number } };
+}
+
+interface MedicationClaimArgs {
+  where: { stockQuantity: { gte: number } };
+}
+
 function prescriptionFixture() {
   return {
     id: 'rx-1',
@@ -42,9 +55,26 @@ function prescriptionFixture() {
 describe('GraceAwareEnterpriseService', () => {
   it('réclame l’ordonnance avant de décrémenter les lots et le stock', async () => {
     const prescription = prescriptionFixture();
-    const prescriptionClaim = jest.fn().mockResolvedValue({ count: 1 });
-    const batchClaim = jest.fn().mockResolvedValue({ count: 1 });
-    const medicationClaim = jest.fn().mockResolvedValue({ count: 1 });
+    const prescriptionCalls: PrescriptionClaimArgs[] = [];
+    const batchCalls: BatchClaimArgs[] = [];
+    const medicationCalls: MedicationClaimArgs[] = [];
+    const operationOrder: string[] = [];
+
+    const prescriptionClaim = jest.fn(async (args: PrescriptionClaimArgs) => {
+      prescriptionCalls.push(args);
+      operationOrder.push('prescription');
+      return { count: 1 };
+    });
+    const batchClaim = jest.fn(async (args: BatchClaimArgs) => {
+      batchCalls.push(args);
+      operationOrder.push('batch');
+      return { count: 1 };
+    });
+    const medicationClaim = jest.fn(async (args: MedicationClaimArgs) => {
+      medicationCalls.push(args);
+      operationOrder.push('medication');
+      return { count: 1 };
+    });
     const itemClaim = jest.fn().mockResolvedValue({ count: 1 });
     const transaction = {
       prescription: {
@@ -90,24 +120,17 @@ describe('GraceAwareEnterpriseService', () => {
 
     await service.dispensePrescription('rx-1', {}, 'pharmacist-1');
 
-    const prescriptionCall = prescriptionClaim.mock.calls[0]?.[0] as unknown as {
-      where: { id: string };
-      data: { status: PrescriptionStatus };
-    };
-    const batchCall = batchClaim.mock.calls[0]?.[0] as unknown as {
-      where: { quantity: { gte: number } };
-    };
-    const medicationCall = medicationClaim.mock.calls[0]?.[0] as unknown as {
-      where: { stockQuantity: { gte: number } };
-    };
-
-    expect(prescriptionCall.where.id).toBe('rx-1');
-    expect(prescriptionCall.data.status).toBe(PrescriptionStatus.DISPENSED);
-    expect(batchCall.where.quantity.gte).toBe(5);
-    expect(medicationCall.where.stockQuantity.gte).toBe(5);
-    expect(prescriptionClaim.mock.invocationCallOrder[0]).toBeLessThan(
-      batchClaim.mock.invocationCallOrder[0],
-    );
+    const prescriptionCall = prescriptionCalls.at(0);
+    const batchCall = batchCalls.at(0);
+    const medicationCall = medicationCalls.at(0);
+    expect(prescriptionCall).toBeDefined();
+    expect(batchCall).toBeDefined();
+    expect(medicationCall).toBeDefined();
+    expect(prescriptionCall?.where.id).toBe('rx-1');
+    expect(prescriptionCall?.data.status).toBe(PrescriptionStatus.DISPENSED);
+    expect(batchCall?.where.quantity.gte).toBe(5);
+    expect(medicationCall?.where.stockQuantity.gte).toBe(5);
+    expect(operationOrder).toEqual(['prescription', 'batch', 'medication']);
   });
 
   it('arrête la délivrance lorsqu’une autre requête a déjà réclamé l’ordonnance', async () => {
