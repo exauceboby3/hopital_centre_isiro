@@ -1,7 +1,17 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
-import { AuthenticatedUser } from '../common/authenticated-user';
+import { AuthenticatedUser, hasAnyRole } from '../common/authenticated-user';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -45,23 +55,32 @@ export class ServiceReportsController {
   constructor(private readonly reports: ServiceReportsService) {}
 
   @Get()
-  list(@Query() query: ListServiceReportsQueryDto) {
-    return this.reports.listReports(query);
+  async list(@Query() query: ListServiceReportsQueryDto, @CurrentUser() user: AuthenticatedUser) {
+    const rows = await this.reports.listReports(query);
+    return rows.map((row) => this.reports.presentReport(row, user));
   }
 
   @Post()
-  create(@Body() dto: CreateDepartmentReportDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.reports.createReport(dto, user.id);
+  async create(@Body() dto: CreateDepartmentReportDto, @CurrentUser() user: AuthenticatedUser) {
+    const canSetManualUnitCost = hasAnyRole(user, [
+      Role.SUPER_ADMIN,
+      Role.ADMIN,
+      Role.CASHIER,
+      Role.ACCOUNTANT,
+    ]);
+    return this.reports.presentReport(
+      await this.reports.createReport(dto, user.id, canSetManualUnitCost),
+      user,
+    );
   }
 
   @Patch(':id/status')
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.ACCOUNTANT)
-  status(
+  async status(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateDepartmentReportStatusDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.reports.updateReportStatus(id, dto, user.id);
+    return this.reports.presentReport(await this.reports.updateReportStatus(id, dto, user), user);
   }
 
   @Get('accounting/summary')
@@ -76,35 +95,48 @@ export class ServiceReportsController {
   }
 
   @Get('requisitions/list')
-  requisitions(@Query() query: ListRequisitionsQueryDto) {
-    return this.reports.listRequisitions(query);
+  async requisitions(
+    @Query() query: ListRequisitionsQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const rows = await this.reports.listRequisitions(query);
+    return rows.map((row) => this.reports.presentRequisition(row, user));
   }
 
   @Post('requisitions')
-  createRequisition(
+  async createRequisition(
     @Body() dto: CreateInternalRequisitionDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.reports.createRequisition(dto, user.id);
+    return this.reports.presentRequisition(
+      await this.reports.createRequisition(dto, user.id),
+      user,
+    );
   }
 
   @Patch('requisitions/:id/approve')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.ACCOUNTANT)
-  approveRequisition(
+  async approveRequisition(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ApproveRequisitionDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.reports.approveRequisition(id, dto, user.id);
+    return this.reports.presentRequisition(
+      await this.reports.approveRequisition(id, dto, user.id),
+      user,
+    );
   }
 
   @Patch('requisitions/:id/fulfill')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.PHARMACIST, Role.STOREKEEPER)
-  fulfillRequisition(
+  async fulfillRequisition(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: FulfillRequisitionDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.reports.fulfillRequisition(id, dto, user.id);
+    return this.reports.presentRequisition(
+      await this.reports.fulfillRequisition(id, dto, user.id),
+      user,
+    );
   }
 }

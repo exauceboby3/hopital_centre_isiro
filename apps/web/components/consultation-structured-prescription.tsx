@@ -3,7 +3,6 @@
 import { Activity, Pill, Plus, ReceiptText, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
-import { currency } from '@/lib/display';
 import { notifyError, notifySuccess, notifyWarning } from '@/lib/notifications';
 
 interface Medication {
@@ -12,7 +11,7 @@ interface Medication {
   form?: string;
   strength?: string;
   stockQuantity: number;
-  unitPrice: string;
+  unitPrice?: string;
 }
 
 type PrescriptionAvailability = 'INTERNAL' | 'PARTIAL' | 'EXTERNAL' | 'NON_CATALOGUED';
@@ -24,7 +23,8 @@ export interface ConsultationPrescription {
   status: string;
   diagnosis?: string;
   generalInstructions?: string;
-  invoice: { id: string; number: string; status: string };
+  invoice?: { id: string; number: string; status: string };
+  paymentClearance?: { inOrder: boolean; status: 'IN_ORDER' | 'TO_REGULARIZE' };
   items: Array<{
     id: string;
     medicationId?: string;
@@ -143,11 +143,7 @@ export function ConsultationStructuredPrescription({
     [items],
   );
 
-  const updateItem = (
-    index: number,
-    field: keyof PrescriptionItemForm,
-    value: string,
-  ) => {
+  const updateItem = (index: number, field: keyof PrescriptionItemForm, value: string) => {
     setItems((current) =>
       current.map((item, currentIndex) =>
         currentIndex === index ? { ...item, [field]: value } : item,
@@ -170,8 +166,7 @@ export function ConsultationStructuredPrescription({
             availability: 'NON_CATALOGUED',
           };
         }
-        const internallyAvailable =
-          medication.stockQuantity > 0 && Number(medication.unitPrice) > 0;
+        const internallyAvailable = medication.stockQuantity > 0;
         return {
           ...item,
           medicationId: medication.id,
@@ -250,7 +245,9 @@ export function ConsultationStructuredPrescription({
   return (
     <section className="clinical-structured-prescription">
       <div className="section-title prescription-section-title">
-        <span><Pill size={17} /></span>
+        <span>
+          <Pill size={17} />
+        </span>
         <div>
           <strong>Prescription médicamenteuse</strong>
           <small>Produits internes, indisponibles ou à acheter à l’extérieur.</small>
@@ -263,7 +260,12 @@ export function ConsultationStructuredPrescription({
             <ReceiptText size={20} />
             <span>
               <strong>{existingPrescription.number}</strong>
-              <small>Facture {existingPrescription.invoice.number} · {existingPrescription.invoice.status}</small>
+              <small>
+                {existingPrescription.paymentClearance?.inOrder ||
+                existingPrescription.invoice?.status === 'PAID'
+                  ? 'Paiement en ordre'
+                  : 'Paiement à régulariser'}
+              </small>
             </span>
           </div>
           <ul>
@@ -323,7 +325,7 @@ export function ConsultationStructuredPrescription({
                         {medications.map((medication) => (
                           <option value={medication.id} key={medication.id}>
                             {medication.name} {medication.strength ?? ''} — stock{' '}
-                            {medication.stockQuantity} — {currency(medication.unitPrice)}
+                            {medication.stockQuantity}
                           </option>
                         ))}
                       </select>
@@ -363,14 +365,18 @@ export function ConsultationStructuredPrescription({
                       <span>Disponibilité*</span>
                       <select
                         value={item.availability}
-                        onChange={(event) =>
-                          updateItem(index, 'availability', event.target.value)
-                        }
+                        onChange={(event) => updateItem(index, 'availability', event.target.value)}
                       >
-                        {item.medicationId && <option value="INTERNAL">Disponible à l’hôpital</option>}
-                        {item.medicationId && <option value="PARTIAL">Partiellement disponible</option>}
+                        {item.medicationId && (
+                          <option value="INTERNAL">Disponible à l’hôpital</option>
+                        )}
+                        {item.medicationId && (
+                          <option value="PARTIAL">Partiellement disponible</option>
+                        )}
                         <option value="EXTERNAL">Achat extérieur</option>
-                        {!item.medicationId && <option value="NON_CATALOGUED">Non référencé</option>}
+                        {!item.medicationId && (
+                          <option value="NON_CATALOGUED">Non référencé</option>
+                        )}
                       </select>
                       {selectedMedication && (
                         <small>Stock disponible : {selectedMedication.stockQuantity}</small>
@@ -475,8 +481,9 @@ export function ConsultationStructuredPrescription({
             </label>
           </div>
           <div className="prescription-payment-notice">
-            Seuls les produits réellement disponibles à la pharmacie hospitalière sont facturés et
-            délivrés. Les produits externes restent visibles sur l’ordonnance imprimée.
+            Seuls les produits réellement disponibles à la pharmacie hospitalière suivent le circuit
+            interne de caisse et sont délivrés. Les produits externes restent visibles sur
+            l’ordonnance imprimée.
           </div>
           <div className="modal-actions embedded-actions">
             <button

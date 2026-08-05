@@ -27,7 +27,6 @@ interface LabService {
   code: string;
   name: string;
   category?: string;
-  price: string;
 }
 
 interface ExamGroup {
@@ -88,7 +87,9 @@ export function BiologistAdditionalExamPanel() {
         setServices(catalog);
       })
       .catch((error) =>
-        notifyError(error instanceof Error ? error.message : 'Chargement du laboratoire impossible.'),
+        notifyError(
+          error instanceof Error ? error.message : 'Chargement du laboratoire impossible.',
+        ),
       );
   }, [allowed, open]);
 
@@ -98,7 +99,12 @@ export function BiologistAdditionalExamPanel() {
       if (!row.requestGroupId || ['VALIDATED', 'CANCELLED'].includes(row.workflowStatus)) return;
       const existing = result.get(row.requestGroupId);
       if (existing) existing.exams.push(row);
-      else result.set(row.requestGroupId, { id: row.requestGroupId, patient: row.patient, exams: [row] });
+      else
+        result.set(row.requestGroupId, {
+          id: row.requestGroupId,
+          patient: row.patient,
+          exams: [row],
+        });
     });
     return [...result.values()];
   }, [rows]);
@@ -108,10 +114,6 @@ export function BiologistAdditionalExamPanel() {
     (service) =>
       !selectedGroup?.exams.some((exam) => exam.careAuthorization?.service?.id === service.id),
   );
-  const selectedService = services.find((service) => service.id === serviceId);
-  const estimatedPrice = Number(selectedService?.price ?? 0);
-  const likelyDoctorApproval = urgency === 'ROUTINE' && estimatedPrice > 50_000;
-
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!groupId || !serviceId || reason.trim().length < 5) return;
@@ -119,7 +121,10 @@ export function BiologistAdditionalExamPanel() {
     try {
       const exam = await api<{
         type: string;
-        careAuthorization: { invoice: { number: string } };
+        careAuthorization: {
+          status: string;
+          paymentClearance?: { inOrder: boolean; status: 'IN_ORDER' | 'TO_REGULARIZE' };
+        };
         additionalExamDecision: { status: string; thresholdCdf: number };
       }>(`/laboratory/exams/batch/${groupId}/additional`, {
         method: 'POST',
@@ -128,8 +133,8 @@ export function BiologistAdditionalExamPanel() {
       const pendingDoctor = exam.additionalExamDecision.status === 'PENDING_DOCTOR';
       notifySuccess(
         pendingDoctor
-          ? `${exam.type} a été ajouté. La facture ${exam.careAuthorization.invoice.number} est créée et la validation du médecin est attendue.`
-          : `${exam.type} a été ajouté. La facture ${exam.careAuthorization.invoice.number} est disponible à la caisse.`,
+          ? `${exam.type} a été ajouté. Le paiement est transmis à la caisse et la validation du médecin est attendue.`
+          : `${exam.type} a été ajouté. Le paiement est transmis à la caisse.`,
         pendingDoctor ? 'Validation médicale requise' : 'Examen complémentaire ajouté',
       );
       setOpen(false);
@@ -150,12 +155,15 @@ export function BiologistAdditionalExamPanel() {
   return createPortal(
     <>
       <section className="panel biologist-extra-exam-panel">
-        <div className="biologist-extra-exam-icon"><FlaskConical size={24} /></div>
+        <div className="biologist-extra-exam-icon">
+          <FlaskConical size={24} />
+        </div>
         <div>
           <span className="eyebrow">Action réservée au biologiste</span>
           <strong>Examen complémentaire</strong>
           <small>
-            Sélectionnez une demande active, choisissez l’examen et justifiez son ajout. {groups.length} demande(s) disponible(s).
+            Sélectionnez une demande active, choisissez l’examen et justifiez son ajout.{' '}
+            {groups.length} demande(s) disponible(s).
           </small>
         </div>
         <button className="primary-button" type="button" onClick={() => setOpen(true)}>
@@ -171,7 +179,9 @@ export function BiologistAdditionalExamPanel() {
         >
           <form onSubmit={submit}>
             {groups.length === 0 && (
-              <div className="alert warning">Aucune demande de laboratoire active n’est disponible.</div>
+              <div className="alert warning">
+                Aucune demande de laboratoire active n’est disponible.
+              </div>
             )}
             <div className="form-grid">
               <SearchableSelect
@@ -198,12 +208,15 @@ export function BiologistAdditionalExamPanel() {
                 options={availableServices.map((service) => ({
                   value: service.id,
                   label: service.name,
-                  description: `${service.category ?? 'Laboratoire'} · ${Number(service.price).toLocaleString('fr-FR')} CDF`,
+                  description: service.category ?? 'Laboratoire',
                 }))}
               />
               <label className="field full">
                 <span>3. Niveau d’urgence *</span>
-                <select value={urgency} onChange={(event) => setUrgency(event.target.value as Urgency)}>
+                <select
+                  value={urgency}
+                  onChange={(event) => setUrgency(event.target.value as Urgency)}
+                >
                   <option value="ROUTINE">Routine</option>
                   <option value="URGENT">Urgent</option>
                   <option value="CRITICAL">Critique</option>
@@ -221,17 +234,21 @@ export function BiologistAdditionalExamPanel() {
                   placeholder="Précisez pourquoi cet examen est nécessaire…"
                 />
               </label>
-              <div className={`alert ${likelyDoctorApproval ? 'warning' : 'info'} full`}>
+              <div className="alert info full">
                 <FlaskConical size={18} />
-                {likelyDoctorApproval
-                  ? `Prix : ${estimatedPrice.toLocaleString('fr-FR')} CDF. Cet examen de routine dépasse 50 000 CDF et nécessite la validation du médecin.`
-                  : 'La facture sera ajoutée automatiquement au compte du patient. L’exécution reste soumise au paiement ou à une grâce active.'}
+                La demande de paiement sera transmise automatiquement à la caisse. Selon la règle
+                interne, une validation médicale supplémentaire peut être demandée avant exécution.
               </div>
             </div>
             <div className="modal-actions">
-              <button className="secondary-button" type="button" onClick={() => setOpen(false)}>Annuler</button>
-              <button className="primary-button" disabled={submitting || !groupId || !serviceId || groups.length === 0}>
-                {submitting ? 'Enregistrement…' : 'Ajouter et facturer'}
+              <button className="secondary-button" type="button" onClick={() => setOpen(false)}>
+                Annuler
+              </button>
+              <button
+                className="primary-button"
+                disabled={submitting || !groupId || !serviceId || groups.length === 0}
+              >
+                {submitting ? 'Enregistrement…' : 'Ajouter l’examen'}
               </button>
             </div>
           </form>

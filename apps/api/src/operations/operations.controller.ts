@@ -10,8 +10,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
-import { Role } from '@prisma/client';
-import { AuthenticatedUser } from '../common/authenticated-user';
+import { CareAuthorizationStatus, Role } from '@prisma/client';
+import { AuthenticatedUser, hasAnyRole } from '../common/authenticated-user';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -44,14 +44,8 @@ const clinicalRoles = [
   Role.SURGEON,
   Role.MIDWIFE,
 ] as const;
-const financialRoles = [
-  Role.SUPER_ADMIN,
-  Role.ADMIN,
-  Role.CASHIER,
-  Role.ACCOUNTANT,
-  Role.RECEPTIONIST,
-  Role.SECRETARY,
-] as const;
+const financialRoles = [Role.SUPER_ADMIN, Role.ADMIN, Role.CASHIER, Role.ACCOUNTANT] as const;
+const insuranceRegistrationRoles = [...financialRoles, Role.RECEPTIONIST, Role.SECRETARY] as const;
 const procurementRoles = [Role.SUPER_ADMIN, Role.ADMIN, Role.STOREKEEPER, Role.PHARMACIST] as const;
 
 @ApiTags('hospital-operations')
@@ -61,32 +55,95 @@ const procurementRoles = [Role.SUPER_ADMIN, Role.ADMIN, Role.STOREKEEPER, Role.P
 export class OperationsController {
   constructor(private readonly operations: OperationsService) {}
 
+  private presentAuthorization<
+    T extends {
+      careAuthorization?: { id: string; status: CareAuthorizationStatus } | null;
+    },
+  >(row: T, user: AuthenticatedUser) {
+    if (hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN])) return row;
+    const { careAuthorization, ...clinicalData } = row;
+    if (!careAuthorization) return { ...clinicalData, careAuthorization };
+    const clearedStatuses: CareAuthorizationStatus[] = [
+      CareAuthorizationStatus.AUTHORIZED,
+      CareAuthorizationStatus.WAIVED,
+      CareAuthorizationStatus.CONSUMED,
+    ];
+    const inOrder = clearedStatuses.includes(careAuthorization.status);
+    return {
+      ...clinicalData,
+      careAuthorization: {
+        id: careAuthorization.id,
+        status: careAuthorization.status,
+        paymentClearance: { inOrder, status: inOrder ? 'IN_ORDER' : 'TO_REGULARIZE' },
+      },
+    };
+  }
+
+  private presentClinicalOrder<
+    T extends {
+      service: { price: unknown };
+      careAuthorization?: { id: string; status: CareAuthorizationStatus } | null;
+    },
+  >(row: T, user: AuthenticatedUser) {
+    if (hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN])) return row;
+    const { price, ...service } = row.service;
+    void price;
+    return { ...this.presentAuthorization(row, user), service };
+  }
+
+  private presentTransfusion<
+    T extends {
+      clinicalOrder: {
+        careAuthorization?: { id: string; status: CareAuthorizationStatus } | null;
+      };
+    },
+  >(row: T, user: AuthenticatedUser) {
+    if (hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN])) return row;
+    return {
+      ...row,
+      clinicalOrder: this.presentAuthorization(row.clinicalOrder, user),
+    };
+  }
+
   @Get('clinical-orders')
   @Roles(...clinicalRoles)
-  clinicalOrders(@Query() filters: ListOperationsDto) {
-    return this.operations.clinicalOrders(filters);
+  async clinicalOrders(
+    @Query() filters: ListOperationsDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const rows = await this.operations.clinicalOrders(filters);
+    return rows.map((row) => this.presentClinicalOrder(row, user));
   }
 
   @Get('clinical-orders/:id')
   @Roles(...clinicalRoles)
-  clinicalOrder(@Param('id', ParseUUIDPipe) id: string) {
-    return this.operations.clinicalOrder(id);
+  async clinicalOrder(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.presentClinicalOrder(await this.operations.clinicalOrder(id), user);
   }
 
   @Post('clinical-orders')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.DOCTOR, Role.SURGEON, Role.MIDWIFE)
-  createClinicalOrder(@Body() dto: CreateClinicalOrderDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.operations.createClinicalOrder(dto, user.id);
+  async createClinicalOrder(
+    @Body() dto: CreateClinicalOrderDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.presentClinicalOrder(await this.operations.createClinicalOrder(dto, user.id), user);
   }
 
   @Patch('clinical-orders/:id')
   @Roles(...clinicalRoles)
-  updateClinicalOrder(
+  async updateClinicalOrder(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateClinicalOrderDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.operations.updateClinicalOrder(id, dto, user.id);
+    return this.presentClinicalOrder(
+      await this.operations.updateClinicalOrder(id, dto, user.id),
+      user,
+    );
   }
 
   @Get('blood-bank/units')
@@ -103,34 +160,41 @@ export class OperationsController {
 
   @Get('blood-bank/transfusions')
   @Roles(...clinicalRoles)
-  transfusions() {
-    return this.operations.transfusions();
+  async transfusions(@CurrentUser() user: AuthenticatedUser) {
+    const rows = await this.operations.transfusions();
+    return rows.map((row) => this.presentTransfusion(row, user));
   }
 
   @Get('blood-bank/transfusions/:id')
   @Roles(...clinicalRoles)
-  transfusion(@Param('id', ParseUUIDPipe) id: string) {
-    return this.operations.transfusion(id);
+  async transfusion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.presentTransfusion(await this.operations.transfusion(id), user);
   }
 
   @Post('blood-bank/transfusions')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.DOCTOR)
-  createTransfusion(@Body() dto: CreateTransfusionDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.operations.createTransfusion(dto, user.id);
+  async createTransfusion(
+    @Body() dto: CreateTransfusionDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.presentTransfusion(await this.operations.createTransfusion(dto, user.id), user);
   }
 
   @Patch('blood-bank/transfusions/:id')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.DOCTOR, Role.NURSE)
-  updateTransfusion(
+  async updateTransfusion(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateTransfusionDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.operations.updateTransfusion(id, dto, user.id);
+    return this.presentTransfusion(await this.operations.updateTransfusion(id, dto, user.id), user);
   }
 
   @Get('insurance/providers')
-  @Roles(...financialRoles)
+  @Roles(...insuranceRegistrationRoles)
   insuranceProviders() {
     return this.operations.insuranceProviders();
   }
@@ -142,7 +206,7 @@ export class OperationsController {
   }
 
   @Get('insurance/policies')
-  @Roles(...financialRoles)
+  @Roles(...insuranceRegistrationRoles)
   insurancePolicies() {
     return this.operations.insurancePolicies();
   }

@@ -46,6 +46,8 @@ import { PatientsService } from './patients.service';
   Role.SURGEON,
   Role.MIDWIFE,
   Role.RADIOLOGIST,
+  Role.CASHIER,
+  Role.ACCOUNTANT,
 )
 @Controller('patients')
 export class PatientsController {
@@ -91,15 +93,28 @@ export class PatientsController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<unknown> {
     await this.access.assertCanAccess(id, user);
-    return this.historyService.history(id);
+    const canViewFinancialDetails = [
+      Role.SUPER_ADMIN,
+      Role.ADMIN,
+      Role.CASHIER,
+      Role.ACCOUNTANT,
+    ].some((role) => [user.role, ...(user.additionalRoles ?? [])].includes(role));
+    const [history, financial] = await Promise.all([
+      this.historyService.history(id, canViewFinancialDetails),
+      this.financialAccess.summary(id),
+    ]);
+    return {
+      ...history,
+      paymentClearance: {
+        inOrder: !financial.financialHold,
+        status: financial.financialHold ? 'TO_REGULARIZE' : 'IN_ORDER',
+      },
+    };
   }
 
   @Get(':id/amendments')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.DOCTOR, Role.SURGEON, Role.MIDWIFE)
-  async amendments(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
+  async amendments(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
     await this.access.assertCanAccess(id, user);
     return this.patients.clinicalAmendments(id);
   }
@@ -116,10 +131,7 @@ export class PatientsController {
   }
 
   @Get(':id')
-  async findOne(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
     await this.access.assertCanAccess(id, user);
     return this.patients.findOne(id);
   }
@@ -134,18 +146,15 @@ export class PatientsController {
         user.id,
         transaction,
       );
-      return { ...patient, fileAuthorization };
+      return {
+        ...patient,
+        fileAuthorization: this.financialAccess.presentFileAuthorization(fileAuthorization, user),
+      };
     });
   }
 
   @Post(':id/vitals')
-  @Roles(
-    Role.SUPER_ADMIN,
-    Role.ADMIN,
-    Role.RECEPTIONIST,
-    Role.SECRETARY,
-    Role.NURSE,
-  )
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.RECEPTIONIST, Role.SECRETARY, Role.NURSE)
   async recordVitals(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateVitalSignDto,
@@ -183,10 +192,7 @@ export class PatientsController {
 
   @Delete(':id')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  async remove(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
+  async remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.trash.moveToTrash(id, user.id);
   }
 }

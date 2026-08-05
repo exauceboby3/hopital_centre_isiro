@@ -17,7 +17,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CreateNursingCareDto, UpdateNursingCareDto } from './dto/nursing.dto';
+import { CreateNursingCareDto, CreateWardRoundDto, UpdateNursingCareDto } from './dto/nursing.dto';
 import { MedicationAdministrationLedgerService } from './medication-administration-ledger.service';
 import { NursingService } from './nursing.service';
 
@@ -67,6 +67,12 @@ export class NursingController {
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.DOCTOR, Role.SURGEON, Role.MIDWIFE)
   create(@Body() dto: CreateNursingCareDto, @CurrentUser() user: AuthenticatedUser) {
     return this.nursing.create(dto, user);
+  }
+
+  @Post('ward-rounds')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.NURSE)
+  recordWardRound(@Body() dto: CreateWardRoundDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.nursing.recordWardRound(dto, user);
   }
 
   @Patch(':id')

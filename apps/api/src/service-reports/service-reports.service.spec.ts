@@ -1,11 +1,57 @@
-import { BadRequestException } from '@nestjs/common';
-import { DepartmentReportStatus, Prisma, RequisitionStatus } from '@prisma/client';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { DepartmentReportStatus, Prisma, RequisitionStatus, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ServiceReportsService } from './service-reports.service';
 
 describe('ServiceReportsService', () => {
+  it('masque les coûts du rapport au personnel clinique', () => {
+    const service = new ServiceReportsService({} as PrismaService);
+    const result = service.presentReport(
+      {
+        id: 'report-1',
+        items: [
+          {
+            itemName: 'Ceftriaxone',
+            unitCost: 2_500,
+            medication: { id: 'medication-1', name: 'Ceftriaxone', unitPrice: 2_500 },
+          },
+        ],
+      },
+      { id: 'nurse-1', username: 'infirmier', role: Role.NURSE, additionalRoles: [] },
+    );
+
+    expect(result).not.toHaveProperty('items.0.unitCost');
+    expect(result).not.toHaveProperty('items.0.medication.unitPrice');
+  });
+
+  it("empêche un responsable de modifier le rapport d'un autre service", async () => {
+    const service = new ServiceReportsService({
+      departmentDailyReport: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'report-1',
+          createdById: 'nurse-2',
+          status: DepartmentReportStatus.DRAFT,
+        }),
+      },
+    } as unknown as PrismaService);
+
+    await expect(
+      service.updateReportStatus(
+        'report-1',
+        { status: DepartmentReportStatus.SUBMITTED },
+        { id: 'doctor-1', username: 'doctor', role: Role.DOCTOR, additionalRoles: [] },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
   it('calcule le reste selon le modèle papier et normalise une garde vide', async () => {
-    type CreateInput = { data: { shift: string; serviceTotal: number; items: { create: Array<{ closingStock: number; pendingOrder: number }> } } };
+    type CreateInput = {
+      data: {
+        shift: string;
+        serviceTotal: number;
+        items: { create: Array<{ closingStock: number; pendingOrder: number }> };
+      };
+    };
     const create = jest.fn<Promise<unknown>, [CreateInput]>().mockResolvedValue({ id: 'report-1' });
     const service = new ServiceReportsService({
       departmentDailyReport: { create },
@@ -194,4 +240,39 @@ describe('ServiceReportsService', () => {
     expect(Number(payload.data.items.create[0]?.unitCost)).toBe(2500);
   });
 
+  it('ignore un coût manuel envoyé par un rôle non financier', async () => {
+    type CreateInput = {
+      data: { items: { create: Array<{ unitCost: Prisma.Decimal | null }> } };
+    };
+    const create = jest.fn<Promise<unknown>, [CreateInput]>().mockResolvedValue({ id: 'report-3' });
+    const service = new ServiceReportsService({
+      departmentDailyReport: { create },
+    } as unknown as PrismaService);
+
+    await service.createReport(
+      {
+        department: 'NURSING',
+        businessDate: '2026-08-05',
+        newAdmissions: 0,
+        hospitalized: 1,
+        ambulatory: 0,
+        items: [
+          {
+            itemName: 'Produit non référencé',
+            openingStock: 1,
+            receivedQuantity: 0,
+            pendingOrder: 0,
+            usedQuantity: 0,
+            returnedQuantity: 0,
+            lostQuantity: 0,
+            unitCost: 999_999,
+          },
+        ],
+      },
+      'nurse-1',
+      false,
+    );
+
+    expect(create.mock.calls[0]?.[0].data.items.create[0]?.unitCost).toBeNull();
+  });
 });

@@ -37,19 +37,14 @@ export const CLINICIAN_ROLES: readonly Role[] = [
   'MIDWIFE',
 ];
 export const NURSING_ROLES: readonly Role[] = [...CLINICIAN_ROLES, 'NURSE'];
-export const BILLING_ROLES: readonly Role[] = [
-  'SUPER_ADMIN',
-  'ADMIN',
-  'RECEPTIONIST',
-  'SECRETARY',
-  'CASHIER',
-  'ACCOUNTANT',
-];
+export const BILLING_ROLES: readonly Role[] = ['SUPER_ADMIN', 'ADMIN', 'CASHIER', 'ACCOUNTANT'];
 export const HOSPITALIZATION_ROLES: readonly Role[] = [
   ...CLINICIAN_ROLES,
   'RECEPTIONIST',
   'SECRETARY',
   'NURSE',
+  'CASHIER',
+  'ACCOUNTANT',
 ];
 export const LABORATORY_ROLES: readonly Role[] = [
   'SUPER_ADMIN',
@@ -67,6 +62,9 @@ export const PHARMACY_ROLES: readonly Role[] = [
 export const PATIENT_DIRECTORY_ROLES: readonly Role[] = [
   ...RECEPTION_ROLES,
   ...CLINICIAN_ROLES,
+  'NURSE',
+  'CASHIER',
+  'ACCOUNTANT',
   'MEDICAL_BIOLOGIST',
   'RADIOLOGIST',
 ];
@@ -76,26 +74,28 @@ export const PATIENT_ACCOUNT_ROLES: readonly Role[] = [
   'SURGEON',
   'MIDWIFE',
 ];
-export const EMERGENCY_ACCESS_ROLES: readonly Role[] = [
-  'DOCTOR',
-  'NURSE',
-  'SURGEON',
-  'MIDWIFE',
-];
+export const EMERGENCY_ACCESS_ROLES: readonly Role[] = ['DOCTOR', 'NURSE', 'SURGEON', 'MIDWIFE'];
 export const OPERATIONS_ROLES: readonly Role[] = [
   'SUPER_ADMIN',
   'ADMIN',
   'DOCTOR',
+  'NURSE',
   'LAB_TECHNICIAN',
   'MEDICAL_BIOLOGIST',
   'RADIOLOGIST',
   'SURGEON',
   'MIDWIFE',
+  'RECEPTIONIST',
+  'SECRETARY',
+  'CASHIER',
+  'ACCOUNTANT',
   'PHARMACIST',
   'STOREKEEPER',
 ];
 export const ENTERPRISE_ROLES: readonly Role[] = [
   ...CLINICIAN_ROLES,
+  'NURSE',
+  'CASHIER',
   'PHARMACIST',
   'STOREKEEPER',
   'RADIOLOGIST',
@@ -140,9 +140,10 @@ const routeRules: RouteRule[] = [
 ].sort((left, right) => right.prefix.length - left.prefix.length);
 
 export function rolesForPath(pathname: string): readonly Role[] | null {
-  return routeRules.find(
-    (rule) => pathname === rule.prefix || pathname.startsWith(`${rule.prefix}/`),
-  )?.roles ?? null;
+  return (
+    routeRules.find((rule) => pathname === rule.prefix || pathname.startsWith(`${rule.prefix}/`))
+      ?.roles ?? null
+  );
 }
 
 export function canAccessPath(
@@ -153,9 +154,7 @@ export function canAccessPath(
   return requiredRoles ? hasAnyRole(user, requiredRoles) : true;
 }
 
-export function defaultRouteForUser(
-  user: Pick<User, 'role' | 'additionalRoles'>,
-): string {
+export function defaultRouteForUser(user: Pick<User, 'role' | 'additionalRoles'>): string {
   const roles = effectiveRoles(user);
   if (roles.includes('SUPER_ADMIN') || roles.includes('ADMIN')) return '/dashboard';
   if (roles.some((role) => ['RECEPTIONIST', 'SECRETARY'].includes(role))) return '/appointments';

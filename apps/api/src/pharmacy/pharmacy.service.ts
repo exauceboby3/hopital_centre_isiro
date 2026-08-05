@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { BillableServiceType, Prisma, StockMovementType } from '@prisma/client';
+import { BillableServiceType, Prisma, Role, StockMovementType } from '@prisma/client';
 import { FinancialAuthorizationService } from '../billing/financial-authorization.service';
+import { AuthenticatedUser, hasAnyRole } from '../common/authenticated-user';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateMedicationDto } from './dto/create-medication.dto';
 import { CreateStockMovementDto } from './dto/create-stock-movement.dto';
@@ -15,14 +16,31 @@ export class PharmacyService {
     private readonly authorizations: FinancialAuthorizationService,
   ) {}
 
-  async list(lowStock = false) {
+  async list(lowStock = false, user?: AuthenticatedUser) {
     const medications = await this.prisma.medication.findMany({
       where: { isActive: true },
       orderBy: { name: 'asc' },
     });
-    return lowStock
+    const rows = lowStock
       ? medications.filter((medication) => medication.stockQuantity <= medication.minimumStock)
       : medications;
+    const canViewPrices = Boolean(
+      user &&
+      hasAnyRole(user, [
+        Role.SUPER_ADMIN,
+        Role.ADMIN,
+        Role.CASHIER,
+        Role.ACCOUNTANT,
+        Role.PHARMACIST,
+        Role.STOREKEEPER,
+      ]),
+    );
+    if (canViewPrices) return rows;
+    return rows.map((medication) => {
+      const { unitPrice, ...clinicalMedication } = medication;
+      void unitPrice;
+      return clinicalMedication;
+    });
   }
 
   create(dto: CreateMedicationDto) {

@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { decodeLabTemplate } from './lab-template-envelope';
+import { stripLabFinancialDetails } from './laboratory.service.helpers';
 
 const groupExamInclude = {
   patient: true,
@@ -103,7 +104,7 @@ export class LaboratoryRequestPrintController {
                   : 'IN_PROGRESS';
 
     return {
-      ...row,
+      ...stripLabFinancialDetails(row),
       workflowStatus,
       catalogMetadata: {
         specimenType: template.specimenType,

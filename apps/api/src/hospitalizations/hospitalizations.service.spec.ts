@@ -1,4 +1,4 @@
-import { CareAuthorizationStatus, Prisma } from '@prisma/client';
+import { CareAuthorizationStatus, Prisma, Role } from '@prisma/client';
 import { HospitalizationsService } from './hospitalizations.service';
 
 type BillingPreview = {
@@ -13,6 +13,7 @@ type BillingPreview = {
 
 type TestableHospitalizationsService = {
   billingPreview(hospitalization: unknown, at: Date): BillingPreview;
+  present(hospitalization: unknown, approvedAt: Date | undefined, user: unknown): unknown;
 };
 
 describe('HospitalizationsService billing guard', () => {
@@ -108,5 +109,32 @@ describe('HospitalizationsService billing guard', () => {
       settled: true,
       settledByWaiver: true,
     });
+  });
+
+  it('ne transmet aucun montant ni facture au personnel clinique', () => {
+    const result = service.present(
+      {
+        id: 'stay-1',
+        admittedAt,
+        careAuthorization: {
+          status: CareAuthorizationStatus.CONSUMED,
+          amount: new Prisma.Decimal(100),
+          service: { price: new Prisma.Decimal(100) },
+          invoice: { number: 'FAC-1', payments: [{ amount: new Prisma.Decimal(100_000) }] },
+        },
+      },
+      undefined,
+      { id: 'nurse-1', username: 'infirmier', role: Role.NURSE, additionalRoles: [] },
+    );
+
+    expect(result).toMatchObject({
+      careAuthorization: { status: CareAuthorizationStatus.CONSUMED },
+      paymentClearance: { inOrder: true, status: 'IN_ORDER' },
+      financialStatus: { settled: true },
+    });
+    expect(result).not.toHaveProperty('careAuthorization.invoice');
+    expect(result).not.toHaveProperty('financialStatus.total');
+    expect(result).not.toHaveProperty('financialStatus.paid');
+    expect(result).not.toHaveProperty('financialStatus.balance');
   });
 });

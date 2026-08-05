@@ -1,12 +1,24 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
-import { AuthenticatedUser } from '../common/authenticated-user';
+import { AuthenticatedUser, hasAnyRole } from '../common/authenticated-user';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CreateGraceAuthorizationDto, DeclarePatientDeathDto } from './dto/patient-financial-access.dto';
+import {
+  CreateGraceAuthorizationDto,
+  DeclarePatientDeathDto,
+} from './dto/patient-financial-access.dto';
 import { PatientFinancialAccessService } from './patient-financial-access.service';
 
 @ApiTags('patient-financial-access')
@@ -28,17 +40,33 @@ export class PatientFinancialAccessController {
     Role.SURGEON,
     Role.MIDWIFE,
   )
-  summary(@Param('patientId', ParseUUIDPipe) patientId: string) {
-    return this.access.summary(patientId);
+  async summary(
+    @Param('patientId', ParseUUIDPipe) patientId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const summary = await this.access.summary(patientId);
+    if (hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN, Role.CASHIER, Role.ACCOUNTANT])) {
+      return summary;
+    }
+    return {
+      patient: summary.patient,
+      financialHold: summary.financialHold,
+      death: summary.death,
+      paymentClearance: {
+        inOrder: !summary.financialHold,
+        status: summary.financialHold ? 'TO_REGULARIZE' : 'IN_ORDER',
+      },
+    };
   }
 
   @Post(':patientId/file-renewal')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.RECEPTIONIST, Role.SECRETARY, Role.CASHIER)
-  renewFile(
+  async renewFile(
     @Param('patientId', ParseUUIDPipe) patientId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.access.renewFile(patientId, user.id);
+    const authorization = await this.access.renewFile(patientId, user.id);
+    return this.access.presentFileAuthorization(authorization, user);
   }
 
   @Post(':patientId/grace')

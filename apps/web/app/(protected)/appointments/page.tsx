@@ -69,7 +69,8 @@ interface Appointment {
   };
   careAuthorization?: {
     status: string;
-    invoice: { number: string; status: string };
+    invoice?: { number: string; status: string };
+    paymentClearance?: { inOrder: boolean; status: 'IN_ORDER' | 'TO_REGULARIZE' };
   };
   consultation?: {
     id: string;
@@ -81,7 +82,7 @@ interface Appointment {
 interface BillableService {
   id: string;
   name: string;
-  price: string;
+  price?: string;
 }
 
 const emptyForm = {
@@ -137,6 +138,7 @@ export default function AppointmentsPage() {
   const [error, setError] = useState('');
 
   const canCreate = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'RECEPTIONIST', 'SECRETARY']);
+  const canManageMoney = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'CASHIER', 'ACCOUNTANT']);
   const canRecordVitals = hasAnyRole(user, [
     'SUPER_ADMIN',
     'ADMIN',
@@ -231,7 +233,9 @@ export default function AppointmentsPage() {
       setVitals(emptyVitals);
       await load();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Signes vitaux impossibles à enregistrer.');
+      setError(
+        reason instanceof Error ? reason.message : 'Signes vitaux impossibles à enregistrer.',
+      );
     } finally {
       setSubmitting(false);
     }
@@ -436,12 +440,21 @@ export default function AppointmentsPage() {
                       </td>
                       <td>
                         <StatusBadge status={row.careAuthorization?.status ?? 'PENDING'} />
-                        {row.careAuthorization && (
+                        {canManageMoney && row.careAuthorization?.invoice ? (
                           <>
                             <br />
                             <span className="muted">{row.careAuthorization.invoice.number}</span>
                           </>
-                        )}
+                        ) : row.careAuthorization ? (
+                          <>
+                            <br />
+                            <span className="muted">
+                              {row.careAuthorization.paymentClearance?.inOrder
+                                ? 'Paiement en ordre'
+                                : 'Paiement à régulariser'}
+                            </span>
+                          </>
+                        ) : null}
                       </td>
                       <td>
                         <div className="row-actions">
@@ -545,7 +558,11 @@ export default function AppointmentsPage() {
       )}
 
       {createOpen && (
-        <Modal title="Planifier un rendez-vous" eyebrow="Réception" onClose={() => setCreateOpen(false)}>
+        <Modal
+          title="Planifier un rendez-vous"
+          eyebrow="Réception"
+          onClose={() => setCreateOpen(false)}
+        >
           <form onSubmit={submit}>
             <div className="form-grid">
               <SearchableSelect
@@ -605,7 +622,11 @@ export default function AppointmentsPage() {
               </label>
             </div>
             <div className="modal-actions">
-              <button type="button" className="secondary-button" onClick={() => setCreateOpen(false)}>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setCreateOpen(false)}
+              >
                 Annuler
               </button>
               <button className="primary-button" disabled={submitting}>

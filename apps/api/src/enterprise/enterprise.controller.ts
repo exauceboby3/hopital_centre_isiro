@@ -48,14 +48,7 @@ import {
 import { EnterpriseExportService, ExportFormat, ExportReport } from './enterprise-export.service';
 import { EnterpriseService } from './enterprise.service';
 
-const financialRoles = [
-  Role.SUPER_ADMIN,
-  Role.ADMIN,
-  Role.CASHIER,
-  Role.ACCOUNTANT,
-  Role.RECEPTIONIST,
-  Role.SECRETARY,
-];
+const financialRoles = [Role.SUPER_ADMIN, Role.ADMIN, Role.CASHIER, Role.ACCOUNTANT];
 const clinicalRoles = [
   Role.SUPER_ADMIN,
   Role.ADMIN,
@@ -105,30 +98,40 @@ export class EnterpriseController {
 
   @Get('prescriptions')
   @Roles(...clinicalRoles, ...pharmacyRoles)
-  prescriptions() {
-    return this.enterprise.prescriptions();
+  async prescriptions(@CurrentUser() user: AuthenticatedUser) {
+    const rows = await this.enterprise.prescriptions();
+    return rows.map((row) => this.enterprise.presentPrescription(row, user));
   }
 
   @Post('prescriptions')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.DOCTOR, Role.SURGEON, Role.MIDWIFE)
-  createPrescription(@Body() dto: CreatePrescriptionDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.enterprise.createPrescription(dto, user.id);
+  async createPrescription(
+    @Body() dto: CreatePrescriptionDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const row = await this.enterprise.createPrescription(dto, user.id);
+    return this.enterprise.presentPrescription(row, user);
   }
 
   @Get('prescriptions/:id')
   @Roles(...clinicalRoles, ...pharmacyRoles)
-  prescription(@Param('id', ParseUUIDPipe) id: string) {
-    return this.enterprise.prescription(id);
+  async prescription(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const row = await this.enterprise.prescription(id);
+    return this.enterprise.presentPrescription(row, user);
   }
 
   @Post('prescriptions/:id/dispense')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.PHARMACIST)
-  dispensePrescription(
+  async dispensePrescription(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: DispensePrescriptionDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.enterprise.dispensePrescription(id, dto, user.id);
+    const row = await this.enterprise.dispensePrescription(id, dto, user.id);
+    return this.enterprise.presentPrescription(row, user);
   }
 
   @Get('pharmacy/interactions')
@@ -175,30 +178,40 @@ export class EnterpriseController {
 
   @Get('specialties')
   @Roles(...clinicalRoles)
-  specialties() {
-    return this.enterprise.specialtyCases();
+  async specialties(@CurrentUser() user: AuthenticatedUser) {
+    const rows = await this.enterprise.specialtyCases();
+    return rows.map((row) => this.enterprise.presentClinicalRecord(row, user));
   }
 
   @Post('specialties')
   @Roles(...clinicalRoles)
-  createSpecialty(@Body() dto: CreateSpecialtyCaseDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.enterprise.createSpecialtyCase(dto, user.id);
+  async createSpecialty(
+    @Body() dto: CreateSpecialtyCaseDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.enterprise.presentClinicalRecord(
+      await this.enterprise.createSpecialtyCase(dto, user.id),
+      user,
+    );
   }
 
   @Get('specialties/:id')
   @Roles(...clinicalRoles)
-  specialty(@Param('id', ParseUUIDPipe) id: string) {
-    return this.enterprise.specialtyCase(id);
+  async specialty(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.enterprise.presentClinicalRecord(await this.enterprise.specialtyCase(id), user);
   }
 
   @Patch('specialties/:id')
   @Roles(...clinicalRoles)
-  updateSpecialty(
+  async updateSpecialty(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateSpecialtyCaseDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.enterprise.updateSpecialtyCase(id, dto, user.id);
+    return this.enterprise.presentClinicalRecord(
+      await this.enterprise.updateSpecialtyCase(id, dto, user.id),
+      user,
+    );
   }
 
   @Get('radiology/pacs')
@@ -215,20 +228,30 @@ export class EnterpriseController {
 
   @Get('radiology/studies')
   @Roles(...radiologyRoles)
-  radiologyStudies() {
-    return this.enterprise.radiologyStudies();
+  async radiologyStudies(@CurrentUser() user: AuthenticatedUser) {
+    const rows = await this.enterprise.radiologyStudies();
+    return rows.map((row) => this.enterprise.presentClinicalRecord(row, user));
   }
 
   @Post('radiology/studies')
   @Roles(...radiologyRoles)
-  createRadiologyStudy(@Body() dto: CreateRadiologyStudyDto) {
-    return this.enterprise.createRadiologyStudy(dto);
+  async createRadiologyStudy(
+    @Body() dto: CreateRadiologyStudyDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.enterprise.presentClinicalRecord(
+      await this.enterprise.createRadiologyStudy(dto),
+      user,
+    );
   }
 
   @Get('radiology/studies/:id')
   @Roles(...radiologyRoles)
-  radiologyStudy(@Param('id', ParseUUIDPipe) id: string) {
-    return this.enterprise.radiologyStudy(id);
+  async radiologyStudy(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.enterprise.presentClinicalRecord(await this.enterprise.radiologyStudy(id), user);
   }
 
   @Patch('radiology/studies/:id')

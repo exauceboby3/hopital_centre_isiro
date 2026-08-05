@@ -17,6 +17,7 @@ import { FinancialAuthorizationService } from '../billing/financial-authorizatio
 import { AuthenticatedUser, hasAnyRole } from '../common/authenticated-user';
 import { encodeVitalSignMetadata, presentVitalSign } from '../common/vital-sign-metadata';
 import { PrismaService } from '../prisma/prisma.service';
+import { stripLabFinancialDetails } from '../laboratory/laboratory.service.helpers';
 import {
   createMedicalSignature,
   decodeClinicalReport,
@@ -109,7 +110,7 @@ export class ConsultationsService {
       orderBy: { createdAt: 'desc' },
       take: 250,
     });
-    return rows.map((row) => this.present(row));
+    return rows.map((row) => this.present(row, user));
   }
 
   async create(dto: CreateConsultationDto, user: AuthenticatedUser) {
@@ -123,7 +124,8 @@ export class ConsultationsService {
             include: { careAuthorization: true, consultation: true },
           })
         : null;
-      if (dto.appointmentId && !appointment) throw new NotFoundException('Rendez-vous introuvable.');
+      if (dto.appointmentId && !appointment)
+        throw new NotFoundException('Rendez-vous introuvable.');
       if (appointment && appointment.patientId !== dto.patientId) {
         throw new BadRequestException('Le rendez-vous appartient à un autre patient.');
       }
@@ -193,7 +195,7 @@ export class ConsultationsService {
         where: { id: consultation.id },
         include: consultationInclude,
       });
-      return this.present(row);
+      return this.present(row, user);
     });
   }
 
@@ -250,10 +252,7 @@ export class ConsultationsService {
       }
 
       if (decision && FINAL_CONSULTATION_DECISIONS.has(decision)) {
-        assertLaboratoryResultsComplete(
-          current.examRequests,
-          'Décision finale indisponible',
-        );
+        assertLaboratoryResultsComplete(current.examRequests, 'Décision finale indisponible');
       }
 
       const clinicalReport = mergeClinicalReport(current.report, {
@@ -272,7 +271,7 @@ export class ConsultationsService {
         decision,
         preLaboratoryLockedAt:
           decision === 'LABORATORY' || hasLaboratoryHistory
-            ? currentSections.preLaboratoryLockedAt ?? new Date().toISOString()
+            ? (currentSections.preLaboratoryLockedAt ?? new Date().toISOString())
             : undefined,
         amendmentReason,
         amendedAt: amendmentReason ? new Date().toISOString() : undefined,
@@ -285,7 +284,8 @@ export class ConsultationsService {
       }
 
       const effectiveStatus = this.resolveStatus(current.status, decision);
-      const effectiveOrientation = orientation ?? this.decisionLabel(decision) ?? current.orientation;
+      const effectiveOrientation =
+        orientation ?? this.decisionLabel(decision) ?? current.orientation;
       const claimed = await transaction.consultation.updateMany({
         where: { id, certificate: null, updatedAt: current.updatedAt },
         data: {
@@ -295,7 +295,7 @@ export class ConsultationsService {
           status: effectiveStatus,
           completedAt:
             effectiveStatus === ConsultationStatus.COMPLETED
-              ? current.completedAt ?? new Date()
+              ? (current.completedAt ?? new Date())
               : null,
         },
       });
@@ -341,7 +341,7 @@ export class ConsultationsService {
           },
         },
       });
-      return this.present(updated);
+      return this.present(updated, user);
     });
   }
 
@@ -406,7 +406,7 @@ export class ConsultationsService {
           where: { id },
           include: consultationInclude,
         });
-        return this.present(updated);
+        return this.present(updated, user);
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
@@ -446,12 +446,37 @@ export class ConsultationsService {
     });
   }
 
-  private present(row: ConsultationRow) {
-    return {
+  private present(row: ConsultationRow, user: AuthenticatedUser) {
+    const base = {
       ...row,
       vitalSigns: row.vitalSigns.map((vital) => presentVitalSign(vital)),
       clinicalReport: decodeClinicalReport(row.report).sections,
       signature: decodeMedicalSignature(row.certificate),
+    };
+    if (hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN, Role.CASHIER, Role.ACCOUNTANT])) {
+      return base;
+    }
+    const clinicalConsultation = stripLabFinancialDetails(base);
+    return {
+      ...clinicalConsultation,
+      examRequests: row.examRequests.map(stripLabFinancialDetails),
+      prescriptions: row.prescriptions.map((prescription) => {
+        const { invoice, invoiceId, ...clinicalPrescription } = prescription;
+        void invoiceId;
+        return {
+          ...clinicalPrescription,
+          items: clinicalPrescription.items.map((item) => {
+            if (!item.medication) return item;
+            const { unitPrice, ...medication } = item.medication;
+            void unitPrice;
+            return { ...item, medication };
+          }),
+          paymentClearance: {
+            inOrder: invoice.status === 'PAID',
+            status: invoice.status === 'PAID' ? 'IN_ORDER' : 'TO_REGULARIZE',
+          },
+        };
+      }),
     };
   }
 

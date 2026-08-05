@@ -74,14 +74,7 @@ function remainingAmount(voucher: CareVoucher) {
 
 export default function CareVouchersPage() {
   const { user } = useAuth();
-  const authorized = hasAnyRole(user, [
-    'SUPER_ADMIN',
-    'ADMIN',
-    'CASHIER',
-    'ACCOUNTANT',
-    'RECEPTIONIST',
-    'SECRETARY',
-  ]);
+  const authorized = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'CASHIER', 'ACCOUNTANT']);
   const canManageStatus = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT']);
   const [vouchers, setVouchers] = useState<CareVoucher[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -155,11 +148,7 @@ export default function CareVouchersPage() {
     nextStatus: 'ACTIVE' | 'SUSPENDED' | 'CANCELLED',
   ) => {
     const action =
-      nextStatus === 'ACTIVE'
-        ? 'réactiver'
-        : nextStatus === 'SUSPENDED'
-          ? 'suspendre'
-          : 'annuler';
+      nextStatus === 'ACTIVE' ? 'réactiver' : nextStatus === 'SUSPENDED' ? 'suspendre' : 'annuler';
     if (!window.confirm(`Confirmer : ${action} le bon ${voucher.number} ?`)) return;
     try {
       await api(`/billing/vouchers/${voucher.id}/status`, {
@@ -206,7 +195,9 @@ export default function CareVouchersPage() {
       <section className="panel restricted">
         <TicketCheck size={38} />
         <h1>Accès aux bons de soins réservé</h1>
-        <p>Ce module est accessible à la réception, au secrétariat, à la caisse et à la comptabilité.</p>
+        <p>
+          Ce module est accessible à la réception, au secrétariat, à la caisse et à la comptabilité.
+        </p>
       </section>
     );
   }
@@ -296,7 +287,11 @@ export default function CareVouchersPage() {
                 filtered.map((voucher) => {
                   const remaining = remainingAmount(voucher);
                   return (
-                    <tr className="clickable-row" key={voucher.id} onClick={() => setSelected(voucher)}>
+                    <tr
+                      className="clickable-row"
+                      key={voucher.id}
+                      onClick={() => setSelected(voucher)}
+                    >
                       <td>
                         <span className="record-number">{voucher.number}</span>
                         <br />
@@ -315,7 +310,8 @@ export default function CareVouchersPage() {
                             <strong>{currency(remaining ?? 0)}</strong>
                             <br />
                             <span className="muted">
-                              utilisé {currency(voucher.usedAmount)} / {currency(voucher.ceilingAmount)}
+                              utilisé {currency(voucher.usedAmount)} /{' '}
+                              {currency(voucher.ceilingAmount)}
                             </span>
                           </>
                         ) : (
@@ -323,19 +319,32 @@ export default function CareVouchersPage() {
                         )}
                       </td>
                       <td>
-                        {voucher.validFrom ? `Du ${dateLabel(voucher.validFrom)}` : 'Début immédiat'}
+                        {voucher.validFrom
+                          ? `Du ${dateLabel(voucher.validFrom)}`
+                          : 'Début immédiat'}
                         <br />
                         <span className="muted">
-                          {voucher.validUntil ? `Au ${dateLabel(voucher.validUntil)}` : 'Sans expiration'}
+                          {voucher.validUntil
+                            ? `Au ${dateLabel(voucher.validUntil)}`
+                            : 'Sans expiration'}
                         </span>
                       </td>
-                      <td>{voucher.coverages.filter((coverage) => coverage.status !== 'CANCELLED').length}</td>
+                      <td>
+                        {
+                          voucher.coverages.filter((coverage) => coverage.status !== 'CANCELLED')
+                            .length
+                        }
+                      </td>
                       <td>
                         <StatusBadge status={voucher.status} />
                       </td>
                       <td onClick={(event) => event.stopPropagation()}>
                         <div className="row-actions">
-                          <button className="text-button" type="button" onClick={() => setSelected(voucher)}>
+                          <button
+                            className="text-button"
+                            type="button"
+                            onClick={() => setSelected(voucher)}
+                          >
                             <WalletCards size={14} /> Détails
                           </button>
                           {canManageStatus && voucher.status === 'ACTIVE' && (
@@ -464,8 +473,9 @@ export default function CareVouchersPage() {
               </label>
             </div>
             <div className="alert info">
-              Le bon pourra être appliqué depuis la facture du patient avant le premier encaissement.
-              Le système calculera automatiquement la part du patient et celle de l’organisme.
+              Le bon pourra être appliqué depuis la facture du patient avant le premier
+              encaissement. Le système calculera automatiquement la part du patient et celle de
+              l’organisme.
             </div>
             <div className="modal-actions">
               <button className="secondary-button" type="button" onClick={close}>
@@ -488,7 +498,8 @@ export default function CareVouchersPage() {
         >
           <div className="coverage-preview">
             <span>
-              Couverture <strong>{Number(selected.coveragePercent).toLocaleString('fr-FR')} %</strong>
+              Couverture{' '}
+              <strong>{Number(selected.coveragePercent).toLocaleString('fr-FR')} %</strong>
             </span>
             <span>
               Montant utilisé <strong>{currency(selected.usedAmount)}</strong>
@@ -496,9 +507,7 @@ export default function CareVouchersPage() {
             <span>
               Solde du plafond{' '}
               <strong>
-                {selected.ceilingAmount
-                  ? currency(remainingAmount(selected) ?? 0)
-                  : 'Sans plafond'}
+                {selected.ceilingAmount ? currency(remainingAmount(selected) ?? 0) : 'Sans plafond'}
               </strong>
             </span>
           </div>
@@ -536,7 +545,9 @@ export default function CareVouchersPage() {
                 {selected.coverages.length === 0 && (
                   <tr>
                     <td colSpan={6}>
-                      <div className="empty-state">Ce bon n’a encore été appliqué à aucune facture.</div>
+                      <div className="empty-state">
+                        Ce bon n’a encore été appliqué à aucune facture.
+                      </div>
                     </td>
                   </tr>
                 )}

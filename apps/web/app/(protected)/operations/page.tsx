@@ -26,12 +26,13 @@ interface Service {
   id: string;
   name: string;
   type: string;
-  price: string;
+  price?: string;
 }
 interface Authorization {
   id: string;
   status: string;
-  invoice: { id: string; number: string };
+  invoice?: { id: string; number: string };
+  paymentClearance?: { inOrder: boolean; status: 'IN_ORDER' | 'TO_REGULARIZE' };
 }
 interface ClinicalOrder {
   id: string;
@@ -161,6 +162,7 @@ export default function OperationsPage() {
   const transfusionStaff = isAdmin || hasAnyRole(user, ['DOCTOR', 'NURSE']);
   const insuranceStaff = isAdmin || hasAnyRole(user, ['RECEPTIONIST', 'SECRETARY', 'ACCOUNTANT']);
   const claimStaff = isAdmin || hasAnyRole(user, ['CASHIER', 'ACCOUNTANT']);
+  const claimReviewer = isAdmin || hasRole(user, 'ACCOUNTANT');
   const canSeeInsurance = insuranceStaff || claimStaff;
   const procurementStaff = isAdmin || hasRole(user, 'STOREKEEPER');
   const receivingStaff = procurementStaff || hasRole(user, 'PHARMACIST');
@@ -256,7 +258,7 @@ export default function OperationsPage() {
           : Promise.resolve([]),
         canSeeInsurance ? api<Provider[]>('/operations/insurance/providers') : Promise.resolve([]),
         canSeeInsurance ? api<Policy[]>('/operations/insurance/policies') : Promise.resolve([]),
-        canSeeInsurance ? api<Claim[]>('/operations/insurance/claims') : Promise.resolve([]),
+        claimStaff ? api<Claim[]>('/operations/insurance/claims') : Promise.resolve([]),
         receivingStaff ? api<Supplier[]>('/operations/procurement/suppliers') : Promise.resolve([]),
         receivingStaff
           ? api<PurchaseOrder[]>('/operations/procurement/orders')
@@ -289,7 +291,16 @@ export default function OperationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canSeeInsurance, clinicalStaff, finance, insuranceStaff, isAdmin, receivingStaff, user]);
+  }, [
+    canSeeInsurance,
+    claimStaff,
+    clinicalStaff,
+    finance,
+    insuranceStaff,
+    isAdmin,
+    receivingStaff,
+    user,
+  ]);
 
   useEffect(() => {
     void load();
@@ -424,7 +435,12 @@ export default function OperationsPage() {
                         <>
                           <StatusBadge status={order.careAuthorization.status} />
                           <br />
-                          <span className="muted">{order.careAuthorization.invoice.number}</span>
+                          <span className="muted">
+                            {order.careAuthorization.invoice?.number ||
+                              (order.careAuthorization.paymentClearance?.inOrder
+                                ? 'Paiement en ordre'
+                                : 'Paiement à régulariser')}
+                          </span>
                         </>
                       ) : (
                         '—'
@@ -495,49 +511,51 @@ export default function OperationsPage() {
 
       {!loading && section === 'blood' && (
         <div className="stack">
-          <section className="panel table-panel">
-            <div className="panel-toolbar">
-              <div>
-                <strong>Stock sanguin</strong>
-                <span>Expiration et réservation contrôlées.</span>
+          {clinicalStaff && (
+            <section className="panel table-panel">
+              <div className="panel-toolbar">
+                <div>
+                  <strong>Stock sanguin</strong>
+                  <span>Expiration et réservation contrôlées.</span>
+                </div>
+                {bloodStockStaff && (
+                  <button className="primary-button" onClick={() => setModal('unit')}>
+                    <Plus size={16} /> Poche
+                  </button>
+                )}
               </div>
-              {bloodStockStaff && (
-                <button className="primary-button" onClick={() => setModal('unit')}>
-                  <Plus size={16} /> Poche
-                </button>
-              )}
-            </div>
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Code</th>
-                    <th>Groupe</th>
-                    <th>Composant</th>
-                    <th>Volume</th>
-                    <th>Expiration</th>
-                    <th>État</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {units.map((unit) => (
-                    <tr key={unit.id}>
-                      <td>{unit.code}</td>
-                      <td>
-                        <strong>{unit.bloodType}</strong>
-                      </td>
-                      <td>{unit.component}</td>
-                      <td>{unit.volumeMl} ml</td>
-                      <td>{new Intl.DateTimeFormat('fr-FR').format(new Date(unit.expiresAt))}</td>
-                      <td>
-                        <StatusBadge status={unit.status} />
-                      </td>
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Code</th>
+                      <th>Groupe</th>
+                      <th>Composant</th>
+                      <th>Volume</th>
+                      <th>Expiration</th>
+                      <th>État</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+                  </thead>
+                  <tbody>
+                    {units.map((unit) => (
+                      <tr key={unit.id}>
+                        <td>{unit.code}</td>
+                        <td>
+                          <strong>{unit.bloodType}</strong>
+                        </td>
+                        <td>{unit.component}</td>
+                        <td>{unit.volumeMl} ml</td>
+                        <td>{new Intl.DateTimeFormat('fr-FR').format(new Date(unit.expiresAt))}</td>
+                        <td>
+                          <StatusBadge status={unit.status} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
           <section className="panel table-panel">
             <div className="panel-toolbar">
               <div>
@@ -684,7 +702,7 @@ export default function OperationsPage() {
                       </td>
                       <td>
                         <div className="row-actions">
-                          {claimStaff && claim.status === 'DRAFT' && (
+                          {claimReviewer && claim.status === 'DRAFT' && (
                             <button
                               className="text-button"
                               onClick={() =>
@@ -866,7 +884,10 @@ export default function OperationsPage() {
                   <option value="">Sélectionner</option>
                   {services.map((service) => (
                     <option key={service.id} value={service.id}>
-                      {service.name} — {currency(service.price)}
+                      {service.name}
+                      {isAdmin && service.price !== undefined
+                        ? ` — ${currency(service.price)}`
+                        : ''}
                     </option>
                   ))}
                 </select>
@@ -1028,9 +1049,12 @@ export default function OperationsPage() {
                     .map((order) => (
                       <option value={order.id} key={order.id}>
                         {order.service.name} —{' '}
-                        {order.careAuthorization?.invoice.number ?? 'Facture'}
-                        {' — '}
-                        {order.careAuthorization?.status ?? 'Paiement en attente'}
+                        {order.careAuthorization?.paymentClearance?.inOrder ||
+                        ['AUTHORIZED', 'WAIVED', 'CONSUMED'].includes(
+                          order.careAuthorization?.status ?? '',
+                        )
+                          ? 'Paiement en ordre'
+                          : 'Paiement à régulariser'}
                       </option>
                     ))}
                 </select>

@@ -47,13 +47,20 @@ export class AppointmentsController {
 
   @Get()
   list(
+    @CurrentUser() user: AuthenticatedUser,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('status', new ParseEnumPipe(AppointmentStatus, { optional: true }))
     status?: AppointmentStatus,
     @Query('scope') scope?: 'active' | 'history',
   ) {
-    return this.appointments.list(from, to, status, scope === 'history' ? 'history' : 'active');
+    return this.appointments.list(
+      from,
+      to,
+      status,
+      scope === 'history' ? 'history' : 'active',
+      user,
+    );
   }
 
   @Post('maintenance/mark-no-shows')
@@ -63,13 +70,7 @@ export class AppointmentsController {
   }
 
   @Get('doctors/availability')
-  @Roles(
-    Role.SUPER_ADMIN,
-    Role.ADMIN,
-    Role.RECEPTIONIST,
-    Role.SECRETARY,
-    ...clinicianRoles,
-  )
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.RECEPTIONIST, Role.SECRETARY, ...clinicianRoles)
   doctorAvailability() {
     return this.availability.list();
   }
@@ -83,11 +84,8 @@ export class AppointmentsController {
 
   @Post()
   async create(@Body() dto: CreateAppointmentDto, @CurrentUser() user: AuthenticatedUser) {
-    await this.financialAccess.assertCareAccess(
-      dto.patientId,
-      BillableServiceType.CONSULTATION,
-    );
-    const appointment = await this.appointments.create(dto, user.id);
+    await this.financialAccess.assertCareAccess(dto.patientId, BillableServiceType.CONSULTATION);
+    const appointment = await this.appointments.create(dto, user);
     await this.governance.ensureEpisodeForAppointment(appointment.id, user.id);
     return appointment;
   }
@@ -110,17 +108,11 @@ export class AppointmentsController {
         );
       }
     }
-    return this.appointments.update(id, dto, user.id);
+    return this.appointments.update(id, dto, user);
   }
 
   @Post(':id/vitals')
-  @Roles(
-    Role.SUPER_ADMIN,
-    Role.ADMIN,
-    Role.RECEPTIONIST,
-    Role.SECRETARY,
-    Role.NURSE,
-  )
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.RECEPTIONIST, Role.SECRETARY, Role.NURSE)
   recordVitals(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateVitalSignDto,

@@ -1,4 +1,219 @@
-.service-report-page{width:100%;max-width:1440px;margin:0 auto}.report-paper{border-top:5px solid var(--brand)}.report-paper-title{text-align:center;margin-bottom:22px}.report-paper-title span{font-size:12px;text-transform:uppercase;letter-spacing:.16em;color:var(--muted)}.report-paper-title h2{margin:6px 0;text-transform:uppercase}.report-metrics-grid{display:grid;grid-template-columns:repeat(6,minmax(90px,1fr));gap:10px;margin:18px 0}.report-stock-table input{width:100%;min-width:80px;border:1px solid var(--line);border-radius:7px;padding:7px}.report-stock-table td:nth-child(2) input{min-width:220px}.report-two-column{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}.requisition-line{display:grid;grid-template-columns:1.2fr 1.2fr 100px;gap:8px;margin-bottom:8px}.requisition-line>*{min-width:0;border:1px solid var(--line);border-radius:9px;padding:10px}.requisition-cards{display:grid;gap:10px}.requisition-cards article{border:1px solid var(--line);border-radius:12px;padding:14px}.requisition-cards article>div{display:flex;flex-direction:column;gap:3px}.requisition-cards ul{margin:8px 0 0;padding-left:18px}.danger-text{color:#b42318}@media(max-width:980px){.report-two-column{grid-template-columns:1fr}.report-metrics-grid{grid-template-columns:repeat(3,1fr)}}@media(max-width:620px){.service-report-page{max-width:480px}.report-metrics-grid{grid-template-columns:repeat(2,1fr)}.requisition-line{grid-template-columns:1fr}.report-stock-table table,.report-stock-table thead,.report-stock-table tbody,.report-stock-table tr,.report-stock-table th,.report-stock-table td{display:block}.report-stock-table thead{display:none}.report-stock-table tr{border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px}.report-stock-table td{display:grid;grid-template-columns:120px 1fr;gap:8px;border:0;padding:5px}.report-stock-table td::before{font-weight:700;color:var(--muted)}.report-stock-table td:nth-child(1)::before{content:'N°'}.report-stock-table td:nth-child(2)::before{content:'Produit'}.report-stock-table td:nth-child(3)::before{content:'Entrée'}.report-stock-table td:nth-child(4)::before{content:'Reçu'}.report-stock-table td:nth-child(5)::before{content:'Commande'}.report-stock-table td:nth-child(6)::before{content:'Utilisé'}.report-stock-table td:nth-child(7)::before{content:'Retours'}.report-stock-table td:nth-child(8)::before{content:'Pertes'}.report-stock-table td:nth-child(9)::before{content:'Reste'}}
-.requisition-line{grid-template-columns:minmax(150px,1fr) minmax(180px,1.4fr) minmax(90px,.55fr) minmax(80px,.45fr) minmax(180px,1.2fr)}
-@media(max-width:900px){.requisition-line{grid-template-columns:1fr 1fr}}
-@media(max-width:620px){.requisition-line{grid-template-columns:1fr}}
+.service-report-page {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+.report-paper {
+  border-top: 5px solid var(--brand);
+}
+.report-paper-title {
+  text-align: center;
+  margin-bottom: 22px;
+}
+.report-paper-title span {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+}
+.report-paper-title h2 {
+  margin: 6px 0;
+  text-transform: uppercase;
+}
+.report-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(90px, 1fr));
+  gap: 10px;
+  margin: 18px 0;
+}
+.report-stock-table input {
+  width: 100%;
+  min-width: 80px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 7px;
+}
+.report-stock-table td:nth-child(2) input {
+  min-width: 220px;
+}
+.report-two-column {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+}
+.requisition-line {
+  display: grid;
+  grid-template-columns: 1.2fr 1.2fr 100px;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.requisition-line > * {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 10px;
+}
+.requisition-cards {
+  display: grid;
+  gap: 10px;
+}
+.requisition-cards article {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+}
+.requisition-cards article > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.requisition-cards ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+.danger-text {
+  color: #b42318;
+}
+@media (max-width: 980px) {
+  .report-two-column {
+    grid-template-columns: 1fr;
+  }
+  .report-metrics-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+@media (max-width: 620px) {
+  .service-report-page {
+    max-width: 480px;
+  }
+  .report-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .requisition-line {
+    grid-template-columns: 1fr;
+  }
+  .report-stock-table table,
+  .report-stock-table thead,
+  .report-stock-table tbody,
+  .report-stock-table tr,
+  .report-stock-table th,
+  .report-stock-table td {
+    display: block;
+  }
+  .report-stock-table thead {
+    display: none;
+  }
+  .report-stock-table tr {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+  .report-stock-table td {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 8px;
+    border: 0;
+    padding: 5px;
+  }
+  .report-stock-table td::before {
+    font-weight: 700;
+    color: var(--muted);
+  }
+  .report-stock-table td:nth-child(1)::before {
+    content: 'N°';
+  }
+  .report-stock-table td:nth-child(2)::before {
+    content: 'Produit';
+  }
+  .report-stock-table td:nth-child(3)::before {
+    content: 'Entrée';
+  }
+  .report-stock-table td:nth-child(4)::before {
+    content: 'Reçu';
+  }
+  .report-stock-table td:nth-child(5)::before {
+    content: 'Commande';
+  }
+  .report-stock-table td:nth-child(6)::before {
+    content: 'Utilisé';
+  }
+  .report-stock-table td:nth-child(7)::before {
+    content: 'Retours';
+  }
+  .report-stock-table td:nth-child(8)::before {
+    content: 'Pertes';
+  }
+  .report-stock-table td:nth-child(9)::before {
+    content: 'Reste';
+  }
+}
+.report-two-column > * {
+  min-width: 0;
+}
+.report-two-column > .panel {
+  overflow: hidden;
+}
+.requisition-line {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--canvas);
+}
+.requisition-line > * {
+  border: 0;
+  padding: 0;
+}
+.requisition-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.requisition-field > span {
+  font-size: 12px;
+  font-weight: 750;
+  color: var(--muted);
+}
+.requisition-field select,
+.requisition-field input {
+  width: 100%;
+  min-width: 0;
+  height: 46px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: white;
+}
+.requisition-field.product {
+  grid-column: span 6;
+}
+.requisition-field.designation {
+  grid-column: span 6;
+}
+.requisition-field.unit {
+  grid-column: span 3;
+}
+.requisition-field.quantity {
+  grid-column: span 3;
+}
+.requisition-field.reason {
+  grid-column: span 6;
+}
+
+@media (max-width: 1100px) {
+  .report-two-column {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 620px) {
+  .requisition-field.product,
+  .requisition-field.designation,
+  .requisition-field.unit,
+  .requisition-field.quantity,
+  .requisition-field.reason {
+    grid-column: 1 / -1;
+  }
+}

@@ -137,7 +137,10 @@ interface Transfusion {
   prescribedBy: { username: string };
   administeredBy?: { username: string };
   clinicalOrder: {
-    careAuthorization?: { status: string; invoice: { number: string } };
+    careAuthorization?: {
+      status: string;
+      paymentClearance?: { inOrder: boolean; status: 'IN_ORDER' | 'TO_REGULARIZE' };
+    };
   };
 }
 interface PurchaseOrder {
@@ -169,7 +172,6 @@ interface Prescription {
   prescribedAt: string;
   patient: Patient;
   prescribedBy: { username: string };
-  invoice: { number: string; status: string };
   items: Array<{
     dosage: string;
     frequency: string;
@@ -917,9 +919,13 @@ function TransfusionDocument({ transfusion }: { transfusion: Transfusion }) {
           <strong>Statut :</strong> {transfusion.status}
         </p>
         <p>
-          <strong>Facture :</strong>{' '}
-          {transfusion.clinicalOrder.careAuthorization?.invoice.number ?? '—'} ·{' '}
-          {transfusion.clinicalOrder.careAuthorization?.status ?? '—'}
+          <strong>Paiement :</strong>{' '}
+          {transfusion.clinicalOrder.careAuthorization?.paymentClearance?.inOrder ||
+          ['AUTHORIZED', 'WAIVED', 'CONSUMED'].includes(
+            transfusion.clinicalOrder.careAuthorization?.status ?? '',
+          )
+            ? 'En ordre'
+            : 'À régulariser'}
         </p>
       </section>
       <section className="print-result">
@@ -1110,9 +1116,6 @@ function PrescriptionDocument({ prescription }: { prescription: Prescription }) 
           <strong>Prescripteur :</strong> {prescription.prescribedBy.username}
         </p>
         <p>
-          <strong>Facture :</strong> {prescription.invoice.number} · {prescription.invoice.status}
-        </p>
-        <p>
           <strong>Diagnostic :</strong> {prescription.diagnosis || '—'}
         </p>
       </section>
@@ -1131,7 +1134,9 @@ function PrescriptionDocument({ prescription }: { prescription: Prescription }) 
           {prescription.items.map((item, index) => (
             <tr key={`${item.medicationName || item.medication?.name || 'medicament'}-${index}`}>
               <td>
-                {item.medicationName || item.medication?.name || 'Médicament'} {item.strength || item.medication?.strength}{item.availability !== 'INTERNAL' ? ' — achat extérieur' : ''}
+                {item.medicationName || item.medication?.name || 'Médicament'}{' '}
+                {item.strength || item.medication?.strength}
+                {item.availability !== 'INTERNAL' ? ' — achat extérieur' : ''}
               </td>
               <td>{item.dosage}</td>
               <td>{item.frequency}</td>

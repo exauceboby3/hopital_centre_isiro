@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import {
   BillableServiceType,
+  EmergencySeverity,
   NursingCareStatus,
   NursingCareType,
   Prisma,
@@ -16,7 +17,7 @@ import { PatientFinancialAccessService } from '../billing/patient-financial-acce
 import { ClinicalGovernanceService } from '../clinical-governance/clinical-governance.service';
 import { AuthenticatedUser, hasAnyRole } from '../common/authenticated-user';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateNursingCareDto, UpdateNursingCareDto } from './dto/nursing.dto';
+import { CreateNursingCareDto, CreateWardRoundDto, UpdateNursingCareDto } from './dto/nursing.dto';
 
 const nursingInclude = {
   patient: true,
@@ -125,16 +126,32 @@ export class NursingService {
       );
     }
     await this.assertNurse(dto.assignedNurseId);
+    const { frequencyHours, durationDays, ...careData } = dto;
+    if ((frequencyHours && !durationDays) || (!frequencyHours && durationDays)) {
+      throw new BadRequestException('La fréquence et la durée doivent être renseignées ensemble.');
+    }
+    const occurrenceCount =
+      frequencyHours && durationDays ? Math.floor((durationDays * 24 - 1) / frequencyHours) + 1 : 1;
+    if (occurrenceCount > 500) {
+      throw new BadRequestException('Le programme ne peut pas dépasser 500 administrations.');
+    }
     return this.prisma.$transaction(async (transaction) => {
-      const care = await transaction.nursingCare.create({
-        data: {
-          ...dto,
-          label: dto.label.trim(),
-          scheduledAt: new Date(dto.scheduledAt),
-          orderedById: user.id,
-          status: dto.assignedNurseId ? NursingCareStatus.SCHEDULED : NursingCareStatus.ORDERED,
-        },
-      });
+      const firstScheduledAt = new Date(dto.scheduledAt);
+      const created = [];
+      for (let index = 0; index < occurrenceCount; index += 1) {
+        const care = await transaction.nursingCare.create({
+          data: {
+            ...careData,
+            label: dto.label.trim(),
+            scheduledAt: new Date(
+              firstScheduledAt.getTime() + index * (frequencyHours ?? 0) * 60 * 60 * 1000,
+            ),
+            orderedById: user.id,
+            status: dto.assignedNurseId ? NursingCareStatus.SCHEDULED : NursingCareStatus.ORDERED,
+          },
+        });
+        created.push(care);
+      }
       if (dto.assignedNurseId && dto.assignedNurseId !== user.id) {
         const patientRow = await transaction.patient.findUniqueOrThrow({
           where: { id: dto.patientId },
@@ -175,10 +192,63 @@ export class NursingService {
           });
         }
       }
-      return transaction.nursingCare.findUniqueOrThrow({
-        where: { id: care.id },
+      return transaction.nursingCare.findMany({
+        where: { id: { in: created.map((care) => care.id) } },
+        include: nursingInclude,
+        orderBy: { scheduledAt: 'asc' },
+      });
+    });
+  }
+
+  async recordWardRound(dto: CreateWardRoundDto, user: AuthenticatedUser) {
+    const condition = dto.condition.trim();
+    if (condition.length < 3) {
+      throw new BadRequestException("L'état actuel du patient doit être renseigné.");
+    }
+    const hospitalization = await this.prisma.hospitalization.findFirst({
+      where: { patientId: dto.patientId, status: 'ACTIVE' },
+      include: { patient: true, bed: { include: { room: true } } },
+    });
+    if (!hospitalization) {
+      throw new BadRequestException('Le patient ne possède aucune hospitalisation active.');
+    }
+    const now = new Date();
+    const observations = [condition, dto.observations?.trim()].filter(Boolean).join(' — ');
+    return this.prisma.$transaction(async (transaction) => {
+      const care = await transaction.nursingCare.create({
+        data: {
+          patientId: dto.patientId,
+          hospitalizationId: hospitalization.id,
+          orderedById: user.id,
+          assignedNurseId: user.id,
+          performedById: user.id,
+          type: NursingCareType.MONITORING,
+          status: NursingCareStatus.COMPLETED,
+          label: `Tour de salle · ${hospitalization.bed.room.name} · lit ${hospitalization.bed.code}`,
+          instructions: dto.actions?.trim() || undefined,
+          observations,
+          vitalSigns: dto.vitalSigns as Prisma.InputJsonValue | undefined,
+          scheduledAt: now,
+          startedAt: now,
+          performedAt: now,
+        },
         include: nursingInclude,
       });
+      if (dto.unstable) {
+        await transaction.emergencyAlert.create({
+          data: {
+            title: `Patient instable · ${hospitalization.patient.medicalRecordNumber}`,
+            message: observations,
+            location: `${hospitalization.bed.room.name} · lit ${hospitalization.bed.code}`,
+            severity: EmergencySeverity.CRITICAL,
+            targetRole: Role.DOCTOR,
+            patientId: dto.patientId,
+            hospitalizationId: hospitalization.id,
+            createdById: user.id,
+          },
+        });
+      }
+      return care;
     });
   }
 
@@ -278,7 +348,9 @@ export class NursingService {
           assignedNurseId: takingOwnership ? user.id : dto.assignedNurseId,
           performedById: performer,
           startedAt:
-            dto.status === NursingCareStatus.IN_PROGRESS && !care.startedAt ? new Date() : undefined,
+            dto.status === NursingCareStatus.IN_PROGRESS && !care.startedAt
+              ? new Date()
+              : undefined,
           performedAt,
           vitalSigns: dto.vitalSigns as Prisma.InputJsonValue | undefined,
         },

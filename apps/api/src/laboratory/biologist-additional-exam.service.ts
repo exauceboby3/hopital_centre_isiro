@@ -1,10 +1,16 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { BillableServiceType, ExamStatus, Prisma, Role } from '@prisma/client';
 import { FinancialAuthorizationService } from '../billing/financial-authorization.service';
 import { ClinicalGovernanceService } from '../clinical-governance/clinical-governance.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AddBiologistExamDto } from './dto/additional-exam.dto';
 import { decodeLabTemplate } from './lab-template-envelope';
+import { stripLabFinancialDetails } from './laboratory.service.helpers';
 
 @Injectable()
 export class BiologistAdditionalExamService {
@@ -42,11 +48,7 @@ export class BiologistAdditionalExamService {
     }
 
     const first = group[0]!;
-    const template = decodeLabTemplate(
-      service.labResultTemplate,
-      service.code,
-      service.category,
-    );
+    const template = decodeLabTemplate(service.labResultTemplate, service.code, service.category);
     return this.prisma.$transaction(async (transaction) => {
       const exam = await transaction.examRequest.create({
         data: {
@@ -111,7 +113,7 @@ export class BiologistAdditionalExamService {
           data: recipients.map((recipient) => ({
             senderId: userId,
             receiverId: recipient.id,
-            content: `Examen complémentaire demandé par le biologiste : ${service.name} pour ${name} (${first.patient.medicalRecordNumber}). Urgence : ${dto.urgency}. Motif : ${dto.reason.trim()}. Facture ${authorization.invoice.number} créée. ${decisionMessage}`,
+            content: `Examen complémentaire demandé par le biologiste : ${service.name} pour ${name} (${first.patient.medicalRecordNumber}). Urgence : ${dto.urgency}. Motif : ${dto.reason.trim()}. Paiement transmis à la caisse. ${decisionMessage}`,
           })),
         });
       }
@@ -146,7 +148,7 @@ export class BiologistAdditionalExamService {
           careAuthorization: { include: { service: true, invoice: true } },
         },
       });
-      return { ...created, additionalExamDecision: decision };
+      return { ...stripLabFinancialDetails(created), additionalExamDecision: decision };
     });
   }
 }

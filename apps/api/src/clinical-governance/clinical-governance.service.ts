@@ -15,6 +15,7 @@ import {
 } from '@prisma/client';
 import { PatientFinancialAccessService } from '../billing/patient-financial-access.service';
 import { AuthenticatedUser, hasAnyRole } from '../common/authenticated-user';
+import { stripLabFinancialDetails } from '../laboratory/laboratory.service.helpers';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   AllocatePatientAdvanceDto,
@@ -145,12 +146,7 @@ interface GraceMetadata {
   createdById: string;
 }
 
-const clinicalBreakGlassRoles = [
-  Role.DOCTOR,
-  Role.NURSE,
-  Role.SURGEON,
-  Role.MIDWIFE,
-] as const;
+const clinicalBreakGlassRoles = [Role.DOCTOR, Role.NURSE, Role.SURGEON, Role.MIDWIFE] as const;
 const additionalExamThresholdCdf = Number(process.env.LAB_DOCTOR_APPROVAL_THRESHOLD_CDF ?? 50000);
 const graceIssuer = 'MESURE DE GRÂCE INTERNE';
 
@@ -162,9 +158,15 @@ export class ClinicalGovernanceService {
   ) {}
 
   async commandCenter(patientId: string, user: AuthenticatedUser) {
+    const canViewFinancialDetails = hasAnyRole(user, [
+      Role.SUPER_ADMIN,
+      Role.ADMIN,
+      Role.CASHIER,
+      Role.ACCOUNTANT,
+    ]);
     const [financial, episodes, breakGlass, death] = await Promise.all([
-      this.financialAccount(patientId),
-      this.episodes(patientId),
+      canViewFinancialDetails ? this.financialAccount(patientId) : Promise.resolve(null),
+      this.episodes(patientId, user),
       this.activeBreakGlass(patientId, user.id),
       this.deathDocument(patientId, false),
     ]);
@@ -226,7 +228,8 @@ export class ClinicalGovernanceService {
     const totalBilled = activeInvoices.reduce((sum, invoice) => sum + Number(invoice.total), 0);
     const totalPaid = activeInvoices.reduce(
       (sum, invoice) =>
-        sum + invoice.payments.reduce((paymentSum, payment) => paymentSum + Number(payment.amount), 0),
+        sum +
+        invoice.payments.reduce((paymentSum, payment) => paymentSum + Number(payment.amount), 0),
       0,
     );
     const coveredAmount = activeInvoices.reduce(
@@ -265,7 +268,9 @@ export class ClinicalGovernanceService {
     });
     const nextDue = installmentGroups
       .flatMap((plan) => plan.installments)
-      .filter((installment) => ['PENDING', 'PARTIALLY_PAID', 'OVERDUE'].includes(installment.status))
+      .filter((installment) =>
+        ['PENDING', 'PARTIALLY_PAID', 'OVERDUE'].includes(installment.status),
+      )
       .sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime())[0];
 
     return {
@@ -367,7 +372,8 @@ export class ClinicalGovernanceService {
         ['GUARANTEED', 'SETTLED'].includes(invoice.insuranceCoverage.status)
           ? Number(invoice.insuranceCoverage.insurerAmount)
           : 0) +
-        (invoice.voucherCoverage && ['GUARANTEED', 'SETTLED'].includes(invoice.voucherCoverage.status)
+        (invoice.voucherCoverage &&
+        ['GUARANTEED', 'SETTLED'].includes(invoice.voucherCoverage.status)
           ? Number(invoice.voucherCoverage.sponsorAmount)
           : 0);
       const remaining = Math.max(Number(invoice.total) - paid - covered, 0);
@@ -427,7 +433,8 @@ export class ClinicalGovernanceService {
   async createPaymentPlan(patientId: string, dto: CreatePaymentPlanDto, userId: string) {
     const account = await this.financialAccount(patientId);
     const total = account.totals.netDebt;
-    if (total <= 0) throw new BadRequestException('Le patient ne possède aucune dette à échelonner.');
+    if (total <= 0)
+      throw new BadRequestException('Le patient ne possède aucune dette à échelonner.');
 
     const id = randomUUID();
     const number = this.number('ECH');
@@ -517,7 +524,13 @@ export class ClinicalGovernanceService {
     return rows[0];
   }
 
-  async episodes(patientId: string) {
+  async episodes(patientId: string, user: AuthenticatedUser) {
+    const canViewFinancialDetails = hasAnyRole(user, [
+      Role.SUPER_ADMIN,
+      Role.ADMIN,
+      Role.CASHIER,
+      Role.ACCOUNTANT,
+    ]);
     await this.assertPatient(patientId);
     const appointments = await this.prisma.appointment.findMany({
       where: { patientId },
@@ -549,11 +562,43 @@ export class ClinicalGovernanceService {
                   nursingCare: { orderBy: { scheduledAt: 'asc' } },
                 },
               },
-              careAuthorization: { include: { invoice: true } },
+              careAuthorization: { include: { invoice: true, service: true } },
             },
           })
         : null;
-      detailed.push({ ...episode, appointment });
+      if (!appointment || canViewFinancialDetails) {
+        detailed.push({ ...episode, appointment });
+        continue;
+      }
+      const clinicalAppointment = stripLabFinancialDetails(appointment);
+      detailed.push({
+        ...episode,
+        appointment: {
+          ...clinicalAppointment,
+          consultation: appointment.consultation
+            ? {
+                ...appointment.consultation,
+                prescriptions: appointment.consultation.prescriptions.map((prescription) => {
+                  const { invoice, invoiceId, ...clinicalPrescription } = prescription;
+                  void invoiceId;
+                  return {
+                    ...clinicalPrescription,
+                    items: clinicalPrescription.items.map((item) => {
+                      if (!item.medication) return item;
+                      const { unitPrice, ...medication } = item.medication;
+                      void unitPrice;
+                      return { ...item, medication };
+                    }),
+                    paymentClearance: {
+                      inOrder: invoice.status === InvoiceStatus.PAID,
+                      status: invoice.status === InvoiceStatus.PAID ? 'IN_ORDER' : 'TO_REGULARIZE',
+                    },
+                  };
+                }),
+              }
+            : null,
+        },
+      });
     }
     return detailed;
   }
@@ -586,9 +631,15 @@ export class ClinicalGovernanceService {
     return { id, status: 'CLOSED' };
   }
 
-  async grantBreakGlass(patientId: string, dto: CreateBreakGlassAccessDto, user: AuthenticatedUser) {
+  async grantBreakGlass(
+    patientId: string,
+    dto: CreateBreakGlassAccessDto,
+    user: AuthenticatedUser,
+  ) {
     if (!hasAnyRole(user, clinicalBreakGlassRoles)) {
-      throw new ForbiddenException('Le bris de glace est réservé aux professionnels cliniques autorisés.');
+      throw new ForbiddenException(
+        'Le bris de glace est réservé aux professionnels cliniques autorisés.',
+      );
     }
     await this.assertPatient(patientId);
     const expiresAt = new Date(dto.expiresAt);
@@ -621,7 +672,9 @@ export class ClinicalGovernanceService {
         select: { id: true },
       });
       if (administrators.length) {
-        const name = [patient.lastName, patient.postName, patient.firstName].filter(Boolean).join(' ');
+        const name = [patient.lastName, patient.postName, patient.firstName]
+          .filter(Boolean)
+          .join(' ');
         await transaction.message.createMany({
           data: administrators.map((administrator) => ({
             senderId: user.id,
@@ -680,7 +733,9 @@ export class ClinicalGovernanceService {
   }
 
   async graceReport(from?: string, to?: string) {
-    const start = from ? new Date(from) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const start = from
+      ? new Date(from)
+      : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
     const end = to ? new Date(to) : new Date();
     const vouchers = await this.prisma.careVoucher.findMany({
       where: {
@@ -706,7 +761,8 @@ export class ClinicalGovernanceService {
       const billed = invoices.reduce((sum, invoice) => sum + Number(invoice.total), 0);
       const paid = invoices.reduce(
         (sum, invoice) =>
-          sum + invoice.payments.reduce((paymentSum, payment) => paymentSum + Number(payment.amount), 0),
+          sum +
+          invoice.payments.reduce((paymentSum, payment) => paymentSum + Number(payment.amount), 0),
         0,
       );
       rows.push({
@@ -836,25 +892,39 @@ export class ClinicalGovernanceService {
   }
 
   async pendingAdditionalExams(user: AuthenticatedUser) {
-    const admin = hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN]);
-    const rows = await this.prisma.$queryRaw<LabDecisionRow[]>(admin
-      ? Prisma.sql`
+    const canViewFinancialDetails = hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN]);
+    const rows = await this.prisma.$queryRaw<LabDecisionRow[]>(
+      canViewFinancialDetails
+        ? Prisma.sql`
           SELECT * FROM "LabAdditionalExamDecision"
           WHERE "status" = 'PENDING_DOCTOR'
           ORDER BY "requestedAt" ASC
         `
-      : Prisma.sql`
+        : Prisma.sql`
           SELECT * FROM "LabAdditionalExamDecision"
           WHERE "status" = 'PENDING_DOCTOR' AND "doctorUserId" = ${user.id}
           ORDER BY "requestedAt" ASC
-        `);
+        `,
+    );
     const result = [];
     for (const row of rows) {
       const exam = await this.prisma.examRequest.findUnique({
         where: { id: row.examRequestId },
-        include: { patient: true, careAuthorization: { include: { invoice: true, service: true } } },
+        include: {
+          patient: true,
+          careAuthorization: { include: { invoice: true, service: true } },
+        },
       });
-      result.push({ ...row, price: Number(row.price), exam });
+      if (canViewFinancialDetails) {
+        result.push({ ...row, price: Number(row.price), exam });
+        continue;
+      }
+      const { price, ...clinicalDecision } = row;
+      void price;
+      result.push({
+        ...clinicalDecision,
+        exam: exam ? stripLabFinancialDetails(exam) : null,
+      });
     }
     return result;
   }
@@ -868,10 +938,7 @@ export class ClinicalGovernanceService {
     if (decision.status !== 'PENDING_DOCTOR') {
       throw new BadRequestException('Cette demande a déjà reçu une décision.');
     }
-    if (
-      decision.doctorUserId !== user.id &&
-      !hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN])
-    ) {
+    if (decision.doctorUserId !== user.id && !hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN])) {
       throw new ForbiddenException('Seul le médecin demandeur ou un administrateur peut décider.');
     }
     const nextStatus = dto.decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
@@ -944,7 +1011,8 @@ export class ClinicalGovernanceService {
     const existing = await this.prisma.$queryRaw<DeathCaseRow[]>(Prisma.sql`
       SELECT * FROM "DeathCase" WHERE "patientId" = ${patientId} LIMIT 1
     `);
-    if (existing[0]) throw new BadRequestException('Un constat de décès existe déjà pour ce patient.');
+    if (existing[0])
+      throw new BadRequestException('Un constat de décès existe déjà pour ce patient.');
 
     await this.financialAccess.declareDeath(
       patientId,
@@ -1010,7 +1078,10 @@ export class ClinicalGovernanceService {
         action: 'DEATH_CASE_UPDATED',
         entity: 'DeathCase',
         entityId: id,
-        metadata: { patientId: current.patientId, financialClosed: Boolean(dto.closeFinancialAccount) },
+        metadata: {
+          patientId: current.patientId,
+          financialClosed: Boolean(dto.closeFinancialAccount),
+        },
       },
     });
     return this.deathDocument(current.patientId, true);
@@ -1028,7 +1099,10 @@ export class ClinicalGovernanceService {
     const [patient, hospital, declaredBy, financialClosedBy] = await Promise.all([
       this.prisma.patient.findUnique({ where: { id: patientId }, omit: { identityKey: true } }),
       this.prisma.hospitalProfile.findUnique({ where: { id: 'main' } }),
-      this.prisma.user.findUnique({ where: { id: death.declaredById }, select: { username: true } }),
+      this.prisma.user.findUnique({
+        where: { id: death.declaredById },
+        select: { username: true },
+      }),
       death.financialClosedById
         ? this.prisma.user.findUnique({
             where: { id: death.financialClosedById },

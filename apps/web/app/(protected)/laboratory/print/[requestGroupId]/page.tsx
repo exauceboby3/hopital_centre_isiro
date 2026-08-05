@@ -3,7 +3,7 @@
 import { Activity } from 'lucide-react';
 import Image from 'next/image';
 import { useParams } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { patientName } from '@/lib/display';
 import type { Patient } from '@/lib/types';
@@ -52,7 +52,7 @@ interface GroupExam {
   catalogMetadata?: { specimenType?: string; method?: string };
   careAuthorization?: {
     status: string;
-    invoice: { number: string; status: string };
+    paymentClearance?: { inOrder: boolean; status: 'IN_ORDER' | 'TO_REGULARIZE' };
   };
   performedByLabTech?: { lastName: string; postName?: string; firstName?: string };
   validatedByLabTech?: { lastName: string; postName?: string; firstName?: string };
@@ -99,14 +99,6 @@ export default function LaboratoryGroupPrintPage() {
       );
   }, [requestGroupId]);
 
-  const invoices = useMemo(
-    () =>
-      group
-        ? [...new Set(group.exams.map((exam) => exam.careAuthorization?.invoice.number).filter(Boolean))]
-        : [],
-    [group],
-  );
-
   if (error) return <section className="panel alert error">{error}</section>;
   if (!context || !group) {
     return (
@@ -147,23 +139,37 @@ export default function LaboratoryGroupPrintPage() {
         </div>
       </header>
 
-      {context.template?.headerText && <p className={styles.templateText}>{context.template.headerText}</p>}
+      {context.template?.headerText && (
+        <p className={styles.templateText}>{context.template.headerText}</p>
+      )}
 
       <h1>{title}</h1>
       <section className={styles.patientBlock}>
-        <div><span>Patient</span><strong>{patientName(group.patient)}</strong></div>
-        <div><span>N° dossier</span><strong>{group.patient.medicalRecordNumber}</strong></div>
-        <div><span>Sexe</span><strong>{group.patient.sex || '—'}</strong></div>
-        <div><span>Date de demande</span><strong>{formatDate(group.requestedAt)}</strong></div>
-        <div><span>Médecin demandeur</span><strong>{patientName(group.requestedByDoctor)}</strong></div>
-        <div><span>Examens</span><strong>{group.exams.length}</strong></div>
+        <div>
+          <span>Patient</span>
+          <strong>{patientName(group.patient)}</strong>
+        </div>
+        <div>
+          <span>N° dossier</span>
+          <strong>{group.patient.medicalRecordNumber}</strong>
+        </div>
+        <div>
+          <span>Sexe</span>
+          <strong>{group.patient.sex || '—'}</strong>
+        </div>
+        <div>
+          <span>Date de demande</span>
+          <strong>{formatDate(group.requestedAt)}</strong>
+        </div>
+        <div>
+          <span>Médecin demandeur</span>
+          <strong>{patientName(group.requestedByDoctor)}</strong>
+        </div>
+        <div>
+          <span>Examens</span>
+          <strong>{group.exams.length}</strong>
+        </div>
       </section>
-
-      {invoices.length > 0 && (
-        <p className={styles.invoiceLine}>
-          <strong>Référence(s) de paiement :</strong> {invoices.join(' · ')}
-        </p>
-      )}
 
       <section className={styles.results}>
         {group.exams.map((exam, index) => (
@@ -173,7 +179,10 @@ export default function LaboratoryGroupPrintPage() {
 
       <footer className={styles.footer}>
         <span>Document regroupant {group.exams.length} examen(s) de la même demande.</span>
-        <span>{context.template?.footerText || 'Résultats à interpréter dans le contexte clinique du patient.'}</span>
+        <span>
+          {context.template?.footerText ||
+            'Résultats à interpréter dans le contexte clinique du patient.'}
+        </span>
       </footer>
     </article>
   );
@@ -199,9 +208,15 @@ function ExamResult({ exam, index }: { exam: GroupExam; index: number }) {
       </div>
 
       <div className={styles.examMetadata}>
-        <span><b>Échantillon :</b> {exam.catalogMetadata?.specimenType || 'Non précisé'}</span>
-        <span><b>Méthode :</b> {exam.catalogMetadata?.method || 'Non précisée'}</span>
-        <span><b>Validation :</b> {exam.validatedAt ? formatDate(exam.validatedAt) : 'Non validé'}</span>
+        <span>
+          <b>Échantillon :</b> {exam.catalogMetadata?.specimenType || 'Non précisé'}
+        </span>
+        <span>
+          <b>Méthode :</b> {exam.catalogMetadata?.method || 'Non précisée'}
+        </span>
+        <span>
+          <b>Validation :</b> {exam.validatedAt ? formatDate(exam.validatedAt) : 'Non validé'}
+        </span>
       </div>
 
       {values.length > 0 ? (
@@ -221,7 +236,9 @@ function ExamResult({ exam, index }: { exam: GroupExam; index: number }) {
               return (
                 <tr key={value.key}>
                   <td>{definition?.label || value.key}</td>
-                  <td><strong>{value.value}</strong></td>
+                  <td>
+                    <strong>{value.value}</strong>
+                  </td>
                   <td>{definition?.unit || '—'}</td>
                   <td>{definition?.reference || 'Selon méthode / patient'}</td>
                   <td>{value.note || '—'}</td>
@@ -235,12 +252,18 @@ function ExamResult({ exam, index }: { exam: GroupExam; index: number }) {
       )}
 
       {exam.resultData?.conclusion && (
-        <p className={styles.conclusion}><strong>Conclusion :</strong> {exam.resultData.conclusion}</p>
+        <p className={styles.conclusion}>
+          <strong>Conclusion :</strong> {exam.resultData.conclusion}
+        </p>
       )}
       {exam.observations && (
-        <p className={styles.observation}><strong>Indication / observation :</strong> {exam.observations}</p>
+        <p className={styles.observation}>
+          <strong>Indication / observation :</strong> {exam.observations}
+        </p>
       )}
-      <p className={styles.validationLine}><strong>Technicien / biologiste :</strong> {validator}</p>
+      <p className={styles.validationLine}>
+        <strong>Technicien / biologiste :</strong> {validator}
+      </p>
     </article>
   );
 }

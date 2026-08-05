@@ -30,12 +30,13 @@ interface Room {
 }
 
 interface FinancialStatus {
-  billedDays: number;
-  total: number;
-  paid: number;
-  balance: number;
+  billedDays?: number;
+  total?: number;
+  paid?: number;
+  balance?: number;
   settled: boolean;
-  settledByWaiver: boolean;
+  settledByWaiver?: boolean;
+  billingMissing?: boolean;
 }
 
 interface Stay {
@@ -50,7 +51,7 @@ interface Stay {
   doctor?: { lastName: string; postName?: string; firstName?: string };
   careAuthorization?: {
     status: string;
-    invoice: { number: string; status: string; total?: string };
+    invoice?: { number: string; status: string; total?: string };
   };
 }
 
@@ -61,7 +62,6 @@ interface CareAuthorization {
   status: string;
   description: string;
   hospitalization?: { id: string } | null;
-  invoice: { number: string; status?: string };
 }
 
 const emptyAdmit = {
@@ -73,7 +73,10 @@ const emptyAdmit = {
   notes: '',
 };
 const emptyRoom = { code: '', name: '', service: '', bedCodes: '1, 2' };
-const money = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = new Intl.NumberFormat('fr-FR', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
 export default function HospitalizationsPage() {
   const { user } = useAuth();
@@ -154,6 +157,12 @@ export default function HospitalizationsPage() {
     'RECEPTIONIST',
     'SECRETARY',
   ]);
+  const canViewFinancialDetails = hasAnyRole(user, [
+    'SUPER_ADMIN',
+    'ADMIN',
+    'CASHIER',
+    'ACCOUNTANT',
+  ]);
 
   const admitPatient = async (event: FormEvent) => {
     event.preventDefault();
@@ -219,7 +228,7 @@ export default function HospitalizationsPage() {
       setNotice(
         result.financialStatus?.settled
           ? `La sortie médicale de ${patientName(stay.patient)} est validée. Le compte est soldé ; l’administration peut finaliser la sortie.`
-          : `La sortie médicale de ${patientName(stay.patient)} est validée. Le solde de ${money.format(result.financialStatus?.balance ?? 0)} doit être réglé avant la sortie administrative.`,
+          : `La sortie médicale de ${patientName(stay.patient)} est validée. Le paiement doit être régularisé avant la sortie administrative.`,
       );
       await load();
     } catch (reason) {
@@ -273,7 +282,7 @@ export default function HospitalizationsPage() {
         row.bed.room.name,
         row.bed.code,
         row.doctor ? patientName(row.doctor) : '',
-        row.careAuthorization?.invoice.number,
+        row.careAuthorization?.invoice?.number,
       ),
   );
 
@@ -404,22 +413,28 @@ export default function HospitalizationsPage() {
                       )}
                     </td>
                     <td>
-                      {row.careAuthorization ? (
+                      {row.careAuthorization && canViewFinancialDetails ? (
                         <div className="hospitalization-financial-summary">
-                          <span>{row.careAuthorization.invoice.number}</span>
+                          <span>
+                            {row.careAuthorization.invoice?.number ?? 'Facture à établir'}
+                          </span>
                           <small>
-                            {row.financialStatus.billedDays} jour(s) · Total{' '}
-                            {money.format(row.financialStatus.total)}
+                            {row.financialStatus.billedDays ?? 0} jour(s) · Total{' '}
+                            {money.format(row.financialStatus.total ?? 0)}
                           </small>
-                          <small>Payé {money.format(row.financialStatus.paid)}</small>
+                          <small>Payé {money.format(row.financialStatus.paid ?? 0)}</small>
                           <strong>
                             {row.financialStatus.settled
                               ? 'Compte soldé'
-                              : `Solde ${money.format(row.financialStatus.balance)}`}
+                              : `Solde ${money.format(row.financialStatus.balance ?? 0)}`}
                           </strong>
                         </div>
                       ) : (
-                        '—'
+                        <strong>
+                          {row.financialStatus.settled
+                            ? 'Paiement en ordre'
+                            : 'Paiement à régulariser'}
+                        </strong>
                       )}
                     </td>
                     <td>
@@ -437,11 +452,13 @@ export default function HospitalizationsPage() {
                                 Valider sortie médicale
                               </button>
                             )}
-                            {row.medicalDischargeApprovedAt && !row.financialStatus.settled && (
-                              <Link className="text-button" href="/billing">
-                                <WalletCards size={15} /> Régler le compte
-                              </Link>
-                            )}
+                            {canViewFinancialDetails &&
+                              row.medicalDischargeApprovedAt &&
+                              !row.financialStatus.settled && (
+                                <Link className="text-button" href="/billing">
+                                  <WalletCards size={15} /> Régler le compte
+                                </Link>
+                              )}
                             {canCompleteAdministrativeDischarge &&
                               row.medicalDischargeApprovedAt &&
                               row.financialStatus.settled && (
@@ -469,7 +486,11 @@ export default function HospitalizationsPage() {
       </section>
 
       {admitOpen && (
-        <Modal title="Admettre un patient" eyebrow="Hospitalisation" onClose={() => setAdmitOpen(false)}>
+        <Modal
+          title="Admettre un patient"
+          eyebrow="Hospitalisation"
+          onClose={() => setAdmitOpen(false)}
+        >
           <form onSubmit={admitPatient}>
             <div className="payment-gate-notice hospitalization-deferred-billing-note">
               <BedDouble size={19} />
@@ -488,13 +509,16 @@ export default function HospitalizationsPage() {
                 label="Patient signalé pour hospitalisation"
                 value={admit.authorizationId}
                 onChange={(authorizationId) => {
-                  const authorization = authorizations.find((entry) => entry.id === authorizationId);
+                  const authorization = authorizations.find(
+                    (entry) => entry.id === authorizationId,
+                  );
                   setAdmit((current) => ({
                     ...current,
                     authorizationId,
                     patientId: authorization?.patientId ?? '',
                     reason:
-                      authorization?.description ?? 'Hospitalisation demandée par le médecin traitant.',
+                      authorization?.description ??
+                      'Hospitalisation demandée par le médecin traitant.',
                   }));
                 }}
                 options={authorizations.map((authorization) => ({
@@ -529,7 +553,9 @@ export default function HospitalizationsPage() {
                   type="datetime-local"
                   value={admit.expectedDischargeAt}
                   min={`${new Date().toISOString().slice(0, 10)}T00:00`}
-                  onChange={(event) => setAdmit({ ...admit, expectedDischargeAt: event.target.value })}
+                  onChange={(event) =>
+                    setAdmit({ ...admit, expectedDischargeAt: event.target.value })
+                  }
                 />
               </label>
               <label className="field full">
@@ -551,7 +577,11 @@ export default function HospitalizationsPage() {
               </label>
             </div>
             <div className="modal-actions">
-              <button type="button" className="secondary-button" onClick={() => setAdmitOpen(false)}>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setAdmitOpen(false)}
+              >
                 Annuler
               </button>
               <button
@@ -637,7 +667,11 @@ export default function HospitalizationsPage() {
               </select>
             </label>
             <div className="modal-actions">
-              <button type="button" className="secondary-button" onClick={() => setTransferFor(null)}>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setTransferFor(null)}
+              >
                 Annuler
               </button>
               <button className="primary-button" disabled={submitting}>

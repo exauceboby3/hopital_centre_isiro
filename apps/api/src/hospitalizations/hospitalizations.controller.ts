@@ -45,10 +45,11 @@ export class HospitalizationsController {
 
   @Get()
   list(
+    @CurrentUser() user: AuthenticatedUser,
     @Query('status', new ParseEnumPipe(HospitalizationStatus, { optional: true }))
     status?: HospitalizationStatus,
   ) {
-    return this.hospitalizations.list(status);
+    return this.hospitalizations.list(status, user);
   }
 
   @Get('rooms')
@@ -79,11 +80,8 @@ export class HospitalizationsController {
 
   @Patch(':id/medical-discharge')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.DOCTOR, Role.SURGEON, Role.MIDWIFE)
-  medicalDischarge(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    return this.hospitalizations.medicalDischarge(id, user.id);
+  medicalDischarge(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.hospitalizations.medicalDischarge(id, user);
   }
 
   @Patch(':id/discharge')
@@ -113,7 +111,11 @@ export class HospitalizationsController {
     Role.SECRETARY,
     Role.NURSE,
   )
-  transfer(@Param('id', ParseUUIDPipe) id: string, @Body() dto: TransferPatientDto) {
-    return this.hospitalizations.transfer(id, dto.bedId);
+  transfer(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: TransferPatientDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.hospitalizations.transfer(id, dto.bedId, user);
   }
 }

@@ -2,13 +2,18 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { NursingCareStatus, NursingCareType } from '@prisma/client';
 import {
   IsDateString,
+  IsBoolean,
   IsEnum,
   IsIn,
+  IsInt,
   IsObject,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
+  Min,
+  MinLength,
 } from 'class-validator';
 
 export class CreateNursingCareDto {
@@ -61,6 +66,46 @@ export class CreateNursingCareDto {
 
   @IsDateString()
   scheduledAt: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(72)
+  frequencyHours?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(90)
+  durationDays?: number;
+}
+
+export class CreateWardRoundDto {
+  @IsUUID()
+  patientId: string;
+
+  @IsString()
+  @MinLength(3)
+  @MaxLength(2000)
+  condition: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(3000)
+  observations?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  actions?: string;
+
+  @IsOptional()
+  @IsObject()
+  vitalSigns?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsBoolean()
+  unstable?: boolean;
 }
 
 export class UpdateNursingCareDto {

@@ -7,7 +7,9 @@ import {
   InvoiceStatus,
   PaymentPayer,
   Prisma,
+  Role,
 } from '@prisma/client';
+import { AuthenticatedUser, hasAnyRole } from '../common/authenticated-user';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateBillableServiceDto,
@@ -64,13 +66,26 @@ export class FinancialAuthorizationService {
     private readonly patientAccess: PatientFinancialAccessService,
   ) {}
 
-  listServices(type?: BillableServiceType, includeInactive = false) {
-    return this.prisma.billableService.findMany({
+  async listServices(
+    type?: BillableServiceType,
+    includeInactive = false,
+    user?: AuthenticatedUser,
+  ) {
+    const canViewPrices = Boolean(
+      user && hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN, Role.CASHIER, Role.ACCOUNTANT]),
+    );
+    const rows = await this.prisma.billableService.findMany({
       where: {
         ...(type ? { type } : {}),
-        ...(!includeInactive ? { isActive: true } : {}),
+        ...(!includeInactive || !canViewPrices ? { isActive: true } : {}),
       },
       orderBy: [{ type: 'asc' }, { category: 'asc' }, { name: 'asc' }],
+    });
+    if (canViewPrices) return rows;
+    return rows.map((row) => {
+      const { price, ...clinicalService } = row;
+      void price;
+      return clinicalService;
     });
   }
 
@@ -114,8 +129,8 @@ export class FinancialAuthorizationService {
     return { deleted: true, deactivated: false };
   }
 
-  listAuthorizations(filters: ListCareAuthorizationsDto) {
-    return this.prisma.careAuthorization.findMany({
+  async listAuthorizations(filters: ListCareAuthorizationsDto, user: AuthenticatedUser) {
+    const rows = await this.prisma.careAuthorization.findMany({
       where: {
         ...(filters.type ? { type: filters.type } : {}),
         ...(filters.status ? { status: filters.status } : {}),
@@ -124,6 +139,41 @@ export class FinancialAuthorizationService {
       include: authorizationInclude,
       orderBy: { createdAt: 'desc' },
       take: 250,
+    });
+    if (hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN, Role.CASHIER, Role.ACCOUNTANT])) {
+      return rows;
+    }
+    return rows.map((row) => {
+      const {
+        amount: _amount,
+        invoiceId: _invoiceId,
+        invoice: _invoice,
+        medication: _medication,
+        service: _service,
+        createdBy: _createdBy,
+        waivedBy: _waivedBy,
+        ...authorization
+      } = row;
+      void _amount;
+      void _invoiceId;
+      void _invoice;
+      void _medication;
+      void _service;
+      void _createdBy;
+      void _waivedBy;
+      return {
+        ...authorization,
+        paymentClearance: {
+          inOrder:
+            row.status === CareAuthorizationStatus.AUTHORIZED ||
+            row.status === CareAuthorizationStatus.WAIVED,
+          status:
+            row.status === CareAuthorizationStatus.AUTHORIZED ||
+            row.status === CareAuthorizationStatus.WAIVED
+              ? 'IN_ORDER'
+              : 'TO_REGULARIZE',
+        },
+      };
     });
   }
 
