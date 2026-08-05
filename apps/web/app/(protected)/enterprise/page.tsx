@@ -21,7 +21,7 @@ import { useAuth } from '@/components/auth-provider';
 import { CustomFieldsEditor } from '@/components/custom-fields-editor';
 import { StatusBadge } from '@/components/status-badge';
 import { api } from '@/lib/api';
-import { currency, patientName } from '@/lib/display';
+import { currency, formatHospitalTime, patientName } from '@/lib/display';
 import { resilientApi } from '@/lib/offline-queue';
 import { hasAnyRole } from '@/lib/roles';
 import { Patient, Role, User } from '@/lib/types';
@@ -131,6 +131,8 @@ interface Attendance {
   id: string;
   date: string;
   status: string;
+  clockIn?: string;
+  clockOut?: string;
   minutesLate: number;
   employee: User;
 }
@@ -1777,13 +1779,15 @@ function HrSection(props: {
         ))}
       </DataTable>
       <DataTable
-        headers={['Date', 'Employé', 'Statut', 'Retard', 'Actions']}
+        headers={['Date', 'Employé', 'Arrivée', 'Sortie', 'Statut', 'Retard', 'Actions']}
         empty="Aucune présence."
       >
         {p.attendance.map((row) => (
           <tr key={row.id}>
             <td>{new Date(row.date).toLocaleDateString('fr-FR')}</td>
             <td>{row.employee.username}</td>
+            <td>{formatHospitalTime(row.clockIn)}</td>
+            <td>{formatHospitalTime(row.clockOut)}</td>
             <td>
               <StatusBadge status={row.status} />
             </td>

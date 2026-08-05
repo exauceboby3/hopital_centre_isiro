@@ -2,7 +2,9 @@
 
 import {
   Activity,
+  AlertTriangle,
   CheckCircle2,
+  ChevronRight,
   ClipboardPlus,
   Clock3,
   Plus,
@@ -10,7 +12,7 @@ import {
   Syringe,
   XCircle,
 } from 'lucide-react';
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { CustomFieldsEditor } from '@/components/custom-fields-editor';
 import { Modal } from '@/components/modal';
@@ -18,6 +20,7 @@ import { SearchableSelect } from '@/components/searchable-select';
 import { StatusBadge } from '@/components/status-badge';
 import { api } from '@/lib/api';
 import { localDateTimeInputValue, patientName } from '@/lib/display';
+import { buildNursingPatientGroups } from '@/lib/nursing-worklist';
 import { hasAnyRole } from '@/lib/roles';
 import { Patient, User } from '@/lib/types';
 
@@ -114,6 +117,7 @@ export default function NursingPage() {
   const [nurses, setNurses] = useState<User[]>([]);
   const [activeHospitalizations, setActiveHospitalizations] = useState<ActiveHospitalization[]>([]);
   const [medicationAlertCount, setMedicationAlertCount] = useState(0);
+  const [worklistNow, setWorklistNow] = useState(() => new Date());
   const [query, setQuery] = useState('');
   const [form, setForm] = useState(emptyForm);
   const [open, setOpen] = useState(false);
@@ -121,6 +125,7 @@ export default function NursingPage() {
   const [wardRound, setWardRound] = useState(emptyWardRound);
   const [completing, setCompleting] = useState<NursingCare | null>(null);
   const [omitting, setOmitting] = useState<NursingCare | null>(null);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [completion, setCompletion] = useState(emptyCompletion);
   const [omission, setOmission] = useState(emptyOmission);
   const [loading, setLoading] = useState(true);
@@ -140,6 +145,7 @@ export default function NursingPage() {
         api<ActiveHospitalization[]>('/hospitalizations?status=ACTIVE'),
       ]);
       setRows(careRows);
+      setWorklistNow(new Date());
       const alertLimit = Date.now() + 30 * 60 * 1000;
       setMedicationAlertCount(
         careRows.filter(
@@ -254,21 +260,34 @@ export default function NursingPage() {
   };
 
   const openAdministration = (row: NursingCare) => {
+    setSelectedPatientId(null);
     setCompleting(row);
     setCompletion({ ...emptyCompletion, administeredDose: row.dose ?? '' });
   };
 
   const openOmission = (row: NursingCare) => {
+    setSelectedPatientId(null);
     setOmitting(row);
     setOmission(emptyOmission);
   };
 
-  const filtered = rows.filter((row) => {
-    const needle = query.toLowerCase();
-    return `${patientName(row.patient)} ${row.patient.medicalRecordNumber} ${row.label} ${row.medicationName ?? ''}`
-      .toLowerCase()
-      .includes(needle);
-  });
+  const patientGroups = useMemo(
+    () => buildNursingPatientGroups(rows, query, worklistNow),
+    [query, rows, worklistNow],
+  );
+  const selectedGroup = useMemo(
+    () =>
+      selectedPatientId
+        ? (buildNursingPatientGroups(rows, '', worklistNow).find(
+            (group) => group.patient.id === selectedPatientId,
+          ) ?? null)
+        : null,
+    [rows, selectedPatientId, worklistNow],
+  );
+  const activeInterventionCount = patientGroups.reduce(
+    (total, group) => total + group.activeRows.length,
+    0,
+  );
   const medicationRequired = ['INJECTION', 'INFUSION', 'MEDICATION'].includes(form.type);
   const isMedicationAdministration = completing
     ? ['INJECTION', 'INFUSION', 'MEDICATION'].includes(completing.type)
@@ -314,26 +333,28 @@ export default function NursingPage() {
       <section className="panel table-panel">
         <div className="panel-toolbar">
           <div>
-            <strong>Feuille d’administration et programme de traitement</strong>
-            <span>{filtered.length} intervention(s)</span>
+            <strong>Patients à prendre en charge</strong>
+            <span>
+              {patientGroups.length} patient(s) · {activeInterventionCount} soin(s) à réaliser
+            </span>
           </div>
           <input
             className="table-search"
-            placeholder="Rechercher nom, fiche, médicament ou soin…"
+            placeholder="Rechercher un patient ou un soin…"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
         <div className="table-scroll">
-          <table>
+          <table className="nursing-patient-table">
             <thead>
               <tr>
-                <th>Heure prévue / réelle</th>
                 <th>Patient</th>
-                <th>Soin</th>
-                <th>Traitement / voie</th>
-                <th>Infirmier</th>
-                <th>Statut</th>
+                <th>Chambre / lit</th>
+                <th>Prochain soin</th>
+                <th>Heure prévue</th>
+                <th>Charge / progression</th>
+                <th>Priorité</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -346,95 +367,231 @@ export default function NursingPage() {
                     </div>
                   </td>
                 </tr>
-              ) : filtered.length === 0 ? (
+              ) : patientGroups.length === 0 ? (
                 <tr>
                   <td colSpan={7}>
                     <div className="empty-state">
                       <Syringe />
-                      <strong>Aucun soin planifié</strong>
+                      <strong>Aucun patient avec un soin à réaliser</strong>
                     </div>
                   </td>
                 </tr>
               ) : (
-                filtered.map((row) => (
-                  <tr key={row.id}>
-                    <td>
-                      <strong>{formatDateTime(row.scheduledAt)}</strong>
-                      {row.performedAt && (
-                        <>
-                          <br />
-                          <span className="muted">Réalisé : {formatDateTime(row.performedAt)}</span>
-                        </>
-                      )}
-                    </td>
-                    <td>
-                      <strong>{patientName(row.patient)}</strong>
-                      <br />
-                      <span className="muted">{row.patient.medicalRecordNumber}</span>
-                      {row.hospitalization && (
-                        <>
-                          <br />
-                          <span className="muted">
-                            {row.hospitalization.bed.room.name} · lit {row.hospitalization.bed.code}
+                patientGroups.map((group) => {
+                  const nextCare = group.nextCare;
+                  const location = nextCare.hospitalization;
+                  const initials =
+                    `${group.patient.lastName[0] ?? ''}${group.patient.firstName?.[0] ?? group.patient.postName?.[0] ?? ''}`.toUpperCase();
+
+                  return (
+                    <tr
+                      key={group.patient.id}
+                      className="nursing-patient-row"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Ouvrir les soins de ${patientName(group.patient)}`}
+                      onClick={() => setSelectedPatientId(group.patient.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setSelectedPatientId(group.patient.id);
+                        }
+                      }}
+                    >
+                      <td>
+                        <div className="nursing-patient-identity">
+                          <span className="nursing-patient-avatar" aria-hidden="true">
+                            {initials}
                           </span>
-                        </>
-                      )}
-                    </td>
-                    <td>
-                      <strong>{row.label}</strong>
-                      <br />
-                      <span className="muted">
-                        {careTypes.find(([value]) => value === row.type)?.[1] ?? row.type}
-                      </span>
-                    </td>
-                    <td>
-                      {row.medicationName
-                        ? `${row.medicationName} · ${row.dose ?? '—'} · ${row.route ?? '—'}${row.site ? ` · ${row.site}` : ''}`
-                        : row.instructions || '—'}
-                      {row.instructions && row.medicationName && (
-                        <>
-                          <br />
-                          <span className="muted">{row.instructions}</span>
-                        </>
-                      )}
-                    </td>
-                    <td>
-                      {row.performedBy?.username ?? row.assignedNurse?.username ?? 'À attribuer'}
-                    </td>
-                    <td>
-                      <StatusBadge status={row.status} />
-                    </td>
-                    <td>
-                      <div className="row-actions">
-                        {canPerform &&
-                          ['ORDERED', 'SCHEDULED', 'IN_PROGRESS'].includes(row.status) && (
-                            <button className="text-button" onClick={() => openAdministration(row)}>
-                              <CheckCircle2 size={15} /> Confirmer administré
-                            </button>
-                          )}
-                        {canPerform && ['ORDERED', 'SCHEDULED'].includes(row.status) && (
-                          <button className="text-button" onClick={() => openOmission(row)}>
-                            <Clock3 size={15} /> Non réalisé
-                          </button>
+                          <div>
+                            <strong>{patientName(group.patient)}</strong>
+                            <span>{group.patient.medicalRecordNumber}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="nursing-location">
+                        {location ? (
+                          <>
+                            <strong>{location.bed.room.name}</strong>
+                            <br />
+                            <span>Lit {location.bed.code}</span>
+                          </>
+                        ) : (
+                          <span>Non hospitalisé</span>
                         )}
-                        {canCancel && !['COMPLETED', 'CANCELLED'].includes(row.status) && (
-                          <button
-                            className="text-button danger"
-                            onClick={() => void transition(row, 'CANCELLED')}
-                          >
-                            <XCircle size={15} /> Annuler
-                          </button>
+                      </td>
+                      <td>
+                        <div className="nursing-next-care">
+                          <strong>{nextCare.label}</strong>
+                          <span>
+                            {nextCare.medicationName
+                              ? [nextCare.medicationName, nextCare.dose, nextCare.route]
+                                  .filter(Boolean)
+                                  .join(' · ')
+                              : nextCare.instructions ||
+                                (careTypes.find(([value]) => value === nextCare.type)?.[1] ??
+                                  nextCare.type)}
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <strong>{formatDateTime(nextCare.scheduledAt)}</strong>
+                      </td>
+                      <td>
+                        <div className="nursing-workload">
+                          <strong>{group.activeRows.length} à faire</strong>
+                          <span className="muted">
+                            {group.completedTodayCount} réalisé(s) aujourd’hui
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        {group.overdueCount > 0 ? (
+                          <span className="nursing-priority overdue">
+                            <AlertTriangle size={14} /> {group.overdueCount} en retard
+                          </span>
+                        ) : group.dueSoonCount > 0 ? (
+                          <span className="nursing-priority due">
+                            <Clock3 size={14} /> À faire maintenant
+                          </span>
+                        ) : (
+                          <span className="nursing-priority">
+                            <Clock3 size={14} /> À venir
+                          </span>
                         )}
-                        <CustomFieldsEditor entity="NURSING_CARE" entityId={row.id} />
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="text-button nursing-open-button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSelectedPatientId(group.patient.id);
+                          }}
+                        >
+                          Ouvrir les soins <ChevronRight size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </section>
+
+      {selectedGroup && (
+        <Modal
+          wide
+          title={patientName(selectedGroup.patient)}
+          eyebrow={`${selectedGroup.patient.medicalRecordNumber}${
+            selectedGroup.nextCare.hospitalization
+              ? ` · ${selectedGroup.nextCare.hospitalization.bed.room.name} · lit ${selectedGroup.nextCare.hospitalization.bed.code}`
+              : ''
+          }`}
+          onClose={() => setSelectedPatientId(null)}
+        >
+          <div className="nursing-patient-summary">
+            <article>
+              <span>Soins à réaliser</span>
+              <strong>{selectedGroup.activeRows.length}</strong>
+            </article>
+            <article>
+              <span>En retard</span>
+              <strong>{selectedGroup.overdueCount}</strong>
+            </article>
+            <article>
+              <span>Dans les 30 minutes</span>
+              <strong>{selectedGroup.dueSoonCount}</strong>
+            </article>
+            <article>
+              <span>Réalisés aujourd’hui</span>
+              <strong>{selectedGroup.completedTodayCount}</strong>
+            </article>
+          </div>
+          <div className="nursing-care-list">
+            {selectedGroup.activeRows.map((row) => {
+              const scheduledTime = new Date(row.scheduledAt).getTime();
+              const currentTime = worklistNow.getTime();
+              const isOverdue = scheduledTime < currentTime;
+              const isDueSoon = !isOverdue && scheduledTime <= currentTime + 30 * 60 * 1000;
+
+              return (
+                <article
+                  key={row.id}
+                  className={`nursing-care-card${isOverdue ? ' overdue' : isDueSoon ? ' due' : ''}`}
+                >
+                  <div className="nursing-care-heading">
+                    <div>
+                      <span className="nursing-care-time">
+                        {isOverdue ? 'En retard · ' : isDueSoon ? 'À faire maintenant · ' : ''}
+                        {formatDateTime(row.scheduledAt)}
+                      </span>
+                      <strong>{row.label}</strong>
+                    </div>
+                    <StatusBadge status={row.status} />
+                  </div>
+                  <div className="nursing-care-treatment">
+                    <div>
+                      <span>Type</span>
+                      <strong>
+                        {careTypes.find(([value]) => value === row.type)?.[1] ?? row.type}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Médicament / soin</span>
+                      <strong>{row.medicationName || row.instructions || '—'}</strong>
+                    </div>
+                    <div>
+                      <span>Dose / voie</span>
+                      <strong>
+                        {[row.dose, row.route, row.site].filter(Boolean).join(' · ') || '—'}
+                      </strong>
+                    </div>
+                  </div>
+                  {row.instructions && row.medicationName && (
+                    <p className="nursing-care-instructions">
+                      <strong>Consigne :</strong> {row.instructions}
+                    </p>
+                  )}
+                  <div className="nursing-care-actions">
+                    {canPerform && ['ORDERED', 'SCHEDULED', 'IN_PROGRESS'].includes(row.status) && (
+                      <button
+                        type="button"
+                        className="primary-button"
+                        onClick={() => openAdministration(row)}
+                      >
+                        <CheckCircle2 size={16} /> Confirmer le soin
+                      </button>
+                    )}
+                    {canPerform && ['ORDERED', 'SCHEDULED'].includes(row.status) && (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => openOmission(row)}
+                      >
+                        <Clock3 size={16} /> Non réalisé
+                      </button>
+                    )}
+                    {canCancel && !['COMPLETED', 'CANCELLED'].includes(row.status) && (
+                      <button
+                        type="button"
+                        className="text-button danger"
+                        disabled={submitting}
+                        onClick={() => void transition(row, 'CANCELLED')}
+                      >
+                        <XCircle size={15} /> Annuler
+                      </button>
+                    )}
+                    <CustomFieldsEditor entity="NURSING_CARE" entityId={row.id} />
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </Modal>
+      )}
 
       {open && (
         <Modal

@@ -6,8 +6,9 @@ import { useAuth } from '@/components/auth-provider';
 import { CustomFieldsEditor } from '@/components/custom-fields-editor';
 import { ListFilters } from '@/components/list-filters';
 import { Modal } from '@/components/modal';
+import { StatusBadge } from '@/components/status-badge';
 import { api } from '@/lib/api';
-import { matchesSearch, patientName } from '@/lib/display';
+import { formatHospitalTime, hospitalDateKey, matchesSearch, patientName } from '@/lib/display';
 import { hasAnyRole, roleLabels } from '@/lib/roles';
 import { Role, User } from '@/lib/types';
 
@@ -169,8 +170,8 @@ export default function StaffPage() {
       )
     );
   });
-  const today = new Date(referenceTime).toISOString().slice(0, 10);
-  const todayAttendance = attendance.filter((row) => row.date.slice(0, 10) === today);
+  const today = hospitalDateKey(new Date(referenceTime));
+  const todayAttendance = attendance.filter((row) => hospitalDateKey(row.date) === today);
   const doctorShifts = shifts
     .filter(
       (row) =>
@@ -314,11 +315,12 @@ export default function StaffPage() {
               <article key={row.id}>
                 <div>
                   <strong>{row.employee.username}</strong>
-                  <span>{roleLabels[row.employee.role]}</span>
+                  <span>
+                    {roleLabels[row.employee.role]} · arrivée {formatHospitalTime(row.clockIn)} ·
+                    sortie {formatHospitalTime(row.clockOut)}
+                  </span>
                 </div>
-                <span className={`status-badge status-${row.status.toLowerCase()}`}>
-                  {row.status}
-                </span>
+                <StatusBadge status={row.status} />
               </article>
             ))}
             {!todayAttendance.length && (

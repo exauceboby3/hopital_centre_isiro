@@ -23,6 +23,29 @@ export function localDateTimeInputValue(date = new Date()): string {
   return local.toISOString().slice(0, 16);
 }
 
+const HOSPITAL_TIME_ZONE = 'Africa/Lubumbashi';
+
+export function formatHospitalTime(value?: string | Date | null, empty = 'Non signée'): string {
+  if (!value) return empty;
+  return new Intl.DateTimeFormat('fr-FR', {
+    timeZone: HOSPITAL_TIME_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
+}
+
+export function hospitalDateKey(value: string | Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: HOSPITAL_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((entry) => entry.type === type)?.value ?? '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
 function normalizeSearchText(value: string): string {
   return value
     .normalize('NFD')
