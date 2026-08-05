@@ -1,4 +1,9 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   AppointmentStatus,
   CareAuthorizationStatus,
@@ -62,7 +67,7 @@ export class AppointmentAcknowledgementService {
         },
       });
 
-      return transaction.appointment.update({
+      const updated = await transaction.appointment.update({
         where: { id },
         data: {
           doctorAcknowledgedAt: new Date(),
@@ -72,10 +77,27 @@ export class AppointmentAcknowledgementService {
         include: {
           patient: true,
           doctor: true,
-          careAuthorization: { include: { invoice: true } },
+          careAuthorization: { select: { status: true } },
           consultation: true,
         },
       });
+      const authorizationStatus = updated.careAuthorization?.status;
+      const inOrder =
+        authorizationStatus === CareAuthorizationStatus.AUTHORIZED ||
+        authorizationStatus === CareAuthorizationStatus.WAIVED ||
+        authorizationStatus === CareAuthorizationStatus.CONSUMED;
+      return {
+        ...updated,
+        careAuthorization: updated.careAuthorization
+          ? {
+              ...updated.careAuthorization,
+              paymentClearance: {
+                inOrder,
+                status: inOrder ? 'IN_ORDER' : 'TO_REGULARIZE',
+              },
+            }
+          : null,
+      };
     });
   }
 }

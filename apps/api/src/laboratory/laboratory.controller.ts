@@ -104,7 +104,7 @@ export class LaboratoryController {
   }
 
   @Post('catalog')
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.MEDICAL_BIOLOGIST)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   createCatalogEntry(@Body() dto: CreateLabExamCatalogDto) {
     return this.laboratory.createCatalogEntry(dto);
   }
@@ -114,8 +114,9 @@ export class LaboratoryController {
   updateCatalogEntry(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateLabExamCatalogDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.laboratory.updateCatalogEntry(id, dto);
+    return this.laboratory.updateCatalogEntry(id, dto, user);
   }
 
   @Patch(':id/complete')

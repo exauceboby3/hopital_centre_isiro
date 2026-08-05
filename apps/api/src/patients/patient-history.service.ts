@@ -37,72 +37,92 @@ const departmentLabels: Partial<Record<Role, string>> = {
 export class PatientHistoryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async history(id: string) {
+  async history(id: string, includeFinancialDetails = false) {
     const patient = await this.prisma.patient.findFirst({
       where: { id, archivedAt: null },
       omit: { identityKey: true },
     });
     if (!patient) throw new NotFoundException('Patient introuvable.');
 
-    const [appointments, consultations, exams, hospitalizations, vitalSigns, prescriptions, invoices, amendments] =
-      await Promise.all([
-        this.prisma.appointment.findMany({
-          where: { patientId: id },
-          include: {
-            createdBy: { select: { username: true, role: true } },
-            doctor: true,
-          },
-        }),
-        this.prisma.consultation.findMany({
-          where: { patientId: id },
-          include: {
-            doctor: { include: { user: { select: { username: true, role: true } } } },
-          },
-        }),
-        this.prisma.examRequest.findMany({
-          where: { patientId: id },
-          include: {
-            requestedByDoctor: { include: { user: { select: { username: true, role: true } } } },
-            performedByLabTech: { include: { user: { select: { username: true, role: true } } } },
-            validatedByLabTech: { include: { user: { select: { username: true, role: true } } } },
-          },
-          orderBy: { requestedAt: 'asc' },
-        }),
-        this.prisma.hospitalization.findMany({
-          where: { patientId: id },
-          include: { bed: { include: { room: true } }, doctor: true },
-        }),
-        this.prisma.vitalSign.findMany({
-          where: { patientId: id },
-          include: { recordedBy: { select: { username: true, role: true } } },
-        }),
-        this.prisma.prescription.findMany({
-          where: { patientId: id },
-          include: {
-            prescribedBy: { select: { username: true, role: true } },
-            items: { include: { medication: true } },
-          },
-        }),
-        this.prisma.invoice.findMany({
-          where: { patientId: id },
-          include: {
-            issuedBy: { select: { username: true, role: true } },
-            payments: { include: { receivedBy: { select: { username: true, role: true } } } },
-            careAuthorization: {
-              include: {
-                examRequest: { select: { requestGroupId: true } },
-                service: { select: { type: true, name: true } },
+    const [
+      appointments,
+      consultations,
+      exams,
+      hospitalizations,
+      vitalSigns,
+      prescriptions,
+      nursingCare,
+      invoices,
+      amendments,
+    ] = await Promise.all([
+      this.prisma.appointment.findMany({
+        where: { patientId: id },
+        include: {
+          createdBy: { select: { username: true, role: true } },
+          doctor: true,
+        },
+      }),
+      this.prisma.consultation.findMany({
+        where: { patientId: id },
+        include: {
+          doctor: { include: { user: { select: { username: true, role: true } } } },
+        },
+      }),
+      this.prisma.examRequest.findMany({
+        where: { patientId: id },
+        include: {
+          requestedByDoctor: { include: { user: { select: { username: true, role: true } } } },
+          performedByLabTech: { include: { user: { select: { username: true, role: true } } } },
+          validatedByLabTech: { include: { user: { select: { username: true, role: true } } } },
+        },
+        orderBy: { requestedAt: 'asc' },
+      }),
+      this.prisma.hospitalization.findMany({
+        where: { patientId: id },
+        include: { bed: { include: { room: true } }, doctor: true },
+      }),
+      this.prisma.vitalSign.findMany({
+        where: { patientId: id },
+        include: { recordedBy: { select: { username: true, role: true } } },
+      }),
+      this.prisma.prescription.findMany({
+        where: { patientId: id },
+        include: {
+          prescribedBy: { select: { username: true, role: true } },
+          items: { include: { medication: true } },
+        },
+      }),
+      this.prisma.nursingCare.findMany({
+        where: { patientId: id },
+        include: {
+          performedBy: { select: { username: true, role: true } },
+          assignedNurse: { select: { username: true, role: true } },
+          hospitalization: { include: { bed: { include: { room: true } } } },
+        },
+        orderBy: { scheduledAt: 'asc' },
+      }),
+      includeFinancialDetails
+        ? this.prisma.invoice.findMany({
+            where: { patientId: id },
+            include: {
+              issuedBy: { select: { username: true, role: true } },
+              payments: { include: { receivedBy: { select: { username: true, role: true } } } },
+              careAuthorization: {
+                include: {
+                  examRequest: { select: { requestGroupId: true } },
+                  service: { select: { type: true, name: true } },
+                },
               },
             },
-          },
-          orderBy: { issuedAt: 'asc' },
-        }),
-        this.prisma.patientClinicalAmendment.findMany({
-          where: { patientId: id },
-          include: { author: { select: { username: true, role: true } } },
-          orderBy: { createdAt: 'asc' },
-        }),
-      ]);
+            orderBy: { issuedAt: 'asc' },
+          })
+        : Promise.resolve([]),
+      this.prisma.patientClinicalAmendment.findMany({
+        where: { patientId: id },
+        include: { author: { select: { username: true, role: true } } },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ]);
 
     const entries: HistoryEntry[] = [];
     const push = (entry: Omit<HistoryEntry, 'dateKey'>) =>
@@ -247,6 +267,28 @@ export class PatientHistoryService {
       });
     });
 
+    nursingCare.forEach((row) => {
+      const actor = row.performedBy ?? row.assignedNurse;
+      push({
+        id: row.id,
+        kind: 'NURSING',
+        date: row.performedAt ?? row.scheduledAt,
+        title: row.label,
+        description: [
+          row.medicationName
+            ? `${row.medicationName} · ${row.dose ?? ''} · ${row.route ?? ''}`
+            : undefined,
+          row.observations,
+          row.instructions ? `Consignes/actions : ${row.instructions}` : undefined,
+        ]
+          .filter(Boolean)
+          .join(' — '),
+        status: row.status,
+        author: actor?.username,
+        department: 'Soins infirmiers',
+      });
+    });
+
     amendments.forEach((row) => {
       push({
         id: row.id,
@@ -257,14 +299,16 @@ export class PatientHistoryService {
           row.previousValue ? `Ancienne valeur : ${row.previousValue}` : undefined,
           `Nouvelle valeur : ${row.newValue}`,
           `Motif : ${row.reason}`,
-        ].filter(Boolean).join(' — '),
+        ]
+          .filter(Boolean)
+          .join(' — '),
         status: 'RECORDED',
         author: row.author.username,
         department: departmentLabels[row.author.role] ?? 'Médecine',
       });
     });
 
-    const invoiceGroups = new Map<string, typeof invoices>();
+    const invoiceGroups = new Map<string, Array<(typeof invoices)[number]>>();
     invoices.forEach((invoice) => {
       const laboratoryGroupId = invoice.careAuthorization?.examRequest?.requestGroupId;
       const key = laboratoryGroupId ? `LAB-${laboratoryGroupId}` : `INV-${invoice.id}`;
@@ -276,7 +320,9 @@ export class PatientHistoryService {
     invoiceGroups.forEach((group, key) => {
       const laboratoryBatch = key.startsWith('LAB-') && group.length > 1;
       const total = group.reduce((sum, invoice) => sum + Number(invoice.total), 0);
-      const payments = group.flatMap((invoice) => invoice.payments.map((payment) => ({ invoice, payment })));
+      const payments = group.flatMap((invoice) =>
+        invoice.payments.map((payment) => ({ invoice, payment })),
+      );
       const latestInvoice = [...group].sort(
         (a, b) => b.issuedAt.getTime() - a.issuedAt.getTime(),
       )[0]!;

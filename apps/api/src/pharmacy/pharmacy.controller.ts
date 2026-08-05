@@ -41,8 +41,11 @@ export class PharmacyController {
     Role.SURGEON,
     Role.MIDWIFE,
   )
-  list(@Query('lowStock', new ParseBoolPipe({ optional: true })) lowStock?: boolean) {
-    return this.pharmacy.list(lowStock);
+  list(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('lowStock', new ParseBoolPipe({ optional: true })) lowStock?: boolean,
+  ) {
+    return this.pharmacy.list(lowStock, user);
   }
 
   @Post()

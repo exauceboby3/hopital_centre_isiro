@@ -13,6 +13,7 @@ import {
   NursingCareStatus,
   NursingCareType,
   PatientJourneyStage,
+  Prisma,
   Role,
 } from '@prisma/client';
 import { AuthenticatedUser, hasAnyRole } from '../common/authenticated-user';
@@ -41,10 +42,7 @@ export class HospitalizationReferralService {
       throw new ForbiddenException('Cette consultation appartient à un autre médecin.');
     }
 
-    assertLaboratoryResultsComplete(
-      consultation.examRequests,
-      'Hospitalisation indisponible',
-    );
+    assertLaboratoryResultsComplete(consultation.examRequests, 'Hospitalisation indisponible');
     const activeHospitalization = await this.prisma.hospitalization.findFirst({
       where: { patientId: consultation.patientId, status: 'ACTIVE' },
       select: { id: true },
@@ -82,7 +80,7 @@ export class HospitalizationReferralService {
     if (existing) {
       const now = new Date();
       await this.finalizeMedicalReferral(consultationId, consultation.appointmentId, now);
-      return existing;
+      return this.presentReferral(existing);
     }
 
     const now = new Date();
@@ -133,7 +131,7 @@ export class HospitalizationReferralService {
           status: ConsultationStatus.COMPLETED,
           completedAt: now,
           orientation:
-            'Hospitalisation demandée — admission à organiser par la réception et les infirmiers; facture à régler à la sortie',
+            'Hospitalisation demandée — admission à organiser par la réception et les infirmiers; règlement à gérer par la caisse à la sortie',
         },
       });
 
@@ -188,12 +186,12 @@ export class HospitalizationReferralService {
           data: recipients.map((recipient) => ({
             senderId: user.id,
             receiverId: recipient.id,
-            content: `Hospitalisation demandée : ${patientName} (${consultation.patient.medicalRecordNumber}). La réception et l'équipe infirmière doivent attribuer un lit et organiser l'admission. Aucun paiement préalable : la facture du séjour sera finalisée à la sortie. Le médecin demandeur est maintenant disponible pour un autre patient.`,
+            content: `Hospitalisation demandée : ${patientName} (${consultation.patient.medicalRecordNumber}). La réception et l'équipe infirmière doivent attribuer un lit et organiser l'admission. Aucun paiement préalable : le règlement du séjour sera géré par la caisse à la sortie. Le médecin demandeur est maintenant disponible pour un autre patient.`,
           })),
         });
       }
 
-      return authorization;
+      return this.presentReferral(authorization);
     });
   }
 
@@ -215,7 +213,7 @@ export class HospitalizationReferralService {
           status: ConsultationStatus.COMPLETED,
           completedAt: now,
           orientation:
-            'Hospitalisation demandée — admission à organiser par la réception et les infirmiers; facture à régler à la sortie',
+            'Hospitalisation demandée — admission à organiser par la réception et les infirmiers; règlement à gérer par la caisse à la sortie',
         },
       });
       if (appointmentId) {
@@ -228,6 +226,33 @@ export class HospitalizationReferralService {
         });
       }
     });
+  }
+
+  private presentReferral<
+    T extends {
+      invoice: unknown;
+      invoiceId: string;
+      amount: Prisma.Decimal;
+      service: { price: Prisma.Decimal } | null;
+      status: CareAuthorizationStatus;
+    },
+  >(authorization: T) {
+    const { invoice, invoiceId, amount, service, ...clinicalAuthorization } = authorization;
+    void invoice;
+    void invoiceId;
+    void amount;
+    const clinicalService = service
+      ? (() => {
+          const { price, ...details } = service;
+          void price;
+          return details;
+        })()
+      : null;
+    return {
+      ...clinicalAuthorization,
+      service: clinicalService,
+      paymentClearance: { inOrder: true, status: 'IN_ORDER' },
+    };
   }
 
   private invoiceNumber() {

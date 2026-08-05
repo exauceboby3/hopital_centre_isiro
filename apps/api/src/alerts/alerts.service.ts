@@ -6,6 +6,20 @@ import { CreateEmergencyAlertDto } from './dto/create-emergency-alert.dto';
 const alertInclude = {
   createdBy: { select: { id: true, username: true, role: true } },
   resolvedBy: { select: { id: true, username: true, role: true } },
+  patient: {
+    select: {
+      id: true,
+      medicalRecordNumber: true,
+      lastName: true,
+      postName: true,
+      firstName: true,
+    },
+  },
+  hospitalization: { include: { bed: { include: { room: true } } } },
+  comments: {
+    include: { author: { select: { id: true, username: true, role: true } } },
+    orderBy: { createdAt: 'asc' as const },
+  },
 };
 
 @Injectable()
@@ -34,10 +48,23 @@ export class AlertsService {
     });
   }
 
-  create(dto: CreateEmergencyAlertDto, createdById: string) {
+  async create(dto: CreateEmergencyAlertDto, createdById: string) {
     const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : undefined;
     if (expiresAt && expiresAt <= new Date()) {
       throw new BadRequestException("La date d'expiration doit être future.");
+    }
+    if (dto.hospitalizationId && !dto.patientId) {
+      throw new BadRequestException(
+        "Le patient est obligatoire lorsqu'une hospitalisation est associée à l'alerte.",
+      );
+    }
+    if (dto.hospitalizationId) {
+      const stay = await this.prisma.hospitalization.findFirst({
+        where: { id: dto.hospitalizationId, patientId: dto.patientId, status: 'ACTIVE' },
+        select: { id: true },
+      });
+      if (!stay)
+        throw new BadRequestException("L'hospitalisation active ne correspond pas au patient.");
     }
     return this.prisma.emergencyAlert.create({
       data: {
@@ -49,6 +76,40 @@ export class AlertsService {
         createdById,
       },
       include: alertInclude,
+    });
+  }
+
+  patientAlerts(patientId: string) {
+    return this.prisma.emergencyAlert.findMany({
+      where: { patientId },
+      include: alertInclude,
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+  }
+
+  async patientIdForAlert(id: string) {
+    const alert = await this.prisma.emergencyAlert.findUnique({
+      where: { id },
+      select: { patientId: true },
+    });
+    if (!alert) throw new NotFoundException("Alerte d'urgence introuvable.");
+    return alert.patientId;
+  }
+
+  async addComment(id: string, comment: string, authorId: string) {
+    const normalizedComment = comment.trim();
+    if (normalizedComment.length < 2) {
+      throw new BadRequestException('Le commentaire doit contenir au moins 2 caractères.');
+    }
+    const alert = await this.prisma.emergencyAlert.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!alert) throw new NotFoundException("Alerte d'urgence introuvable.");
+    return this.prisma.emergencyAlertComment.create({
+      data: { alertId: id, authorId, comment: normalizedComment },
+      include: { author: { select: { id: true, username: true, role: true } } },
     });
   }
 

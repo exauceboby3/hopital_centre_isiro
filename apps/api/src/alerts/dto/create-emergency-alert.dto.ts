@@ -1,6 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EmergencySeverity, Role } from '@prisma/client';
-import { IsDateString, IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsDateString,
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class CreateEmergencyAlertDto {
   @ApiProperty()
@@ -34,4 +42,19 @@ export class CreateEmergencyAlertDto {
   @IsOptional()
   @IsDateString()
   expiresAt?: string;
+
+  @IsOptional()
+  @IsUUID()
+  patientId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  hospitalizationId?: string;
+}
+
+export class CreateEmergencyAlertCommentDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(3000)
+  comment: string;
 }

@@ -24,14 +24,7 @@ import {
   UpdateCareVoucherStatusDto,
 } from './dto/care-voucher.dto';
 
-const voucherRoles = [
-  Role.SUPER_ADMIN,
-  Role.ADMIN,
-  Role.CASHIER,
-  Role.ACCOUNTANT,
-  Role.RECEPTIONIST,
-  Role.SECRETARY,
-];
+const voucherRoles = [Role.SUPER_ADMIN, Role.ADMIN, Role.CASHIER, Role.ACCOUNTANT];
 
 @ApiTags('care-vouchers')
 @ApiCookieAuth('hospital_access')

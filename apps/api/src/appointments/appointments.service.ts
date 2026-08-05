@@ -19,6 +19,7 @@ import { hospitalDayRange } from '../common/hospital-time';
 import { encodeVitalSignMetadata, presentVitalSign } from '../common/vital-sign-metadata';
 import { mergeClinicalReport } from '../consultations/clinical-report';
 import { CreateVitalSignDto } from '../consultations/dto/create-vital-sign.dto';
+import { stripLabFinancialDetails } from '../laboratory/laboratory.service.helpers';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
@@ -41,6 +42,7 @@ const appointmentInclude = {
 } satisfies Prisma.AppointmentInclude;
 
 type AppointmentRow = Prisma.AppointmentGetPayload<{ include: typeof appointmentInclude }>;
+const financialRoles = [Role.SUPER_ADMIN, Role.ADMIN, Role.CASHIER, Role.ACCOUNTANT] as const;
 
 @Injectable()
 export class AppointmentsService {
@@ -54,6 +56,7 @@ export class AppointmentsService {
     to?: string,
     status?: AppointmentStatus,
     scope: 'active' | 'history' = 'active',
+    user?: AuthenticatedUser,
   ) {
     const { start: startToday } = hospitalDayRange();
 
@@ -102,9 +105,8 @@ export class AppointmentsService {
       orderBy: scope === 'history' ? { scheduledAt: 'desc' } : { scheduledAt: 'asc' },
       take: 250,
     });
-    return rows.map((row) => this.present(row));
+    return rows.map((row) => this.present(row, user));
   }
-
 
   async markPastScheduledAsNoShow(reference = new Date()) {
     const { start } = hospitalDayRange(reference);
@@ -140,8 +142,7 @@ export class AppointmentsService {
     return rows.map((row) => this.present(row));
   }
 
-
-  create(dto: CreateAppointmentDto, createdById: string) {
+  create(dto: CreateAppointmentDto, user: AuthenticatedUser) {
     return this.prisma.$transaction(async (transaction) => {
       const { billableServiceId, ...appointmentData } = dto;
       const scheduledAt = new Date(dto.scheduledAt);
@@ -149,7 +150,9 @@ export class AppointmentsService {
         throw new BadRequestException('La date du rendez-vous est invalide.');
       }
       if (scheduledAt.getTime() < Date.now() - 5 * 60_000) {
-        throw new BadRequestException('Un nouveau rendez-vous ne peut pas être programmé dans le passé.');
+        throw new BadRequestException(
+          'Un nouveau rendez-vous ne peut pas être programmé dans le passé.',
+        );
       }
       if (dto.doctorId) await this.assertActiveDoctor(transaction, dto.doctorId);
 
@@ -171,14 +174,14 @@ export class AppointmentsService {
         data: {
           ...appointmentData,
           scheduledAt,
-          createdById,
+          createdById: user.id,
         },
       });
       await this.authorizations.createFromService(
         {
           patientId: dto.patientId,
           serviceId: billableServiceId,
-          createdById,
+          createdById: user.id,
           expectedType: BillableServiceType.CONSULTATION,
           appointmentId: appointment.id,
         },
@@ -188,11 +191,11 @@ export class AppointmentsService {
         where: { id: appointment.id },
         include: appointmentInclude,
       });
-      return this.present(row);
+      return this.present(row, user);
     });
   }
 
-  async update(id: string, dto: UpdateAppointmentDto, updatedById: string) {
+  async update(id: string, dto: UpdateAppointmentDto, user: AuthenticatedUser) {
     return this.prisma.$transaction(async (transaction) => {
       const appointment = await transaction.appointment.findUnique({
         where: { id },
@@ -204,7 +207,9 @@ export class AppointmentsService {
 
       if (dto.status === AppointmentStatus.CHECKED_IN) {
         if (!targetDoctorId) {
-          throw new ConflictException('Affectez un médecin avant de marquer le patient comme arrivé.');
+          throw new ConflictException(
+            'Affectez un médecin avant de marquer le patient comme arrivé.',
+          );
         }
         if (!appointment.careAuthorization) {
           throw new NotFoundException('Autorisation financière de consultation introuvable.');
@@ -238,7 +243,11 @@ export class AppointmentsService {
         },
       });
 
-      if (dto.status === AppointmentStatus.CHECKED_IN && targetDoctorId && !appointment.consultation) {
+      if (
+        dto.status === AppointmentStatus.CHECKED_IN &&
+        targetDoctorId &&
+        !appointment.consultation
+      ) {
         await transaction.consultation.create({
           data: {
             patientId: appointment.patientId,
@@ -257,13 +266,13 @@ export class AppointmentsService {
         dto.status === AppointmentStatus.CHECKED_IN ||
         (reassigned && appointment.status === AppointmentStatus.CHECKED_IN);
       if (targetDoctorId && readyForDoctor) {
-        await this.notifyDoctor(transaction, updatedById, id);
+        await this.notifyDoctor(transaction, user.id, id);
       }
       const row = await transaction.appointment.findUniqueOrThrow({
         where: { id },
         include: appointmentInclude,
       });
-      return this.present(row);
+      return this.present(row, user);
     });
   }
 
@@ -394,7 +403,8 @@ export class AppointmentsService {
         throw new ConflictException('Le patient est déjà affecté à ce médecin.');
       }
       const previousDoctorId = appointment.doctorId;
-      if (!previousDoctorId) throw new ConflictException('Aucun médecin n’est affecté à ce patient.');
+      if (!previousDoctorId)
+        throw new ConflictException('Aucun médecin n’est affecté à ce patient.');
 
       const claimed = await transaction.appointment.updateMany({
         where: {
@@ -465,14 +475,16 @@ export class AppointmentsService {
     });
   }
 
-  private present(row: AppointmentRow) {
-    return {
+  private present(row: AppointmentRow, user?: AuthenticatedUser) {
+    const appointment = {
       ...row,
       patient: {
         ...row.patient,
         vitalSigns: row.patient.vitalSigns.map((vital) => presentVitalSign(vital)),
       },
     };
+    if (user && hasAnyRole(user, financialRoles)) return appointment;
+    return stripLabFinancialDetails(appointment);
   }
 
   private async notifyDoctor(
@@ -510,7 +522,11 @@ export class AppointmentsService {
   }
 
   private assertAssignedDoctor(assignedUserId: string | undefined, user: AuthenticatedUser) {
-    if (!hasAnyRole(user, [Role.DOCTOR, Role.SURGEON, Role.MIDWIFE]) || !assignedUserId || assignedUserId !== user.id) {
+    if (
+      !hasAnyRole(user, [Role.DOCTOR, Role.SURGEON, Role.MIDWIFE]) ||
+      !assignedUserId ||
+      assignedUserId !== user.id
+    ) {
       throw new ForbiddenException('Ce patient est attribué à un autre médecin.');
     }
   }

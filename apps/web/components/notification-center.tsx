@@ -1,1 +1,99 @@
-'use client';import{AlertTriangle,CheckCircle2,Info,X,XCircle}from'lucide-react';import{useEffect,useRef,useState}from'react';import{APP_NOTIFICATION_EVENT,AppNotificationDetail,NotificationKind,}from'@/lib/notifications';interface NotificationItem extends AppNotificationDetail{id:string;}const icons:Record<NotificationKind,typeof CheckCircle2>={success:CheckCircle2,error:XCircle,warning:AlertTriangle,info:Info,};const titles:Record<NotificationKind,string>={success:'Opération réussie',error:'Action impossible',warning:'Attention',info:'Information',};function notificationId(){return`${Date.now()}-${Math.random().toString(16).slice(2)}`;}function notificationKey(detail:AppNotificationDetail){return`${detail.kind}:${detail.title??''}:${detail.message.trim()}`;}export function NotificationCenter(){const[items,setItems]=useState<NotificationItem[]>([]);const recent=useRef(new Map<string,number>());const timers=useRef(new Map<string,number>());useEffect(()=>{const remove=(id:string)=>{const timer=timers.current.get(id);if(timer!==undefined)window.clearTimeout(timer);timers.current.delete(id);setItems((current)=>current.filter((item)=>item.id!==id));};const show=(detail:AppNotificationDetail)=>{const key=notificationKey(detail);const now=Date.now();const previous=recent.current.get(key)??0;if(now-previous<5_000)return;recent.current.set(key,now);for(const[entry,shownAt]of recent.current){if(now-shownAt>60_000)recent.current.delete(entry);}const id=notificationId();setItems((current)=>[...current.slice(-2),{...detail,id}]);const timer=window.setTimeout(()=>remove(id),detail.duration??(detail.kind==='error'?7000:4500),);timers.current.set(id,timer);};const onNotification=(event:Event)=>{const detail=(event as CustomEvent<AppNotificationDetail>).detail;if(detail?.message?.trim())show(detail);};window.addEventListener(APP_NOTIFICATION_EVENT,onNotification);return()=>{window.removeEventListener(APP_NOTIFICATION_EVENT,onNotification);timers.current.forEach((timer)=>window.clearTimeout(timer));timers.current.clear();};},[]);if(!items.length)return null;return(<aside className="app-notification-stack"aria-live="polite"aria-atomic="false">{items.map((item)=>{const Icon=icons[item.kind];return(<article className={`app-notification ${item.kind}`}key={item.id}role="status"><Icon size={21}/><div><strong>{item.title??titles[item.kind]}</strong><p>{item.message}</p></div><button type="button"aria-label="Fermer la notification"onClick={()=>{const timer=timers.current.get(item.id);if(timer!==undefined)window.clearTimeout(timer);timers.current.delete(item.id);setItems((current)=>current.filter((entry)=>entry.id!==item.id));}}><X size={16}/></button></article>);})}</aside>);}
+'use client';
+import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import {
+  APP_NOTIFICATION_EVENT,
+  AppNotificationDetail,
+  NotificationKind,
+} from '@/lib/notifications';
+interface NotificationItem extends AppNotificationDetail {
+  id: string;
+}
+const icons: Record<NotificationKind, typeof CheckCircle2> = {
+  success: CheckCircle2,
+  error: XCircle,
+  warning: AlertTriangle,
+  info: Info,
+};
+const titles: Record<NotificationKind, string> = {
+  success: 'Opération réussie',
+  error: 'Action impossible',
+  warning: 'Attention',
+  info: 'Information',
+};
+function notificationId() {
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+function notificationKey(detail: AppNotificationDetail) {
+  return `${detail.kind}:${detail.title ?? ''}:${detail.message.trim()}`;
+}
+export function NotificationCenter() {
+  const [items, setItems] = useState<NotificationItem[]>([]);
+  const recent = useRef(new Map<string, number>());
+  const timers = useRef(new Map<string, number>());
+  useEffect(() => {
+    const activeTimers = timers.current;
+    const remove = (id: string) => {
+      const timer = activeTimers.get(id);
+      if (timer !== undefined) window.clearTimeout(timer);
+      activeTimers.delete(id);
+      setItems((current) => current.filter((item) => item.id !== id));
+    };
+    const show = (detail: AppNotificationDetail) => {
+      const key = notificationKey(detail);
+      const now = Date.now();
+      const previous = recent.current.get(key) ?? 0;
+      if (now - previous < 5_000) return;
+      recent.current.set(key, now);
+      for (const [entry, shownAt] of recent.current) {
+        if (now - shownAt > 60_000) recent.current.delete(entry);
+      }
+      const id = notificationId();
+      setItems((current) => [...current.slice(-2), { ...detail, id }]);
+      const timer = window.setTimeout(
+        () => remove(id),
+        detail.duration ?? (detail.kind === 'error' ? 7000 : 4500),
+      );
+      activeTimers.set(id, timer);
+    };
+    const onNotification = (event: Event) => {
+      const detail = (event as CustomEvent<AppNotificationDetail>).detail;
+      if (detail?.message?.trim()) show(detail);
+    };
+    window.addEventListener(APP_NOTIFICATION_EVENT, onNotification);
+    return () => {
+      window.removeEventListener(APP_NOTIFICATION_EVENT, onNotification);
+      activeTimers.forEach((timer) => window.clearTimeout(timer));
+      activeTimers.clear();
+    };
+  }, []);
+  if (!items.length) return null;
+  return (
+    <aside className="app-notification-stack" aria-live="polite" aria-atomic="false">
+      {items.map((item) => {
+        const Icon = icons[item.kind];
+        return (
+          <article className={`app-notification ${item.kind}`} key={item.id} role="status">
+            <Icon size={21} />
+            <div>
+              <strong>{item.title ?? titles[item.kind]}</strong>
+              <p>{item.message}</p>
+            </div>
+            <button
+              type="button"
+              aria-label="Fermer la notification"
+              onClick={() => {
+                const timer = timers.current.get(item.id);
+                if (timer !== undefined) window.clearTimeout(timer);
+                timers.current.delete(item.id);
+                setItems((current) => current.filter((entry) => entry.id !== item.id));
+              }}
+            >
+              <X size={16} />
+            </button>
+          </article>
+        );
+      })}
+    </aside>
+  );
+}

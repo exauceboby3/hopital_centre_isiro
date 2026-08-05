@@ -20,7 +20,9 @@ import {
   PatientJourneyStage,
   PrescriptionStatus,
   Prisma,
+  Role,
 } from '@prisma/client';
+import { AuthenticatedUser, hasAnyRole } from '../common/authenticated-user';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   CreateGraceAuthorizationDto,
@@ -45,6 +47,26 @@ interface GraceMetadata {
 @Injectable()
 export class PatientFinancialAccessService {
   constructor(private readonly prisma: PrismaService) {}
+
+  presentFileAuthorization<T extends { id: string; status: CareAuthorizationStatus }>(
+    authorization: T,
+    user: AuthenticatedUser,
+  ) {
+    if (hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN, Role.CASHIER, Role.ACCOUNTANT])) {
+      return authorization;
+    }
+    const clearedStatuses: CareAuthorizationStatus[] = [
+      CareAuthorizationStatus.AUTHORIZED,
+      CareAuthorizationStatus.WAIVED,
+      CareAuthorizationStatus.CONSUMED,
+    ];
+    const inOrder = clearedStatuses.includes(authorization.status);
+    return {
+      id: authorization.id,
+      status: authorization.status,
+      paymentClearance: { inOrder, status: inOrder ? 'IN_ORDER' : 'TO_REGULARIZE' },
+    };
+  }
 
   async createInitialFileAuthorization(
     patientId: string,
@@ -103,7 +125,9 @@ export class PatientFinancialAccessService {
     });
     if (!patient) throw new NotFoundException('Patient introuvable.');
     if ((await this.deathStatus(patientId, this.prisma)).deceased) {
-      throw new BadRequestException('Une mesure de grâce ne peut pas être ouverte pour un patient décédé.');
+      throw new BadRequestException(
+        'Une mesure de grâce ne peut pas être ouverte pour un patient décédé.',
+      );
     }
 
     const now = new Date();
@@ -173,7 +197,10 @@ export class PatientFinancialAccessService {
         where: { id },
         data: {
           status: CareVoucherStatus.CANCELLED,
-          notes: this.appendNote(voucher.notes, `Révoquée par ${userId} le ${new Date().toISOString()}`),
+          notes: this.appendNote(
+            voucher.notes,
+            `Révoquée par ${userId} le ${new Date().toISOString()}`,
+          ),
         },
       });
       await transaction.auditLog.create({
@@ -201,7 +228,14 @@ export class PatientFinancialAccessService {
     }
 
     return this.prisma.$transaction(async (transaction) => {
-      await this.writePatientMarker(transaction, patientId, 'patient_status', 'Statut du patient', 'DECEASED', userId);
+      await this.writePatientMarker(
+        transaction,
+        patientId,
+        'patient_status',
+        'Statut du patient',
+        'DECEASED',
+        userId,
+      );
       await this.writePatientMarker(
         transaction,
         patientId,
@@ -211,7 +245,14 @@ export class PatientFinancialAccessService {
         userId,
         CustomFieldType.DATE,
       );
-      await this.writePatientMarker(transaction, patientId, 'death_reason', 'Cause / contexte du décès', dto.reason.trim(), userId);
+      await this.writePatientMarker(
+        transaction,
+        patientId,
+        'death_reason',
+        'Cause / contexte du décès',
+        dto.reason.trim(),
+        userId,
+      );
       if (dto.notes?.trim()) {
         await this.writePatientMarker(
           transaction,
@@ -253,7 +294,10 @@ export class PatientFinancialAccessService {
             patientId,
             status: { in: [ExamStatus.REQUESTED, ExamStatus.IN_PROGRESS, ExamStatus.COMPLETED] },
           },
-          data: { status: ExamStatus.CANCELLED, reviewComment: 'Annulé après déclaration du décès.' },
+          data: {
+            status: ExamStatus.CANCELLED,
+            reviewComment: 'Annulé après déclaration du décès.',
+          },
         }),
         transaction.nursingCare.updateMany({
           where: {
@@ -413,7 +457,9 @@ export class PatientFinancialAccessService {
       throw new BadRequestException('La fiche d’un patient décédé ne peut pas être renouvelée.');
     }
 
-    const service = await db.billableService.findUnique({ where: { code: PATIENT_FILE_SERVICE_CODE } });
+    const service = await db.billableService.findUnique({
+      where: { code: PATIENT_FILE_SERVICE_CODE },
+    });
     if (!service || !service.isActive) {
       throw new NotFoundException('Le tarif de fiche patient mensuelle est absent ou inactif.');
     }
@@ -458,7 +504,9 @@ export class PatientFinancialAccessService {
         type: BillableServiceType.OTHER,
         description: service.name,
         amount: service.price,
-        status: requiresPayment ? CareAuthorizationStatus.PENDING : CareAuthorizationStatus.AUTHORIZED,
+        status: requiresPayment
+          ? CareAuthorizationStatus.PENDING
+          : CareAuthorizationStatus.AUTHORIZED,
         authorizedAt: requiresPayment ? undefined : new Date(),
       },
       include: { invoice: true, service: true },
@@ -503,7 +551,11 @@ export class PatientFinancialAccessService {
     };
   }
 
-  private async outstandingBalance(patientId: string, excludeInvoiceId: string | undefined, db: DatabaseClient) {
+  private async outstandingBalance(
+    patientId: string,
+    excludeInvoiceId: string | undefined,
+    db: DatabaseClient,
+  ) {
     const invoices = await db.invoice.findMany({
       where: {
         patientId,
@@ -519,13 +571,18 @@ export class PatientFinancialAccessService {
       take: 250,
     });
     return invoices.reduce((sum, invoice) => {
-      const paid = invoice.payments.reduce((paymentSum, payment) => paymentSum + Number(payment.amount), 0);
+      const paid = invoice.payments.reduce(
+        (paymentSum, payment) => paymentSum + Number(payment.amount),
+        0,
+      );
       const insured =
-        invoice.insuranceCoverage && ['GUARANTEED', 'SETTLED'].includes(invoice.insuranceCoverage.status)
+        invoice.insuranceCoverage &&
+        ['GUARANTEED', 'SETTLED'].includes(invoice.insuranceCoverage.status)
           ? Number(invoice.insuranceCoverage.insurerAmount)
           : 0;
       const sponsored =
-        invoice.voucherCoverage && ['GUARANTEED', 'SETTLED'].includes(invoice.voucherCoverage.status)
+        invoice.voucherCoverage &&
+        ['GUARANTEED', 'SETTLED'].includes(invoice.voucherCoverage.status)
           ? Number(invoice.voucherCoverage.sponsorAmount)
           : 0;
       return sum + Math.max(0, Number(invoice.total) - paid - insured - sponsored);
@@ -552,7 +609,9 @@ export class PatientFinancialAccessService {
       },
       include: { definition: true },
     });
-    const byKey = new Map(values.map((value) => [value.definition.key, String(value.value).replaceAll('"', '')]));
+    const byKey = new Map(
+      values.map((value) => [value.definition.key, String(value.value).replaceAll('"', '')]),
+    );
     return {
       deceased: true,
       occurredAt: byKey.get('deceased_at') ?? null,
@@ -610,12 +669,7 @@ export class PatientFinancialAccessService {
     if (!notes) return null;
     try {
       const value = JSON.parse(notes) as Partial<GraceMetadata>;
-      if (
-        value.kind === 'INTERNAL_GRACE' &&
-        value.scope &&
-        value.reason &&
-        value.createdById
-      ) {
+      if (value.kind === 'INTERNAL_GRACE' && value.scope && value.reason && value.createdById) {
         return value as GraceMetadata;
       }
     } catch {

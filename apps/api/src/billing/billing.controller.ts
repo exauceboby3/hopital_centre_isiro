@@ -30,14 +30,7 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 @ApiTags('billing')
 @ApiCookieAuth('hospital_access')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(
-  Role.SUPER_ADMIN,
-  Role.ADMIN,
-  Role.CASHIER,
-  Role.ACCOUNTANT,
-  Role.RECEPTIONIST,
-  Role.SECRETARY,
-)
+@Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.CASHIER, Role.ACCOUNTANT)
 @Controller('billing/invoices')
 export class BillingController {
   constructor(

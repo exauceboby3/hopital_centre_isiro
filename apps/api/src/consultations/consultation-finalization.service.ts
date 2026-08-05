@@ -77,7 +77,7 @@ export function assertCanSignConsultation(consultation: SignableConsultationSnap
 
   if (report.decision === 'PRESCRIPTION' && consultation.prescriptions.length === 0) {
     throw new BadRequestException(
-      'Créez l’ordonnance structurée et sa facture avant de signer une consultation conclue par prescription.',
+      'Enregistrez l’ordonnance structurée avant de signer une consultation conclue par prescription.',
     );
   }
 }

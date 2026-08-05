@@ -12,9 +12,11 @@ import {
   ExamStatus,
   PatientJourneyStage,
   Prisma,
+  Role,
 } from '@prisma/client';
 import { FinancialAuthorizationService } from '../billing/financial-authorization.service';
 import { createBusinessNotifications } from '../business-notifications/business-notification.repository';
+import { AuthenticatedUser, hasAnyRole } from '../common/authenticated-user';
 import { PrismaService } from '../prisma/prisma.service';
 import { CompleteExamDto } from './dto/complete-exam.dto';
 import {
@@ -76,11 +78,7 @@ export class LaboratoryService {
           'Examen de laboratoire introuvable, inactif ou non facturable.',
         );
       }
-      const template = decodeLabTemplate(
-        service.labResultTemplate,
-        service.code,
-        service.category,
-      );
+      const template = decodeLabTemplate(service.labResultTemplate, service.code, service.category);
       const exam = await transaction.examRequest.create({
         data: {
           ...examData,
@@ -137,8 +135,8 @@ export class LaboratoryService {
         );
       }
     }
-    const orderedServices = dto.serviceIds.map(
-      (serviceId) => services.find((service) => service.id === serviceId)!,
+    const orderedServices = dto.serviceIds.map((serviceId) =>
+      services.find((service) => service.id === serviceId)!,
     );
     const requestGroupId = randomUUID();
     return this.prisma.$transaction(async (transaction) => {
@@ -213,17 +211,14 @@ export class LaboratoryService {
     }
   }
 
-  async updateCatalogEntry(id: string, dto: UpdateLabExamCatalogDto) {
+  async updateCatalogEntry(id: string, dto: UpdateLabExamCatalogDto, user: AuthenticatedUser) {
+    const canManagePrice = hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN]);
     const current = await this.prisma.billableService.findFirst({
       where: { id, type: BillableServiceType.LABORATORY },
     });
     if (!current) throw new NotFoundException('Examen du catalogue introuvable.');
     const category = dto.category?.trim() || current.category || 'Autres examens';
-    const existing = decodeLabTemplate(
-      current.labResultTemplate,
-      current.code,
-      current.category,
-    );
+    const existing = decodeLabTemplate(current.labResultTemplate, current.code, current.category);
     const template = encodeLabTemplate({
       value: dto.resultFields ?? existing.fields,
       code: dto.code ?? current.code,
@@ -238,12 +233,17 @@ export class LaboratoryService {
           code: dto.code?.trim().toUpperCase(),
           name: dto.name?.trim(),
           category,
-          price: dto.price === undefined ? undefined : new Prisma.Decimal(dto.price),
+          price:
+            !canManagePrice || dto.price === undefined ? undefined : new Prisma.Decimal(dto.price),
           isActive: dto.isActive,
           labResultTemplate: asPrismaJson(template),
         },
       });
-      return presentLabCatalog(row);
+      const catalog = presentLabCatalog(row);
+      if (canManagePrice) return catalog;
+      const { price, ...clinicalCatalog } = catalog;
+      void price;
+      return clinicalCatalog;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException('Cette référence d’examen existe déjà dans le catalogue.');
@@ -378,9 +378,7 @@ export class LaboratoryService {
     if (!reviewer) throw new ForbiddenException('Profil de biologiste médical requis.');
     const exam = await this.find(id);
     if (exam.status !== ExamStatus.COMPLETED) {
-      throw new BadRequestException(
-        'Seul un résultat en attente de validation peut être renvoyé.',
-      );
+      throw new BadRequestException('Seul un résultat en attente de validation peut être renvoyé.');
     }
     return this.prisma.$transaction(async (transaction) => {
       const rejected = await transaction.examRequest.update({

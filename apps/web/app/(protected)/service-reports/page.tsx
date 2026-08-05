@@ -1,6 +1,14 @@
 'use client';
 
-import { Activity, ClipboardList, PackageCheck, Plus, RefreshCw, Send, Warehouse } from 'lucide-react';
+import {
+  Activity,
+  ClipboardList,
+  PackageCheck,
+  Plus,
+  RefreshCw,
+  Send,
+  Warehouse,
+} from 'lucide-react';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { api } from '@/lib/api';
@@ -33,7 +41,7 @@ type Report = {
   ambulatory: number;
   serviceTotal: number;
   items: ReportItem[];
-  createdBy: { username: string };
+  createdBy: { id: string; username: string };
 };
 
 type RequisitionItem = {
@@ -65,7 +73,7 @@ type Medication = {
   form?: string;
   strength?: string;
   stockQuantity: number;
-  unitPrice: number | string;
+  unitPrice?: number | string;
 };
 type AccountingSummary = {
   rows: Array<{
@@ -137,6 +145,16 @@ const money = (value: number) => `${Math.round(value).toLocaleString('fr-CD')} C
 export default function ServiceReportsPage() {
   const { user } = useAuth();
   const canAccount = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT']);
+  const canViewCosts = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'CASHIER', 'ACCOUNTANT']);
+  const canBrowseMedicationCatalog = hasAnyRole(user, [
+    'SUPER_ADMIN',
+    'ADMIN',
+    'PHARMACIST',
+    'STOREKEEPER',
+    'DOCTOR',
+    'SURGEON',
+    'MIDWIFE',
+  ]);
   const canApprove = canAccount;
   const canFulfill = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'PHARMACIST', 'STOREKEEPER']);
   const [tab, setTab] = useState<'REPORTS' | 'REQUISITIONS' | 'ACCOUNTING'>('REPORTS');
@@ -174,10 +192,13 @@ export default function ServiceReportsPage() {
       const requests: Promise<unknown>[] = [
         api<Report[]>('/service-reports'),
         api<Requisition[]>('/service-reports/requisitions/list'),
-        api<Medication[]>('/pharmacy/medications'),
+        canBrowseMedicationCatalog
+          ? api<Medication[]>('/pharmacy/medications')
+          : Promise.resolve([]),
       ];
       if (canAccount) requests.push(api<AccountingSummary>('/service-reports/accounting/summary'));
-      const [reportRows, requisitionRows, medicationRows, accountingRows] = await Promise.all(requests);
+      const [reportRows, requisitionRows, medicationRows, accountingRows] =
+        await Promise.all(requests);
       setReports(reportRows as Report[]);
       setRequisitions(requisitionRows as Requisition[]);
       setMedications(medicationRows as Medication[]);
@@ -187,7 +208,7 @@ export default function ServiceReportsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canAccount]);
+  }, [canAccount, canBrowseMedicationCatalog]);
 
   useEffect(() => void load(), [load]);
 
@@ -228,7 +249,12 @@ export default function ServiceReportsPage() {
         }),
       });
       setNotice('Réquisition soumise à la pharmacie et à l’administration.');
-      setRequisition((current) => ({ ...current, reason: '', notes: '', items: [blankRequisitionItem()] }));
+      setRequisition((current) => ({
+        ...current,
+        reason: '',
+        notes: '',
+        items: [blankRequisitionItem()],
+      }));
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Réquisition impossible.');
@@ -307,7 +333,11 @@ export default function ServiceReportsPage() {
       report.items.map((item) => ({
         ...item,
         closingStock:
-          item.openingStock + item.receivedQuantity + item.returnedQuantity - item.usedQuantity - item.lostQuantity,
+          item.openingStock +
+          item.receivedQuantity +
+          item.returnedQuantity -
+          item.usedQuantity -
+          item.lostQuantity,
       })),
     [report.items],
   );
@@ -315,18 +345,22 @@ export default function ServiceReportsPage() {
   const updateReportItem = (index: number, patch: Partial<ReportItem>) => {
     setReport((current) => ({
       ...current,
-      items: current.items.map((item, rowIndex) => (rowIndex === index ? { ...item, ...patch } : item)),
+      items: current.items.map((item, rowIndex) =>
+        rowIndex === index ? { ...item, ...patch } : item,
+      ),
     }));
   };
 
   const selectReportProduct = (index: number, value: string) => {
     const selected = medications.find(
-      (medication) => medication.name.toLocaleLowerCase('fr') === value.trim().toLocaleLowerCase('fr'),
+      (medication) =>
+        medication.name.toLocaleLowerCase('fr') === value.trim().toLocaleLowerCase('fr'),
     );
     updateReportItem(index, {
       itemName: value,
       medicationId: selected?.id,
-      unitCost: selected ? Number(selected.unitPrice) : 0,
+      unitCost:
+        canViewCosts && selected?.unitPrice !== undefined ? Number(selected.unitPrice) : undefined,
       unit: selected?.form?.trim() || report.items[index]?.unit || 'unité',
     });
   };
@@ -334,11 +368,18 @@ export default function ServiceReportsPage() {
   const updateRequisitionItem = (index: number, patch: Partial<RequisitionItem>) => {
     setRequisition((current) => ({
       ...current,
-      items: current.items.map((item, rowIndex) => (rowIndex === index ? { ...item, ...patch } : item)),
+      items: current.items.map((item, rowIndex) =>
+        rowIndex === index ? { ...item, ...patch } : item,
+      ),
     }));
   };
 
-  if (loading) return <section className="panel empty-state"><Activity className="spin" /> Chargement des rapports…</section>;
+  if (loading)
+    return (
+      <section className="panel empty-state">
+        <Activity className="spin" /> Chargement des rapports…
+      </section>
+    );
 
   return (
     <div className="service-report-page">
@@ -348,15 +389,31 @@ export default function ServiceReportsPage() {
           <h1>Rapports journaliers des services</h1>
           <p>Modèle harmonisé pour nursing, laboratoire, pharmacie et tous les départements.</p>
         </div>
-        <button className="secondary-button" onClick={() => void load()}><RefreshCw size={17} /> Actualiser</button>
+        <button className="secondary-button" onClick={() => void load()}>
+          <RefreshCw size={17} /> Actualiser
+        </button>
       </div>
       {error && <div className="alert error">{error}</div>}
       {notice && <div className="alert success">{notice}</div>}
 
       <div className="admin-tabs">
-        <button className={tab === 'REPORTS' ? 'active' : ''} onClick={() => setTab('REPORTS')}><ClipboardList size={16} /> Rapports</button>
-        <button className={tab === 'REQUISITIONS' ? 'active' : ''} onClick={() => setTab('REQUISITIONS')}><Send size={16} /> Réquisitions</button>
-        {canAccount && <button className={tab === 'ACCOUNTING' ? 'active' : ''} onClick={() => setTab('ACCOUNTING')}><Warehouse size={16} /> Tableau comptable</button>}
+        <button className={tab === 'REPORTS' ? 'active' : ''} onClick={() => setTab('REPORTS')}>
+          <ClipboardList size={16} /> Rapports
+        </button>
+        <button
+          className={tab === 'REQUISITIONS' ? 'active' : ''}
+          onClick={() => setTab('REQUISITIONS')}
+        >
+          <Send size={16} /> Réquisitions
+        </button>
+        {canAccount && (
+          <button
+            className={tab === 'ACCOUNTING' ? 'active' : ''}
+            onClick={() => setTab('ACCOUNTING')}
+          >
+            <Warehouse size={16} /> Tableau comptable
+          </button>
+        )}
       </div>
 
       {tab === 'REPORTS' && (
@@ -367,45 +424,277 @@ export default function ServiceReportsPage() {
               <h2>Rapport journalier du service</h2>
             </div>
             <div className="form-grid">
-              <label className="field"><span>Département</span><select value={report.department} onChange={(event) => setReport({ ...report, department: event.target.value })}>{departments.map((department) => <option key={department}>{department}</option>)}</select></label>
-              <label className="field"><span>Date</span><input type="date" required value={report.businessDate} onChange={(event) => setReport({ ...report, businessDate: event.target.value })} /></label>
-              <label className="field"><span>Garde / équipe</span><input value={report.shift} onChange={(event) => setReport({ ...report, shift: event.target.value })} /></label>
-              <label className="field"><span>Nouveaux cas admis</span><input type="number" min={0} value={report.newAdmissions} onChange={(event) => setReport({ ...report, newAdmissions: Number(event.target.value) })} /></label>
-              <label className="field"><span>Hospitalisés</span><input type="number" min={0} value={report.hospitalized} onChange={(event) => setReport({ ...report, hospitalized: Number(event.target.value) })} /></label>
-              <label className="field"><span>Ambulatoires</span><input type="number" min={0} value={report.ambulatory} onChange={(event) => setReport({ ...report, ambulatory: Number(event.target.value) })} /></label>
-              <label className="field"><span>Total du service</span><input readOnly value={reportTotal} /></label>
+              <label className="field">
+                <span>Département</span>
+                <select
+                  value={report.department}
+                  onChange={(event) => setReport({ ...report, department: event.target.value })}
+                >
+                  {departments.map((department) => (
+                    <option key={department}>{department}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Date</span>
+                <input
+                  type="date"
+                  required
+                  value={report.businessDate}
+                  onChange={(event) => setReport({ ...report, businessDate: event.target.value })}
+                />
+              </label>
+              <label className="field">
+                <span>Garde / équipe</span>
+                <input
+                  value={report.shift}
+                  onChange={(event) => setReport({ ...report, shift: event.target.value })}
+                />
+              </label>
+              <label className="field">
+                <span>Nouveaux cas admis</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={report.newAdmissions}
+                  onChange={(event) =>
+                    setReport({ ...report, newAdmissions: Number(event.target.value) })
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Hospitalisés</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={report.hospitalized}
+                  onChange={(event) =>
+                    setReport({ ...report, hospitalized: Number(event.target.value) })
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Ambulatoires</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={report.ambulatory}
+                  onChange={(event) =>
+                    setReport({ ...report, ambulatory: Number(event.target.value) })
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Total du service</span>
+                <input readOnly value={reportTotal} />
+              </label>
             </div>
             <div className="report-metrics-grid">
               {Object.entries(report.metrics).map(([key, value]) => (
-                <label className="field" key={key}><span>{key}</span><input type="number" min={0} value={value} onChange={(event) => setReport({ ...report, metrics: { ...report.metrics, [key]: Number(event.target.value) } })} /></label>
+                <label className="field" key={key}>
+                  <span>{key}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={value}
+                    onChange={(event) =>
+                      setReport({
+                        ...report,
+                        metrics: { ...report.metrics, [key]: Number(event.target.value) },
+                      })
+                    }
+                  />
+                </label>
               ))}
             </div>
             <div className="table-scroll report-stock-table">
               <table>
-                <thead><tr><th>N°</th><th>Médicament / consommable</th><th>Unité</th><th>Coût unitaire</th><th>Stock d’entrée</th><th>Reçu</th><th>Commande en cours</th><th>Utilisé</th><th>Retours</th><th>Pertes</th><th>Reste</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>N°</th>
+                    <th>Médicament / consommable</th>
+                    <th>Unité</th>
+                    {canViewCosts && <th>Coût unitaire</th>}
+                    <th>Stock d’entrée</th>
+                    <th>Reçu</th>
+                    <th>Commande en cours</th>
+                    <th>Utilisé</th>
+                    <th>Retours</th>
+                    <th>Pertes</th>
+                    <th>Reste</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {reportValues.map((item, index) => (
                     <tr key={index}>
                       <td>{index + 1}</td>
-                      <td><input required value={item.itemName} onChange={(event) => selectReportProduct(index, event.target.value)} list="medication-options" /></td>
-                      <td><input required value={item.unit} onChange={(event) => updateReportItem(index, { unit: event.target.value })} /></td>
-                      <td><input type="number" min={0} step="0.01" value={item.unitCost ?? 0} disabled={Boolean(item.medicationId)} title={item.medicationId ? 'Coût repris automatiquement du catalogue de la pharmacie.' : 'Coût manuel pour un produit non référencé.'} onChange={(event) => updateReportItem(index, { unitCost: Number(event.target.value) })} /></td>
-                      {(['openingStock', 'receivedQuantity', 'pendingOrder', 'usedQuantity', 'returnedQuantity', 'lostQuantity'] as const).map((key) => <td key={key}><input type="number" min={0} value={item[key]} onChange={(event) => updateReportItem(index, { [key]: Number(event.target.value) })} /></td>)}
-                      <td><strong className={Number(item.closingStock) < 0 ? 'danger-text' : ''}>{item.closingStock}</strong></td>
+                      <td>
+                        <input
+                          required
+                          value={item.itemName}
+                          onChange={(event) => selectReportProduct(index, event.target.value)}
+                          list="medication-options"
+                        />
+                      </td>
+                      <td>
+                        <input
+                          required
+                          value={item.unit}
+                          onChange={(event) =>
+                            updateReportItem(index, { unit: event.target.value })
+                          }
+                        />
+                      </td>
+                      {canViewCosts && (
+                        <td>
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={item.unitCost ?? 0}
+                            disabled={Boolean(item.medicationId)}
+                            title={
+                              item.medicationId
+                                ? 'Coût repris automatiquement du catalogue de la pharmacie.'
+                                : 'Coût manuel pour un produit non référencé.'
+                            }
+                            onChange={(event) =>
+                              updateReportItem(index, { unitCost: Number(event.target.value) })
+                            }
+                          />
+                        </td>
+                      )}
+                      {(
+                        [
+                          'openingStock',
+                          'receivedQuantity',
+                          'pendingOrder',
+                          'usedQuantity',
+                          'returnedQuantity',
+                          'lostQuantity',
+                        ] as const
+                      ).map((key) => (
+                        <td key={key}>
+                          <input
+                            type="number"
+                            min={0}
+                            value={item[key]}
+                            onChange={(event) =>
+                              updateReportItem(index, { [key]: Number(event.target.value) })
+                            }
+                          />
+                        </td>
+                      ))}
+                      <td>
+                        <strong className={Number(item.closingStock) < 0 ? 'danger-text' : ''}>
+                          {item.closingStock}
+                        </strong>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <datalist id="medication-options">{medications.map((medication) => <option key={medication.id} value={medication.name} />)}</datalist>
-            <button type="button" className="secondary-button" onClick={() => setReport((current) => ({ ...current, items: [...current.items, blankReportItem()] }))}><Plus size={16} /> Ajouter une ligne</button>
-            <label className="field full"><span>Observations</span><textarea rows={3} value={report.observations} onChange={(event) => setReport({ ...report, observations: event.target.value })} /></label>
-            <div className="modal-actions"><button className="primary-button" disabled={saving}>Enregistrer le rapport</button></div>
+            <datalist id="medication-options">
+              {medications.map((medication) => (
+                <option key={medication.id} value={medication.name} />
+              ))}
+            </datalist>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() =>
+                setReport((current) => ({
+                  ...current,
+                  items: [...current.items, blankReportItem()],
+                }))
+              }
+            >
+              <Plus size={16} /> Ajouter une ligne
+            </button>
+            <label className="field full">
+              <span>Observations</span>
+              <textarea
+                rows={3}
+                value={report.observations}
+                onChange={(event) => setReport({ ...report, observations: event.target.value })}
+              />
+            </label>
+            <div className="modal-actions">
+              <button className="primary-button" disabled={saving}>
+                Enregistrer le rapport
+              </button>
+            </div>
           </form>
 
           <section className="panel">
-            <div className="panel-heading"><div><span className="eyebrow">Registre</span><h2>Rapports enregistrés</h2></div><strong>{reports.length}</strong></div>
-            <div className="table-scroll"><table><thead><tr><th>Date</th><th>Service</th><th>Garde</th><th>Patients</th><th>Produits</th><th>Statut</th><th>Responsable</th></tr></thead><tbody>{reports.map((row) => <tr key={row.id}><td>{new Date(row.businessDate).toLocaleDateString('fr-CD')}</td><td>{row.department}</td><td>{row.shift ?? '—'}</td><td>{row.serviceTotal}</td><td>{row.items.length}</td><td>{row.status}<div className="row-actions">{row.status === 'DRAFT' && <button className="text-button" disabled={saving} onClick={() => void updateReportStatus(row.id, 'SUBMITTED')}>Soumettre</button>}{canAccount && row.status === 'SUBMITTED' && <button className="text-button" disabled={saving} onClick={() => void updateReportStatus(row.id, 'APPROVED')}>Approuver</button>}{canAccount && row.status === 'APPROVED' && <button className="text-button" disabled={saving} onClick={() => void updateReportStatus(row.id, 'CLOSED')}>Clôturer</button>}</div></td><td>{row.createdBy.username}</td></tr>)}</tbody></table></div>
+            <div className="panel-heading">
+              <div>
+                <span className="eyebrow">Registre</span>
+                <h2>Rapports enregistrés</h2>
+              </div>
+              <strong>{reports.length}</strong>
+            </div>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Service</th>
+                    <th>Garde</th>
+                    <th>Patients</th>
+                    <th>Produits</th>
+                    <th>Statut</th>
+                    <th>Responsable</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reports.map((row) => (
+                    <tr key={row.id}>
+                      <td>{new Date(row.businessDate).toLocaleDateString('fr-CD')}</td>
+                      <td>{row.department}</td>
+                      <td>{row.shift ?? '—'}</td>
+                      <td>{row.serviceTotal}</td>
+                      <td>{row.items.length}</td>
+                      <td>
+                        {row.status}
+                        <div className="row-actions">
+                          {row.status === 'DRAFT' &&
+                            (canAccount || row.createdBy.id === user?.id) && (
+                              <button
+                                className="text-button"
+                                disabled={saving}
+                                onClick={() => void updateReportStatus(row.id, 'SUBMITTED')}
+                              >
+                                Soumettre
+                              </button>
+                            )}
+                          {canAccount && row.status === 'SUBMITTED' && (
+                            <button
+                              className="text-button"
+                              disabled={saving}
+                              onClick={() => void updateReportStatus(row.id, 'APPROVED')}
+                            >
+                              Approuver
+                            </button>
+                          )}
+                          {canAccount && row.status === 'APPROVED' && (
+                            <button
+                              className="text-button"
+                              disabled={saving}
+                              onClick={() => void updateReportStatus(row.id, 'CLOSED')}
+                            >
+                              Clôturer
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td>{row.createdBy.username}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </section>
         </>
       )}
@@ -413,39 +702,273 @@ export default function ServiceReportsPage() {
       {tab === 'REQUISITIONS' && (
         <div className="report-two-column">
           <form className="panel" onSubmit={submitRequisition}>
-            <div className="panel-heading"><div><span className="eyebrow">Modèle de réquisition</span><h2>Nouvelle demande interne</h2></div><PackageCheck /></div>
+            <div className="panel-heading">
+              <div>
+                <span className="eyebrow">Modèle de réquisition</span>
+                <h2>Nouvelle demande interne</h2>
+              </div>
+              <PackageCheck />
+            </div>
             <div className="form-grid">
-              <label className="field"><span>Service demandeur</span><select value={requisition.department} onChange={(event) => setRequisition({ ...requisition, department: event.target.value })}>{departments.map((department) => <option key={department}>{department}</option>)}</select></label>
-              <label className="field"><span>Demandeur</span><input readOnly value={user?.username ?? ''} /></label>
-              <label className="field"><span>Fonction</span><input readOnly value={user?.role ?? ''} /></label>
-              <label className="field"><span>Priorité</span><select value={requisition.priority} onChange={(event) => setRequisition({ ...requisition, priority: event.target.value })}><option value="ROUTINE">Normale</option><option value="URGENT">Urgente</option><option value="CRITICAL">Critique</option></select></label>
-              <label className="field full"><span>Motif général de la demande</span><textarea required minLength={5} value={requisition.reason} onChange={(event) => setRequisition({ ...requisition, reason: event.target.value })} /></label>
-              <label className="field full"><span>Observations éventuelles</span><textarea value={requisition.notes} onChange={(event) => setRequisition({ ...requisition, notes: event.target.value })} /></label>
+              <label className="field">
+                <span>Service demandeur</span>
+                <select
+                  value={requisition.department}
+                  onChange={(event) =>
+                    setRequisition({ ...requisition, department: event.target.value })
+                  }
+                >
+                  {departments.map((department) => (
+                    <option key={department}>{department}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Demandeur</span>
+                <input readOnly value={user?.username ?? ''} />
+              </label>
+              <label className="field">
+                <span>Fonction</span>
+                <input readOnly value={user?.role ?? ''} />
+              </label>
+              <label className="field">
+                <span>Priorité</span>
+                <select
+                  value={requisition.priority}
+                  onChange={(event) =>
+                    setRequisition({ ...requisition, priority: event.target.value })
+                  }
+                >
+                  <option value="ROUTINE">Normale</option>
+                  <option value="URGENT">Urgente</option>
+                  <option value="CRITICAL">Critique</option>
+                </select>
+              </label>
+              <label className="field full">
+                <span>Motif de la demande</span>
+                <textarea
+                  required
+                  minLength={5}
+                  value={requisition.reason}
+                  onChange={(event) =>
+                    setRequisition({ ...requisition, reason: event.target.value })
+                  }
+                />
+              </label>
+              <label className="field full">
+                <span>Observations éventuelles</span>
+                <textarea
+                  value={requisition.notes}
+                  onChange={(event) =>
+                    setRequisition({ ...requisition, notes: event.target.value })
+                  }
+                />
+              </label>
             </div>
             {requisition.items.map((item, index) => (
               <div className="requisition-line" key={index}>
-                <select value={item.medicationId ?? ''} onChange={(event) => { const selected = medications.find((medication) => medication.id === event.target.value); updateRequisitionItem(index, { medicationId: event.target.value || undefined, itemName: selected?.name ?? item.itemName }); }}><option value="">Produit non référencé</option>{medications.map((medication) => <option key={medication.id} value={medication.id}>{medication.name} · stock {medication.stockQuantity}</option>)}</select>
-                <input required placeholder="Désignation" value={item.itemName} onChange={(event) => updateRequisitionItem(index, { itemName: event.target.value })} />
-                <input required placeholder="Unité" value={item.unit} onChange={(event) => updateRequisitionItem(index, { unit: event.target.value })} />
-                <input type="number" min={1} value={item.quantityRequested} onChange={(event) => updateRequisitionItem(index, { quantityRequested: Number(event.target.value) })} />
-                <input placeholder="Motif de la demande" value={item.observations ?? ''} onChange={(event) => updateRequisitionItem(index, { observations: event.target.value })} />
+                <label className="requisition-field product">
+                  <span>Produit du catalogue</span>
+                  <select
+                    value={item.medicationId ?? ''}
+                    onChange={(event) => {
+                      const selected = medications.find(
+                        (medication) => medication.id === event.target.value,
+                      );
+                      updateRequisitionItem(index, {
+                        medicationId: event.target.value || undefined,
+                        itemName: selected?.name ?? item.itemName,
+                      });
+                    }}
+                  >
+                    <option value="">Produit non référencé</option>
+                    {medications.map((medication) => (
+                      <option key={medication.id} value={medication.id}>
+                        {medication.name} · stock {medication.stockQuantity}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="requisition-field designation">
+                  <span>Désignation *</span>
+                  <input
+                    required
+                    placeholder="Nom du produit demandé"
+                    value={item.itemName}
+                    onChange={(event) =>
+                      updateRequisitionItem(index, { itemName: event.target.value })
+                    }
+                  />
+                </label>
+                <label className="requisition-field unit">
+                  <span>Unité *</span>
+                  <input
+                    required
+                    placeholder="Boîte, unité…"
+                    value={item.unit}
+                    onChange={(event) => updateRequisitionItem(index, { unit: event.target.value })}
+                  />
+                </label>
+                <label className="requisition-field quantity">
+                  <span>Quantité *</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={item.quantityRequested}
+                    onChange={(event) =>
+                      updateRequisitionItem(index, {
+                        quantityRequested: Number(event.target.value),
+                      })
+                    }
+                  />
+                </label>
+                <label className="requisition-field reason">
+                  <span>Motif de cette ligne</span>
+                  <input
+                    placeholder="Pourquoi ce produit est demandé ?"
+                    value={item.observations ?? ''}
+                    onChange={(event) =>
+                      updateRequisitionItem(index, { observations: event.target.value })
+                    }
+                  />
+                </label>
               </div>
             ))}
-            <button type="button" className="secondary-button" onClick={() => setRequisition((current) => ({ ...current, items: [...current.items, blankRequisitionItem()] }))}><Plus size={16} /> Ajouter</button>
-            <div className="modal-actions"><button className="primary-button" disabled={saving}>Soumettre la réquisition</button></div>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() =>
+                setRequisition((current) => ({
+                  ...current,
+                  items: [...current.items, blankRequisitionItem()],
+                }))
+              }
+            >
+              <Plus size={16} /> Ajouter
+            </button>
+            <div className="modal-actions">
+              <button className="primary-button" disabled={saving}>
+                Soumettre la réquisition
+              </button>
+            </div>
           </form>
           <section className="panel">
-            <div className="panel-heading"><div><span className="eyebrow">Suivi</span><h2>Réquisitions</h2></div><strong>{requisitions.length}</strong></div>
-            <div className="requisition-cards">{requisitions.map((row) => <article key={row.id}><div><strong>{row.reference}</strong><span>{row.department} · {row.priority}</span><small>{row.reason}</small></div><b>{row.status}</b><ul>{row.items.map((item) => <li key={item.id}>{item.itemName}: {item.quantityIssued ?? 0}/{item.quantityApproved ?? 0}/{item.quantityRequested}</li>)}</ul><div className="row-actions">{canApprove && row.status === 'SUBMITTED' && <button className="text-button" disabled={saving} onClick={() => void approveRequisition(row)}>Approuver tout</button>}{canFulfill && ['APPROVED', 'PARTIALLY_FULFILLED'].includes(row.status) && <button className="text-button" disabled={saving} onClick={() => void fulfillRequisition(row)}>Livrer le solde</button>}</div></article>)}</div>
+            <div className="panel-heading">
+              <div>
+                <span className="eyebrow">Suivi</span>
+                <h2>Réquisitions</h2>
+              </div>
+              <strong>{requisitions.length}</strong>
+            </div>
+            <div className="requisition-cards">
+              {requisitions.map((row) => (
+                <article key={row.id}>
+                  <div>
+                    <strong>{row.reference}</strong>
+                    <span>
+                      {row.department} · {row.priority}
+                    </span>
+                    <small>{row.reason}</small>
+                  </div>
+                  <b>{row.status}</b>
+                  <ul>
+                    {row.items.map((item) => (
+                      <li key={item.id}>
+                        {item.itemName}: {item.quantityIssued ?? 0}/{item.quantityApproved ?? 0}/
+                        {item.quantityRequested}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="row-actions">
+                    {canApprove && row.status === 'SUBMITTED' && (
+                      <button
+                        className="text-button"
+                        disabled={saving}
+                        onClick={() => void approveRequisition(row)}
+                      >
+                        Approuver tout
+                      </button>
+                    )}
+                    {canFulfill && ['APPROVED', 'PARTIALLY_FULFILLED'].includes(row.status) && (
+                      <button
+                        className="text-button"
+                        disabled={saving}
+                        onClick={() => void fulfillRequisition(row)}
+                      >
+                        Livrer le solde
+                      </button>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
           </section>
         </div>
       )}
 
       {tab === 'ACCOUNTING' && canAccount && accounting && (
         <section className="panel">
-          <div className="panel-heading"><div><span className="eyebrow">Consolidation inter-départements</span><h2>Tableau du comptable</h2></div><strong>{accounting.rows.length} rapport(s)</strong></div>
-          <div className="metric-grid"><article><span>Patients</span><strong>{accounting.totals.patients}</strong></article><article><span>Consommé</span><strong>{money(accounting.totals.usedValue)}</strong></article><article><span>Pertes</span><strong>{money(accounting.totals.lostValue)}</strong></article><article><span>Stock final</span><strong>{money(accounting.totals.closingValue)}</strong></article></div>
-          <div className="table-scroll"><table><thead><tr><th>Date</th><th>Département</th><th>Patients</th><th>Ouverture</th><th>Entrées</th><th>Retours</th><th>Utilisé</th><th>Pertes</th><th>Clôture</th><th>Écart</th></tr></thead><tbody>{accounting.rows.map((row) => <tr key={row.id}><td>{new Date(row.businessDate).toLocaleDateString('fr-CD')}</td><td>{row.department}</td><td>{row.patientCount}</td><td>{money(row.openingValue)}</td><td>{money(row.receivedValue)}</td><td>{money(row.returnedValue)}</td><td>{money(row.usedValue)}</td><td>{money(row.lostValue)}</td><td>{money(row.closingValue)}</td><td className={Math.abs(row.variance) > 0.01 ? 'danger-text' : ''}>{money(row.variance)}</td></tr>)}</tbody></table></div>
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">Consolidation inter-départements</span>
+              <h2>Tableau du comptable</h2>
+            </div>
+            <strong>{accounting.rows.length} rapport(s)</strong>
+          </div>
+          <div className="metric-grid">
+            <article>
+              <span>Patients</span>
+              <strong>{accounting.totals.patients}</strong>
+            </article>
+            <article>
+              <span>Consommé</span>
+              <strong>{money(accounting.totals.usedValue)}</strong>
+            </article>
+            <article>
+              <span>Pertes</span>
+              <strong>{money(accounting.totals.lostValue)}</strong>
+            </article>
+            <article>
+              <span>Stock final</span>
+              <strong>{money(accounting.totals.closingValue)}</strong>
+            </article>
+          </div>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Département</th>
+                  <th>Patients</th>
+                  <th>Ouverture</th>
+                  <th>Entrées</th>
+                  <th>Retours</th>
+                  <th>Utilisé</th>
+                  <th>Pertes</th>
+                  <th>Clôture</th>
+                  <th>Écart</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accounting.rows.map((row) => (
+                  <tr key={row.id}>
+                    <td>{new Date(row.businessDate).toLocaleDateString('fr-CD')}</td>
+                    <td>{row.department}</td>
+                    <td>{row.patientCount}</td>
+                    <td>{money(row.openingValue)}</td>
+                    <td>{money(row.receivedValue)}</td>
+                    <td>{money(row.returnedValue)}</td>
+                    <td>{money(row.usedValue)}</td>
+                    <td>{money(row.lostValue)}</td>
+                    <td>{money(row.closingValue)}</td>
+                    <td className={Math.abs(row.variance) > 0.01 ? 'danger-text' : ''}>
+                      {money(row.variance)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
     </div>

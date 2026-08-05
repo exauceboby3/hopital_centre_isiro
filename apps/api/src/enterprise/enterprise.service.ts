@@ -16,11 +16,13 @@ import {
   PrescriptionAvailability,
   PrescriptionStatus,
   RadiologyStudyStatus,
+  Role,
   SpecialtyCaseStatus,
   StockMovementType,
   UtilityBillStatus,
 } from '@prisma/client';
 import { FinancialAuthorizationService } from '../billing/financial-authorization.service';
+import { AuthenticatedUser, hasAnyRole } from '../common/authenticated-user';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   AllocateInsuranceDto,
@@ -67,6 +69,8 @@ const prescriptionInclude = {
   },
   items: { include: { medication: true } },
 } satisfies Prisma.PrescriptionInclude;
+
+type PrescriptionRow = Prisma.PrescriptionGetPayload<{ include: typeof prescriptionInclude }>;
 
 @Injectable()
 export class EnterpriseService {
@@ -230,6 +234,67 @@ export class EnterpriseService {
     });
   }
 
+  presentPrescription(row: PrescriptionRow, user: AuthenticatedUser) {
+    if (hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN, Role.CASHIER, Role.ACCOUNTANT])) {
+      return row;
+    }
+    const { invoice, invoiceId, ...prescription } = row;
+    void invoiceId;
+    return {
+      ...prescription,
+      items: prescription.items.map((item) => {
+        if (!item.medication) return item;
+        const { unitPrice, ...medication } = item.medication;
+        void unitPrice;
+        return { ...item, medication };
+      }),
+      paymentClearance: {
+        inOrder: this.invoiceIsCleared(invoice),
+        status: this.invoiceIsCleared(invoice) ? 'IN_ORDER' : 'TO_REGULARIZE',
+      },
+    };
+  }
+
+  presentClinicalRecord<
+    T extends {
+      clinicalOrder?: {
+        service?: { price: unknown } | null;
+        careAuthorization?: { id: string; status: CareAuthorizationStatus } | null;
+      } | null;
+    },
+  >(row: T, user: AuthenticatedUser) {
+    if (hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN]) || !row.clinicalOrder) return row;
+    const { clinicalOrder, ...clinicalRecord } = row;
+    const { service, careAuthorization, ...order } = clinicalOrder;
+    const clinicalService = service
+      ? (() => {
+          const { price, ...details } = service;
+          void price;
+          return details;
+        })()
+      : service;
+    const clearedStatuses: CareAuthorizationStatus[] = [
+      CareAuthorizationStatus.AUTHORIZED,
+      CareAuthorizationStatus.WAIVED,
+      CareAuthorizationStatus.CONSUMED,
+    ];
+    const inOrder = careAuthorization ? clearedStatuses.includes(careAuthorization.status) : false;
+    return {
+      ...clinicalRecord,
+      clinicalOrder: {
+        ...order,
+        service: clinicalService,
+        careAuthorization: careAuthorization
+          ? {
+              id: careAuthorization.id,
+              status: careAuthorization.status,
+              paymentClearance: { inOrder, status: inOrder ? 'IN_ORDER' : 'TO_REGULARIZE' },
+            }
+          : careAuthorization,
+      },
+    };
+  }
+
   async prescription(id: string) {
     const prescription = await this.prisma.prescription.findUnique({
       where: { id },
@@ -280,7 +345,9 @@ export class EnterpriseService {
       throw new BadRequestException('Un médicament ne peut apparaître qu’une fois par ordonnance.');
     }
     const medicationIds = [
-      ...new Set(dto.items.map((item) => item.medicationId).filter((id): id is string => Boolean(id))),
+      ...new Set(
+        dto.items.map((item) => item.medicationId).filter((id): id is string => Boolean(id)),
+      ),
     ];
     const [patient, consultation, medications, interactions] = await Promise.all([
       this.prisma.patient.findUnique({ where: { id: dto.patientId } }),
@@ -319,8 +386,8 @@ export class EnterpriseService {
       const medication = item.medicationId ? byId.get(item.medicationId) : undefined;
       const internallyAvailable = Boolean(
         medication &&
-          medication.stockQuantity >= item.quantity &&
-          medication.unitPrice.greaterThan(0),
+        medication.stockQuantity >= item.quantity &&
+        medication.unitPrice.greaterThan(0),
       );
       const availability = medication
         ? item.availability === PrescriptionAvailability.EXTERNAL ||
@@ -346,7 +413,9 @@ export class EnterpriseService {
           availability === PrescriptionAvailability.INTERNAL
             ? null
             : item.externalReason?.trim() ||
-              (medication ? 'Produit indisponible ou quantité insuffisante à la pharmacie.' : 'Produit non référencé dans le stock hospitalier.'),
+              (medication
+                ? 'Produit indisponible ou quantité insuffisante à la pharmacie.'
+                : 'Produit non référencé dans le stock hospitalier.'),
         dosage: item.dosage.trim(),
         frequency: item.frequency.trim(),
         route: item.route.trim(),

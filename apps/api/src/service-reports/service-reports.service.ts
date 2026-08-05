@@ -2,14 +2,12 @@ import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  DepartmentReportStatus,
-  Prisma,
-  RequisitionStatus,
-} from '@prisma/client';
+import { DepartmentReportStatus, Prisma, RequisitionStatus, Role } from '@prisma/client';
+import { AuthenticatedUser, hasAnyRole } from '../common/authenticated-user';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ApproveRequisitionDto,
@@ -38,6 +36,45 @@ const requisitionInclude = {
 export class ServiceReportsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  presentReport<
+    T extends {
+      items: Array<{ unitCost: unknown; medication?: { unitPrice: unknown } | null }>;
+    },
+  >(report: T, user: AuthenticatedUser) {
+    if (hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN, Role.CASHIER, Role.ACCOUNTANT])) {
+      return report;
+    }
+    return {
+      ...report,
+      items: report.items.map((item) => {
+        const { unitCost, ...operationalItem } = item;
+        void unitCost;
+        if (!item.medication) return operationalItem;
+        const { unitPrice, ...operationalMedication } = item.medication;
+        void unitPrice;
+        return { ...operationalItem, medication: operationalMedication };
+      }),
+    };
+  }
+
+  presentRequisition<T extends { items: Array<{ medication?: { unitPrice: unknown } | null }> }>(
+    requisition: T,
+    user: AuthenticatedUser,
+  ) {
+    if (hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN, Role.CASHIER, Role.ACCOUNTANT])) {
+      return requisition;
+    }
+    return {
+      ...requisition,
+      items: requisition.items.map((item) => {
+        if (!item.medication) return item;
+        const { unitPrice, ...operationalMedication } = item.medication;
+        void unitPrice;
+        return { ...item, medication: operationalMedication };
+      }),
+    };
+  }
+
   listReports(query: ListServiceReportsQueryDto) {
     const from = query.from ? new Date(query.from) : undefined;
     const to = query.to ? new Date(query.to) : undefined;
@@ -56,12 +93,14 @@ export class ServiceReportsService {
     });
   }
 
-  async createReport(dto: CreateDepartmentReportDto, userId: string) {
+  async createReport(dto: CreateDepartmentReportDto, userId: string, canSetManualUnitCost = false) {
     const businessDate = new Date(dto.businessDate);
     const department = dto.department.trim().toUpperCase();
     const shift = dto.shift?.trim().toUpperCase() || 'NON_PRECISEE';
     const serviceTotal = dto.newAdmissions + dto.hospitalized + dto.ambulatory;
-    const medicationIds = [...new Set(dto.items.flatMap((item) => (item.medicationId ? [item.medicationId] : [])))];
+    const medicationIds = [
+      ...new Set(dto.items.flatMap((item) => (item.medicationId ? [item.medicationId] : []))),
+    ];
     const medications = medicationIds.length
       ? await this.prisma.medication.findMany({
           where: { id: { in: medicationIds }, isActive: true },
@@ -99,8 +138,11 @@ export class ServiceReportsService {
         returnedQuantity: item.returnedQuantity,
         lostQuantity: item.lostQuantity,
         closingStock,
-        unitCost: medication?.unitPrice ??
-          (item.unitCost === undefined ? null : new Prisma.Decimal(item.unitCost)),
+        unitCost:
+          medication?.unitPrice ??
+          (!canSetManualUnitCost || item.unitCost === undefined
+            ? null
+            : new Prisma.Decimal(item.unitCost)),
         observations: item.observations?.trim() || null,
       };
     });
@@ -136,10 +178,20 @@ export class ServiceReportsService {
   async updateReportStatus(
     id: string,
     dto: UpdateDepartmentReportStatusDto,
-    userId: string,
+    user: AuthenticatedUser,
   ) {
     const report = await this.prisma.departmentDailyReport.findUnique({ where: { id } });
     if (!report) throw new NotFoundException('Rapport journalier introuvable.');
+    const canApprove = hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN, Role.ACCOUNTANT]);
+    const creatorCanSubmit =
+      report.createdById === user.id &&
+      report.status === DepartmentReportStatus.DRAFT &&
+      dto.status === DepartmentReportStatus.SUBMITTED;
+    if (!canApprove && !creatorCanSubmit) {
+      throw new ForbiddenException(
+        'Le responsable peut uniquement soumettre son propre brouillon. Les autres transitions sont réservées à la comptabilité.',
+      );
+    }
     const allowed: Partial<Record<DepartmentReportStatus, DepartmentReportStatus[]>> = {
       DRAFT: [DepartmentReportStatus.SUBMITTED, DepartmentReportStatus.REJECTED],
       SUBMITTED: [DepartmentReportStatus.APPROVED, DepartmentReportStatus.REJECTED],
@@ -157,17 +209,16 @@ export class ServiceReportsService {
         where: { id },
         data: {
           status: dto.status,
-          submittedAt:
-            dto.status === DepartmentReportStatus.SUBMITTED ? now : report.submittedAt,
+          submittedAt: dto.status === DepartmentReportStatus.SUBMITTED ? now : report.submittedAt,
           approvedAt:
             dto.status === DepartmentReportStatus.APPROVED ||
             dto.status === DepartmentReportStatus.CLOSED
-              ? report.approvedAt ?? now
+              ? (report.approvedAt ?? now)
               : report.approvedAt,
           approvedById:
             dto.status === DepartmentReportStatus.APPROVED ||
             dto.status === DepartmentReportStatus.CLOSED
-              ? userId
+              ? user.id
               : report.approvedById,
           observations: dto.note?.trim()
             ? [report.observations, dto.note.trim()].filter(Boolean).join('\n')
@@ -177,7 +228,7 @@ export class ServiceReportsService {
       });
       await transaction.auditLog.create({
         data: {
-          userId,
+          userId: user.id,
           action: 'DEPARTMENT_REPORT_STATUS_CHANGED',
           entity: 'DepartmentDailyReport',
           entityId: id,
@@ -360,7 +411,8 @@ export class ServiceReportsService {
           const byId = new Map(requisition.items.map((item) => [item.id, item]));
           for (const line of dto.items) {
             const item = byId.get(line.itemId);
-            if (!item) throw new BadRequestException('Une ligne ne correspond pas à la réquisition.');
+            if (!item)
+              throw new BadRequestException('Une ligne ne correspond pas à la réquisition.');
             const remaining = item.quantityApproved - item.quantityIssued;
             if (line.quantityIssued > remaining) {
               throw new BadRequestException(

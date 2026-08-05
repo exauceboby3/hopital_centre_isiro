@@ -132,7 +132,7 @@ export default function ConsultationsPage() {
       decision:
         mode === 'POST_LABORATORY' || mode === 'INITIAL_ASSESSMENT'
           ? 'CONTINUE'
-          : row.clinicalReport?.decision ?? 'CONTINUE',
+          : (row.clinicalReport?.decision ?? 'CONTINUE'),
       amendmentReason: '',
     });
     setSelectedExamIds([]);
@@ -166,10 +166,7 @@ export default function ConsultationsPage() {
       const consultations = await load(false);
       const consultation = consultations.find((row) => row.appointment?.id === appointment.id);
       if (consultation) {
-        openClinicalForm(
-          consultation,
-          laboratoryReturn ? 'POST_LABORATORY' : 'INITIAL_ASSESSMENT',
-        );
+        openClinicalForm(consultation, laboratoryReturn ? 'POST_LABORATORY' : 'INITIAL_ASSESSMENT');
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Prise en charge impossible.');
@@ -211,7 +208,10 @@ export default function ConsultationsPage() {
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
-    if (!editing || ['LABORATORY_VIEW', 'HOSPITALIZATION_VIEW', 'READ_ONLY'].includes(editingMode)) {
+    if (
+      !editing ||
+      ['LABORATORY_VIEW', 'HOSPITALIZATION_VIEW', 'READ_ONLY'].includes(editingMode)
+    ) {
       return;
     }
     if (form.decision === 'LABORATORY' && !selectedExamIds.length) {
@@ -219,7 +219,7 @@ export default function ConsultationsPage() {
       return;
     }
     if (form.decision === 'HOSPITALIZATION' && !hospitalizationServiceId) {
-      setError("Sélectionnez le type de séjour à transmettre à l’hospitalisation.");
+      setError('Sélectionnez le type de séjour à transmettre à l’hospitalisation.');
       return;
     }
     if (form.decision === 'IMAGING' && !imagingServiceId) {
@@ -231,7 +231,7 @@ export default function ConsultationsPage() {
       return;
     }
     if (form.decision === 'PRESCRIPTION' && !(editing.prescriptions ?? []).length) {
-      setError('Créez l’ordonnance structurée et sa facture avant de clôturer la consultation.');
+      setError('Enregistrez l’ordonnance structurée avant de clôturer la consultation.');
       return;
     }
     if (
@@ -376,7 +376,9 @@ export default function ConsultationsPage() {
     return (
       focused &&
       inScope &&
-      (!statusFilter || row.status === statusFilter || row.appointment?.journeyStage === statusFilter) &&
+      (!statusFilter ||
+        row.status === statusFilter ||
+        row.appointment?.journeyStage === statusFilter) &&
       matchesSearch(
         query,
         patientName(row.patient),
@@ -391,11 +393,9 @@ export default function ConsultationsPage() {
     );
   });
 
-  const validatedExams =
-    editing?.examRequests.filter((exam) => exam.status === 'VALIDATED') ?? [];
+  const validatedExams = editing?.examRequests.filter((exam) => exam.status === 'VALIDATED') ?? [];
   const activeExams =
-    editing?.examRequests.filter((exam) => !['VALIDATED', 'CANCELLED'].includes(exam.status)) ??
-    [];
+    editing?.examRequests.filter((exam) => !['VALIDATED', 'CANCELLED'].includes(exam.status)) ?? [];
   const existingPrescription = editing?.prescriptions?.[0];
 
   return (
@@ -413,7 +413,10 @@ export default function ConsultationsPage() {
           <button className={scope === 'active' ? 'active' : ''} onClick={() => setScope('active')}>
             <Stethoscope size={17} /> Consultations actives
           </button>
-          <button className={scope === 'history' ? 'active' : ''} onClick={() => setScope('history')}>
+          <button
+            className={scope === 'history' ? 'active' : ''}
+            onClick={() => setScope('history')}
+          >
             <History size={17} /> Historique
           </button>
         </div>
@@ -543,9 +546,10 @@ export default function ConsultationsPage() {
                     !row.signature &&
                     row.status === 'COMPLETED' &&
                     Boolean(decision && finalDecisions.has(decision));
-                  const requiresMedicalAcknowledgement = ['WAITING_DOCTOR', 'RETURN_TO_DOCTOR'].includes(
-                    row.appointment?.journeyStage ?? '',
-                  );
+                  const requiresMedicalAcknowledgement = [
+                    'WAITING_DOCTOR',
+                    'RETURN_TO_DOCTOR',
+                  ].includes(row.appointment?.journeyStage ?? '');
                   const validResults = row.examRequests.filter(
                     (exam) => exam.status === 'VALIDATED',
                   ).length;
@@ -587,7 +591,8 @@ export default function ConsultationsPage() {
                       <td>
                         {row.examRequests.length ? (
                           <span className="exam-count-summary">
-                            <FlaskConical size={13} /> {validResults} prêt(s) · {pendingResults} en cours
+                            <FlaskConical size={13} /> {validResults} prêt(s) · {pendingResults} en
+                            cours
                           </span>
                         ) : (
                           '—'

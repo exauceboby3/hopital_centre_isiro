@@ -194,7 +194,6 @@ enum PrescriptionStatus {
   CANCELLED
 }
 
-
 enum PrescriptionAvailability {
   INTERNAL
   PARTIAL
@@ -400,70 +399,71 @@ enum CareAuthorizationStatus {
 }
 
 model User {
-  id                        String                  @id @default(uuid())
-  username                  String                  @unique
+  id                        String                     @id @default(uuid())
+  username                  String                     @unique
   passwordHash              String
   role                      Role
-  additionalRoles           Role[]                  @default([])
-  isActive                  Boolean                 @default(true)
+  additionalRoles           Role[]                     @default([])
+  isActive                  Boolean                    @default(true)
   lastActiveAt              DateTime?
-  createdAt                 DateTime                @default(now())
-  updatedAt                 DateTime                @updatedAt
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
   doctorProfile             DoctorProfile?
   nurseProfile              NurseProfile?
   secretaryProfile          SecretaryProfile?
   labProfile                LabTechnicianProfile?
   staffProfile              StaffProfile?
   sessions                  AuthSession[]
-  createdAppointments       Appointment[]           @relation("AppointmentCreator")
-  recordedVitals            VitalSign[]             @relation("VitalRecorder")
-  uploadedLabExamDocuments  LabExamDocument[]       @relation("LabExamDocumentUploader")
-  issuedInvoices            Invoice[]               @relation("InvoiceIssuer")
-  receivedPayments          Payment[]               @relation("PaymentReceiver")
+  createdAppointments       Appointment[]              @relation("AppointmentCreator")
+  recordedVitals            VitalSign[]                @relation("VitalRecorder")
+  uploadedLabExamDocuments  LabExamDocument[]          @relation("LabExamDocumentUploader")
+  issuedInvoices            Invoice[]                  @relation("InvoiceIssuer")
+  receivedPayments          Payment[]                  @relation("PaymentReceiver")
   stockMovements            StockMovement[]
-  sentMessages              Message[]               @relation("MessageSender")
-  receivedMessages          Message[]               @relation("MessageReceiver")
+  sentMessages              Message[]                  @relation("MessageSender")
+  receivedMessages          Message[]                  @relation("MessageReceiver")
   auditLogs                 AuditLog[]
-  createdCareAuthorizations CareAuthorization[]     @relation("CareAuthorizationCreator")
-  waivedCareAuthorizations  CareAuthorization[]     @relation("CareAuthorizationWaiver")
-  createdEmergencyAlerts    EmergencyAlert[]        @relation("EmergencyAlertCreator")
-  resolvedEmergencyAlerts   EmergencyAlert[]        @relation("EmergencyAlertResolver")
+  createdCareAuthorizations CareAuthorization[]        @relation("CareAuthorizationCreator")
+  waivedCareAuthorizations  CareAuthorization[]        @relation("CareAuthorizationWaiver")
+  createdEmergencyAlerts    EmergencyAlert[]           @relation("EmergencyAlertCreator")
+  resolvedEmergencyAlerts   EmergencyAlert[]           @relation("EmergencyAlertResolver")
   createdCustomFields       CustomFieldDefinition[]
-  requestedClinicalOrders   ClinicalOrder[]         @relation("ClinicalOrderRequester")
-  performedClinicalOrders   ClinicalOrder[]         @relation("ClinicalOrderPerformer")
-  prescribedTransfusions    BloodTransfusion[]      @relation("TransfusionPrescriber")
-  administeredTransfusions  BloodTransfusion[]      @relation("TransfusionAdministrator")
+  requestedClinicalOrders   ClinicalOrder[]            @relation("ClinicalOrderRequester")
+  performedClinicalOrders   ClinicalOrder[]            @relation("ClinicalOrderPerformer")
+  prescribedTransfusions    BloodTransfusion[]         @relation("TransfusionPrescriber")
+  administeredTransfusions  BloodTransfusion[]         @relation("TransfusionAdministrator")
   createdPurchaseOrders     PurchaseOrder[]
   updatedHospitalProfiles   HospitalProfile[]
-  prescriptions             Prescription[]          @relation("PrescriptionPrescriber")
-  insuranceCoverages        InsuranceCoverage[]     @relation("CoverageCreator")
-  specialtyCases            SpecialtyCase[]         @relation("SpecialtyResponsible")
-  radiologyStudies          RadiologyStudy[]        @relation("RadiologyPerformer")
-  staffShifts               StaffShift[]            @relation("ShiftEmployee")
-  attendanceRecords         AttendanceRecord[]      @relation("AttendanceEmployee")
-  payrollEntries            PayrollEntry[]          @relation("PayrollEmployee")
-  journalEntries            JournalEntry[]          @relation("JournalCreator")
-  inventoryCounts           InventoryCount[]        @relation("InventoryCounter")
+  prescriptions             Prescription[]             @relation("PrescriptionPrescriber")
+  insuranceCoverages        InsuranceCoverage[]        @relation("CoverageCreator")
+  specialtyCases            SpecialtyCase[]            @relation("SpecialtyResponsible")
+  radiologyStudies          RadiologyStudy[]           @relation("RadiologyPerformer")
+  staffShifts               StaffShift[]               @relation("ShiftEmployee")
+  attendanceRecords         AttendanceRecord[]         @relation("AttendanceEmployee")
+  payrollEntries            PayrollEntry[]             @relation("PayrollEmployee")
+  journalEntries            JournalEntry[]             @relation("JournalCreator")
+  inventoryCounts           InventoryCount[]           @relation("InventoryCounter")
   idempotencyRecords        IdempotencyRecord[]
-  createdPrintTemplates     PrintTemplate[]         @relation("PrintTemplateCreator")
-  updatedPrintTemplates     PrintTemplate[]         @relation("PrintTemplateUpdater")
-  createdCareVouchers       CareVoucher[]           @relation("CareVoucherCreator")
-  createdVoucherCoverages   VoucherCoverage[]       @relation("VoucherCoverageCreator")
-  orderedNursingCare        NursingCare[]           @relation("NursingCareOrderer")
-  assignedNursingCare       NursingCare[]           @relation("NursingCareAssignedNurse")
-  performedNursingCare      NursingCare[]           @relation("NursingCarePerformer")
-  cashClosures              CashClosure[]           @relation("CashClosureUser")
-  utilityBills              UtilityBill[]           @relation("UtilityBillCreator")
-  archivedPatients          Patient[]               @relation("PatientArchiver")
-  patientArchiveEvents      PatientArchiveEvent[]   @relation("PatientArchiveActor")
-  updatedArchivePolicies    ArchivePolicy[]         @relation("ArchivePolicyUpdater")
+  createdPrintTemplates     PrintTemplate[]            @relation("PrintTemplateCreator")
+  updatedPrintTemplates     PrintTemplate[]            @relation("PrintTemplateUpdater")
+  createdCareVouchers       CareVoucher[]              @relation("CareVoucherCreator")
+  createdVoucherCoverages   VoucherCoverage[]          @relation("VoucherCoverageCreator")
+  orderedNursingCare        NursingCare[]              @relation("NursingCareOrderer")
+  assignedNursingCare       NursingCare[]              @relation("NursingCareAssignedNurse")
+  performedNursingCare      NursingCare[]              @relation("NursingCarePerformer")
+  cashClosures              CashClosure[]              @relation("CashClosureUser")
+  utilityBills              UtilityBill[]              @relation("UtilityBillCreator")
+  archivedPatients          Patient[]                  @relation("PatientArchiver")
+  patientArchiveEvents      PatientArchiveEvent[]      @relation("PatientArchiveActor")
+  updatedArchivePolicies    ArchivePolicy[]            @relation("ArchivePolicyUpdater")
   clinicalAmendments        PatientClinicalAmendment[] @relation("ClinicalAmendmentAuthor")
-  createdDepartmentReports  DepartmentDailyReport[] @relation("DepartmentReportCreator")
-  approvedDepartmentReports DepartmentDailyReport[] @relation("DepartmentReportApprover")
-  requestedRequisitions     InternalRequisition[] @relation("RequisitionRequester")
-  approvedRequisitions      InternalRequisition[] @relation("RequisitionApprover")
-  fulfilledRequisitions     InternalRequisition[] @relation("RequisitionFulfiller")
+  createdDepartmentReports  DepartmentDailyReport[]    @relation("DepartmentReportCreator")
+  approvedDepartmentReports DepartmentDailyReport[]    @relation("DepartmentReportApprover")
+  requestedRequisitions     InternalRequisition[]      @relation("RequisitionRequester")
+  approvedRequisitions      InternalRequisition[]      @relation("RequisitionApprover")
+  fulfilledRequisitions     InternalRequisition[]      @relation("RequisitionFulfiller")
   departmentStockMovements  DepartmentStockMovement[]
+  emergencyAlertComments    EmergencyAlertComment[]    @relation("EmergencyAlertCommentAuthor")
 
   @@index([role, isActive])
 }
@@ -553,9 +553,9 @@ model StaffProfile {
 }
 
 model Patient {
-  id                  String                @id @default(uuid())
-  medicalRecordNumber String                @unique
-  identityKey         String?               @unique
+  id                  String                     @id @default(uuid())
+  medicalRecordNumber String                     @unique
+  identityKey         String?                    @unique
   lastName            String
   postName            String?
   firstName           String?
@@ -570,8 +570,8 @@ model Patient {
   archiveReason       String?
   retentionUntil      DateTime?
   archivedById        String?
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
   appointments        Appointment[]
   consultations       Consultation[]
   vitalSigns          VitalSign[]
@@ -587,9 +587,10 @@ model Patient {
   radiologyStudies    RadiologyStudy[]
   careVouchers        CareVoucher[]
   nursingCare         NursingCare[]
-  archivedBy          User?                 @relation("PatientArchiver", fields: [archivedById], references: [id], onDelete: SetNull)
+  archivedBy          User?                      @relation("PatientArchiver", fields: [archivedById], references: [id], onDelete: SetNull)
   archiveEvents       PatientArchiveEvent[]
   clinicalAmendments  PatientClinicalAmendment[]
+  emergencyAlerts     EmergencyAlert[]
 
   @@index([lastName, postName, firstName])
   @@index([phone])
@@ -658,11 +659,11 @@ model Appointment {
 }
 
 model Consultation {
-  id                String             @id @default(uuid())
+  id                String                     @id @default(uuid())
   patientId         String
   doctorId          String
-  appointmentId     String?            @unique
-  status            ConsultationStatus @default(WAITING)
+  appointmentId     String?                    @unique
+  status            ConsultationStatus         @default(WAITING)
   reason            String
   report            String?
   orientation       String?
@@ -670,11 +671,11 @@ model Consultation {
   certificate       String?
   startedAt         DateTime?
   completedAt       DateTime?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  patient           Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  doctor            DoctorProfile      @relation(fields: [doctorId], references: [id])
-  appointment       Appointment?       @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+  patient           Patient                    @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor            DoctorProfile              @relation(fields: [doctorId], references: [id])
+  appointment       Appointment?               @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
   vitalSigns        VitalSign[]
   examRequests      ExamRequest[]
   careAuthorization CareAuthorization?
@@ -791,6 +792,7 @@ model Hospitalization {
   bed                 Bed                   @relation(fields: [bedId], references: [id])
   careAuthorization   CareAuthorization?
   nursingCare         NursingCare[]
+  emergencyAlerts     EmergencyAlert[]
 
   @@index([patientId, status])
   @@index([bedId, status])
@@ -870,29 +872,29 @@ model CashClosure {
 }
 
 model Medication {
-  id                 String               @id @default(uuid())
-  code               String               @unique
-  name               String
-  form               String?
-  strength           String?
-  stockQuantity      Int                  @default(0)
-  minimumStock       Int                  @default(5)
-  unitPrice          Decimal              @default(0) @db.Decimal(12, 2)
-  isActive           Boolean              @default(true)
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  stockMovements     StockMovement[]
-  careAuthorizations CareAuthorization[]
-  purchaseOrderItems PurchaseOrderItem[]
-  batches            MedicationBatch[]
-  prescriptionItems  PrescriptionItem[]
-  interactionAsA     DrugInteraction[]    @relation("InteractionMedicationA")
-  interactionAsB     DrugInteraction[]    @relation("InteractionMedicationB")
-  inventoryLines     InventoryCountLine[]
-  departmentStocks   DepartmentStock[]
+  id                    String                      @id @default(uuid())
+  code                  String                      @unique
+  name                  String
+  form                  String?
+  strength              String?
+  stockQuantity         Int                         @default(0)
+  minimumStock          Int                         @default(5)
+  unitPrice             Decimal                     @default(0) @db.Decimal(12, 2)
+  isActive              Boolean                     @default(true)
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  stockMovements        StockMovement[]
+  careAuthorizations    CareAuthorization[]
+  purchaseOrderItems    PurchaseOrderItem[]
+  batches               MedicationBatch[]
+  prescriptionItems     PrescriptionItem[]
+  interactionAsA        DrugInteraction[]           @relation("InteractionMedicationA")
+  interactionAsB        DrugInteraction[]           @relation("InteractionMedicationB")
+  inventoryLines        InventoryCountLine[]
+  departmentStocks      DepartmentStock[]
   departmentReportItems DepartmentDailyReportItem[]
-  requisitionItems   InternalRequisitionItem[]
-  departmentMovements DepartmentStockMovement[]
+  requisitionItems      InternalRequisitionItem[]
+  departmentMovements   DepartmentStockMovement[]
 
   @@index([name])
   @@index([stockQuantity])
@@ -959,23 +961,41 @@ model AuditLog {
 }
 
 model EmergencyAlert {
-  id           String               @id @default(uuid())
-  title        String
-  message      String
-  location     String?
-  severity     EmergencySeverity    @default(HIGH)
-  status       EmergencyAlertStatus @default(ACTIVE)
-  targetRole   Role?
-  createdById  String
-  resolvedById String?
-  createdAt    DateTime             @default(now())
-  resolvedAt   DateTime?
-  expiresAt    DateTime?
-  createdBy    User                 @relation("EmergencyAlertCreator", fields: [createdById], references: [id])
-  resolvedBy   User?                @relation("EmergencyAlertResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  id                String                  @id @default(uuid())
+  title             String
+  message           String
+  location          String?
+  severity          EmergencySeverity       @default(HIGH)
+  status            EmergencyAlertStatus    @default(ACTIVE)
+  targetRole        Role?
+  patientId         String?
+  hospitalizationId String?
+  createdById       String
+  resolvedById      String?
+  createdAt         DateTime                @default(now())
+  resolvedAt        DateTime?
+  expiresAt         DateTime?
+  createdBy         User                    @relation("EmergencyAlertCreator", fields: [createdById], references: [id])
+  resolvedBy        User?                   @relation("EmergencyAlertResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  patient           Patient?                @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  hospitalization   Hospitalization?        @relation(fields: [hospitalizationId], references: [id], onDelete: SetNull)
+  comments          EmergencyAlertComment[]
 
   @@index([status, createdAt])
   @@index([targetRole, status])
+  @@index([patientId, status, createdAt])
+}
+
+model EmergencyAlertComment {
+  id        String         @id @default(uuid())
+  alertId   String
+  authorId  String
+  comment   String
+  createdAt DateTime       @default(now())
+  alert     EmergencyAlert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  author    User           @relation("EmergencyAlertCommentAuthor", fields: [authorId], references: [id])
+
+  @@index([alertId, createdAt])
 }
 
 model BillableService {
@@ -1723,7 +1743,7 @@ model IdempotencyRecord {
 }
 
 model PatientClinicalAmendment {
-  id             String   @id @default(uuid())
+  id             String        @id @default(uuid())
   patientId      String
   consultationId String?
   authorId       String
@@ -1732,10 +1752,10 @@ model PatientClinicalAmendment {
   previousValue  String?
   newValue       String
   reason         String
-  createdAt      DateTime @default(now())
-  patient        Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  createdAt      DateTime      @default(now())
+  patient        Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
   consultation   Consultation? @relation(fields: [consultationId], references: [id], onDelete: SetNull)
-  author         User     @relation("ClinicalAmendmentAuthor", fields: [authorId], references: [id])
+  author         User          @relation("ClinicalAmendmentAuthor", fields: [authorId], references: [id])
 
   @@index([patientId, createdAt])
   @@index([consultationId, createdAt])
@@ -1743,12 +1763,12 @@ model PatientClinicalAmendment {
 }
 
 model DepartmentStock {
-  id              String   @id @default(uuid())
+  id              String     @id @default(uuid())
   department      String
   medicationId    String
-  quantity        Int      @default(0)
-  minimumQuantity Int      @default(0)
-  updatedAt       DateTime @updatedAt
+  quantity        Int        @default(0)
+  minimumQuantity Int        @default(0)
+  updatedAt       DateTime   @updatedAt
   medication      Medication @relation(fields: [medicationId], references: [id])
 
   @@unique([department, medicationId])
@@ -1756,17 +1776,17 @@ model DepartmentStock {
 }
 
 model DepartmentStockMovement {
-  id                String   @id @default(uuid())
-  medicationId      String
-  userId            String
-  sourceDepartment  String?
-  targetDepartment  String?
-  quantity          Int
-  reason            String
-  reference         String?
-  createdAt         DateTime @default(now())
-  medication        Medication @relation(fields: [medicationId], references: [id])
-  user              User       @relation(fields: [userId], references: [id])
+  id               String     @id @default(uuid())
+  medicationId     String
+  userId           String
+  sourceDepartment String?
+  targetDepartment String?
+  quantity         Int
+  reason           String
+  reference        String?
+  createdAt        DateTime   @default(now())
+  medication       Medication @relation(fields: [medicationId], references: [id])
+  user             User       @relation(fields: [userId], references: [id])
 
   @@index([medicationId, createdAt])
   @@index([sourceDepartment, createdAt])
@@ -1774,27 +1794,27 @@ model DepartmentStockMovement {
 }
 
 model DepartmentDailyReport {
-  id             String                 @id @default(uuid())
-  reference      String                 @unique
-  department     String
-  businessDate   DateTime               @db.Date
-  shift          String?
-  status         DepartmentReportStatus @default(DRAFT)
-  newAdmissions  Int                    @default(0)
-  hospitalized   Int                    @default(0)
-  ambulatory     Int                    @default(0)
-  serviceTotal   Int                    @default(0)
-  metrics        Json?
-  observations   String?
-  createdById    String
-  approvedById   String?
-  submittedAt    DateTime?
-  approvedAt     DateTime?
-  createdAt      DateTime               @default(now())
-  updatedAt      DateTime               @updatedAt
-  createdBy      User                   @relation("DepartmentReportCreator", fields: [createdById], references: [id])
-  approvedBy     User?                  @relation("DepartmentReportApprover", fields: [approvedById], references: [id], onDelete: SetNull)
-  items          DepartmentDailyReportItem[]
+  id            String                      @id @default(uuid())
+  reference     String                      @unique
+  department    String
+  businessDate  DateTime                    @db.Date
+  shift         String?
+  status        DepartmentReportStatus      @default(DRAFT)
+  newAdmissions Int                         @default(0)
+  hospitalized  Int                         @default(0)
+  ambulatory    Int                         @default(0)
+  serviceTotal  Int                         @default(0)
+  metrics       Json?
+  observations  String?
+  createdById   String
+  approvedById  String?
+  submittedAt   DateTime?
+  approvedAt    DateTime?
+  createdAt     DateTime                    @default(now())
+  updatedAt     DateTime                    @updatedAt
+  createdBy     User                        @relation("DepartmentReportCreator", fields: [createdById], references: [id])
+  approvedBy    User?                       @relation("DepartmentReportApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  items         DepartmentDailyReportItem[]
 
   @@unique([department, businessDate, shift])
   @@index([businessDate, department])
@@ -1802,63 +1822,63 @@ model DepartmentDailyReport {
 }
 
 model DepartmentDailyReportItem {
-  id                 String   @id @default(uuid())
-  reportId           String
-  medicationId       String?
-  itemName           String
-  unit               String?
-  openingStock       Int      @default(0)
-  receivedQuantity   Int      @default(0)
-  pendingOrder       Int      @default(0)
-  usedQuantity       Int      @default(0)
-  returnedQuantity   Int      @default(0)
-  lostQuantity       Int      @default(0)
-  closingStock       Int      @default(0)
-  unitCost           Decimal? @db.Decimal(12, 2)
-  observations       String?
-  report             DepartmentDailyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  medication         Medication? @relation(fields: [medicationId], references: [id], onDelete: SetNull)
+  id               String                @id @default(uuid())
+  reportId         String
+  medicationId     String?
+  itemName         String
+  unit             String?
+  openingStock     Int                   @default(0)
+  receivedQuantity Int                   @default(0)
+  pendingOrder     Int                   @default(0)
+  usedQuantity     Int                   @default(0)
+  returnedQuantity Int                   @default(0)
+  lostQuantity     Int                   @default(0)
+  closingStock     Int                   @default(0)
+  unitCost         Decimal?              @db.Decimal(12, 2)
+  observations     String?
+  report           DepartmentDailyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  medication       Medication?           @relation(fields: [medicationId], references: [id], onDelete: SetNull)
 
   @@index([reportId])
   @@index([medicationId])
 }
 
 model InternalRequisition {
-  id             String              @id @default(uuid())
-  reference      String              @unique
-  department     String
-  priority       RequisitionPriority @default(ROUTINE)
-  status         RequisitionStatus   @default(DRAFT)
-  reason         String
-  notes          String?
-  requestedById  String
-  approvedById   String?
-  fulfilledById  String?
-  requestedAt    DateTime            @default(now())
-  approvedAt     DateTime?
-  fulfilledAt    DateTime?
-  updatedAt      DateTime            @updatedAt
-  requestedBy    User                @relation("RequisitionRequester", fields: [requestedById], references: [id])
-  approvedBy     User?               @relation("RequisitionApprover", fields: [approvedById], references: [id], onDelete: SetNull)
-  fulfilledBy    User?               @relation("RequisitionFulfiller", fields: [fulfilledById], references: [id], onDelete: SetNull)
-  items          InternalRequisitionItem[]
+  id            String                    @id @default(uuid())
+  reference     String                    @unique
+  department    String
+  priority      RequisitionPriority       @default(ROUTINE)
+  status        RequisitionStatus         @default(DRAFT)
+  reason        String
+  notes         String?
+  requestedById String
+  approvedById  String?
+  fulfilledById String?
+  requestedAt   DateTime                  @default(now())
+  approvedAt    DateTime?
+  fulfilledAt   DateTime?
+  updatedAt     DateTime                  @updatedAt
+  requestedBy   User                      @relation("RequisitionRequester", fields: [requestedById], references: [id])
+  approvedBy    User?                     @relation("RequisitionApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  fulfilledBy   User?                     @relation("RequisitionFulfiller", fields: [fulfilledById], references: [id], onDelete: SetNull)
+  items         InternalRequisitionItem[]
 
   @@index([department, requestedAt])
   @@index([status, requestedAt])
 }
 
 model InternalRequisitionItem {
-  id                String   @id @default(uuid())
+  id                String              @id @default(uuid())
   requisitionId     String
   medicationId      String?
   itemName          String
   unit              String?
   quantityRequested Int
-  quantityApproved  Int      @default(0)
-  quantityIssued    Int      @default(0)
+  quantityApproved  Int                 @default(0)
+  quantityIssued    Int                 @default(0)
   observations      String?
   requisition       InternalRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
-  medication        Medication? @relation(fields: [medicationId], references: [id], onDelete: SetNull)
+  medication        Medication?         @relation(fields: [medicationId], references: [id], onDelete: SetNull)
 
   @@index([requisitionId])
   @@index([medicationId])

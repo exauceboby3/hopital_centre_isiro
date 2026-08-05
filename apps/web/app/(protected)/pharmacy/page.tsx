@@ -36,7 +36,6 @@ interface CareAuthorization {
   patient: Patient;
   medicationId: string;
   quantity: number;
-  invoice: { number: string };
 }
 interface Prescription {
   id: string;
@@ -44,7 +43,8 @@ interface Prescription {
   status: string;
   prescribedAt: string;
   patient: Patient;
-  invoice: { number: string; status: string };
+  invoice?: { number: string; status: string };
+  paymentClearance?: { inOrder: boolean; status: 'IN_ORDER' | 'TO_REGULARIZE' };
   items: Array<{
     id: string;
     quantity: number;
@@ -193,7 +193,7 @@ export default function PharmacyPage() {
         row.number,
         patientName(row.patient),
         row.patient.medicalRecordNumber,
-        row.invoice.number,
+        row.invoice?.number,
         row.items.map((item) => item.medicationName || item.medication?.name || '').join(' '),
       ),
   );
@@ -224,7 +224,7 @@ export default function PharmacyPage() {
         <div className="panel-toolbar">
           <div>
             <strong>Ordonnances structurées à délivrer</strong>
-            <span>La caisse encaisse la facture avant la remise des médicaments disponibles.</span>
+            <span>La caisse confirme le paiement avant la remise des médicaments disponibles.</span>
           </div>
           <Stethoscope size={22} />
         </div>
@@ -241,7 +241,7 @@ export default function PharmacyPage() {
                 <th>Ordonnance</th>
                 <th>Patient</th>
                 <th>Médicaments</th>
-                <th>Facture</th>
+                <th>Paiement</th>
                 <th>Action</th>
               </tr>
             </thead>
@@ -263,14 +263,18 @@ export default function PharmacyPage() {
                   <td>
                     {row.items.map((item) => {
                       const remaining = item.quantity - item.dispensedQuantity;
-                      const internal = item.availability === 'INTERNAL' || item.availability === 'PARTIAL';
+                      const internal =
+                        item.availability === 'INTERNAL' || item.availability === 'PARTIAL';
                       const available = Boolean(
                         internal && item.medication && item.medication.stockQuantity >= remaining,
                       );
                       return (
-                        <div key={item.id} className={internal && !available ? 'stock-unavailable' : ''}>
-                          {item.medicationName || item.medication?.name || 'Médicament'} — {item.dosage},{' '}
-                          {item.frequency} · {remaining} unité(s)
+                        <div
+                          key={item.id}
+                          className={internal && !available ? 'stock-unavailable' : ''}
+                        >
+                          {item.medicationName || item.medication?.name || 'Médicament'} —{' '}
+                          {item.dosage}, {item.frequency} · {remaining} unité(s)
                           {!internal && ' · achat extérieur (aucune sortie de stock)'}
                           {internal && !available && ' · stock insuffisant'}
                         </div>
@@ -278,9 +282,16 @@ export default function PharmacyPage() {
                     })}
                   </td>
                   <td>
-                    {row.invoice.number}
+                    {row.invoice?.number ||
+                      (row.paymentClearance?.inOrder
+                        ? 'Paiement en ordre'
+                        : 'Paiement à régulariser')}
                     <br />
-                    <StatusBadge status={row.invoice.status} />
+                    <StatusBadge
+                      status={
+                        row.invoice?.status || row.paymentClearance?.status || 'TO_REGULARIZE'
+                      }
+                    />
                   </td>
                   <td>
                     <div className="row-actions">
@@ -529,7 +540,7 @@ export default function PharmacyPage() {
         >
           <form onSubmit={dispense}>
             <label className="field">
-              <span>Facture payée *</span>
+              <span>Paiement validé *</span>
               <select
                 required
                 value={dispenseAuthorizationId}
@@ -540,8 +551,8 @@ export default function PharmacyPage() {
                   .filter((entry) => entry.medicationId === dispensingFor.id)
                   .map((authorization) => (
                     <option value={authorization.id} key={authorization.id}>
-                      {patientName(authorization.patient)} — quantité {authorization.quantity} —{' '}
-                      {authorization.invoice.number}
+                      {patientName(authorization.patient)} — quantité {authorization.quantity} —
+                      paiement validé
                     </option>
                   ))}
               </select>

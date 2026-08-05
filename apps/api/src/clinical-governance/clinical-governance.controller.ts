@@ -65,7 +65,7 @@ export class ClinicalGovernanceController {
   }
 
   @Get('patients/:patientId/financial-account')
-  @Roles(...accountRoles, Role.DOCTOR, Role.SURGEON, Role.MIDWIFE)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.CASHIER, Role.ACCOUNTANT)
   financialAccount(@Param('patientId', ParseUUIDPipe) patientId: string) {
     return this.governance.financialAccount(patientId);
   }
@@ -101,9 +101,18 @@ export class ClinicalGovernanceController {
   }
 
   @Get('patients/:patientId/episodes')
-  @Roles(...accountRoles, ...clinicalRoles, Role.MEDICAL_BIOLOGIST, Role.LAB_TECHNICIAN, Role.RADIOLOGIST)
-  episodes(@Param('patientId', ParseUUIDPipe) patientId: string) {
-    return this.governance.episodes(patientId);
+  @Roles(
+    ...accountRoles,
+    ...clinicalRoles,
+    Role.MEDICAL_BIOLOGIST,
+    Role.LAB_TECHNICIAN,
+    Role.RADIOLOGIST,
+  )
+  episodes(
+    @Param('patientId', ParseUUIDPipe) patientId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.governance.episodes(patientId, user);
   }
 
   @Post('patients/:patientId/episodes')
@@ -134,10 +143,7 @@ export class ClinicalGovernanceController {
 
   @Patch('break-glass/:id/revoke')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, ...clinicalRoles)
-  revokeBreakGlass(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
+  revokeBreakGlass(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.governance.revokeBreakGlass(id, user);
   }
 
@@ -197,10 +203,7 @@ export class ClinicalGovernanceController {
 
   @Get('doctor-waiting-room')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.DOCTOR, Role.SURGEON, Role.MIDWIFE)
-  doctorWaitingRoom(
-    @CurrentUser() user: AuthenticatedUser,
-    @Query('doctorId') doctorId?: string,
-  ) {
+  doctorWaitingRoom(@CurrentUser() user: AuthenticatedUser, @Query('doctorId') doctorId?: string) {
     return this.governance.doctorWaitingRoom(user, doctorId);
   }
 }

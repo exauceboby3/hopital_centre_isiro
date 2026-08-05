@@ -1,6 +1,15 @@
 'use client';
 
-import { Activity, CheckCircle2, Clock3, Plus, ScanLine, Syringe, XCircle } from 'lucide-react';
+import {
+  Activity,
+  CheckCircle2,
+  ClipboardPlus,
+  Clock3,
+  Plus,
+  ScanLine,
+  Syringe,
+  XCircle,
+} from 'lucide-react';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { CustomFieldsEditor } from '@/components/custom-fields-editor';
@@ -30,6 +39,13 @@ interface NursingCare {
   orderedBy?: Pick<User, 'id' | 'username' | 'role'>;
   assignedNurse?: Pick<User, 'id' | 'username' | 'role'>;
   performedBy?: Pick<User, 'id' | 'username' | 'role'>;
+  hospitalization?: { id: string; bed: { code: string; room: { name: string; code: string } } };
+}
+
+interface ActiveHospitalization {
+  id: string;
+  patient: Patient;
+  bed: { code: string; room: { name: string; code: string } };
 }
 
 const careTypes = [
@@ -57,6 +73,19 @@ const emptyForm = {
   site: '',
   instructions: '',
   scheduledAt: '',
+  frequencyHours: '',
+  durationDays: '',
+};
+
+const emptyWardRound = {
+  patientId: '',
+  condition: '',
+  observations: '',
+  actions: '',
+  temperatureC: '',
+  pulse: '',
+  oxygenPercent: '',
+  unstable: false,
 };
 
 const emptyCompletion = {
@@ -83,9 +112,13 @@ export default function NursingPage() {
   const [rows, setRows] = useState<NursingCare[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [nurses, setNurses] = useState<User[]>([]);
+  const [activeHospitalizations, setActiveHospitalizations] = useState<ActiveHospitalization[]>([]);
+  const [medicationAlertCount, setMedicationAlertCount] = useState(0);
   const [query, setQuery] = useState('');
   const [form, setForm] = useState(emptyForm);
   const [open, setOpen] = useState(false);
+  const [wardRoundOpen, setWardRoundOpen] = useState(false);
+  const [wardRound, setWardRound] = useState(emptyWardRound);
   const [completing, setCompleting] = useState<NursingCare | null>(null);
   const [omitting, setOmitting] = useState<NursingCare | null>(null);
   const [completion, setCompletion] = useState(emptyCompletion);
@@ -100,16 +133,27 @@ export default function NursingPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [careRows, patientRows, users] = await Promise.all([
+      const [careRows, patientRows, users, stays] = await Promise.all([
         api<NursingCare[]>('/nursing-care'),
         api<{ items: Patient[] }>('/patients/lookup?limit=200'),
         api<User[]>('/users'),
+        api<ActiveHospitalization[]>('/hospitalizations?status=ACTIVE'),
       ]);
       setRows(careRows);
+      const alertLimit = Date.now() + 30 * 60 * 1000;
+      setMedicationAlertCount(
+        careRows.filter(
+          (row) =>
+            ['INJECTION', 'INFUSION', 'MEDICATION'].includes(row.type) &&
+            ['ORDERED', 'SCHEDULED'].includes(row.status) &&
+            new Date(row.scheduledAt).getTime() <= alertLimit,
+        ).length,
+      );
       setPatients(patientRows.items);
       setNurses(
         users.filter((entry) => entry.role === 'NURSE' || entry.additionalRoles?.includes('NURSE')),
       );
+      setActiveHospitalizations(stays);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Chargement des soins impossible.');
     } finally {
@@ -139,6 +183,8 @@ export default function NursingPage() {
           site: form.site || undefined,
           instructions: form.instructions || undefined,
           scheduledAt: new Date(form.scheduledAt).toISOString(),
+          frequencyHours: form.frequencyHours ? Number(form.frequencyHours) : undefined,
+          durationDays: form.durationDays ? Number(form.durationDays) : undefined,
         }),
       });
       setOpen(false);
@@ -146,6 +192,38 @@ export default function NursingPage() {
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Création du soin impossible.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const recordWardRound = async (event: FormEvent) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setError('');
+    try {
+      await api('/nursing-care/ward-rounds', {
+        method: 'POST',
+        body: JSON.stringify({
+          patientId: wardRound.patientId,
+          condition: wardRound.condition,
+          observations: wardRound.observations || undefined,
+          actions: wardRound.actions || undefined,
+          vitalSigns: {
+            ...(wardRound.temperatureC ? { temperatureC: Number(wardRound.temperatureC) } : {}),
+            ...(wardRound.pulse ? { pulse: Number(wardRound.pulse) } : {}),
+            ...(wardRound.oxygenPercent ? { oxygenPercent: Number(wardRound.oxygenPercent) } : {}),
+          },
+          unstable: wardRound.unstable,
+        }),
+      });
+      setWardRound(emptyWardRound);
+      setWardRoundOpen(false);
+      await load();
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : 'Enregistrement du tour de salle impossible.',
+      );
     } finally {
       setSubmitting(false);
     }
@@ -203,22 +281,36 @@ export default function NursingPage() {
           <span className="eyebrow">Administration sécurisée des soins</span>
           <h1>Soins infirmiers</h1>
           <p>
-            Recherchez le patient ou son numéro de dossier, contrôlez la prescription et tracez l’heure, la dose, l’identité de l’infirmier et tout incident.
+            Recherchez le patient ou son numéro de dossier, contrôlez la prescription et tracez
+            l’heure, la dose, l’identité de l’infirmier et tout incident.
           </p>
         </div>
-        {canOrder && (
-          <button
-            className="primary-button"
-            onClick={() => {
-              setForm({ ...emptyForm, scheduledAt: localDateTimeInputValue() });
-              setOpen(true);
-            }}
-          >
-            <Plus size={18} /> Programmer un soin
-          </button>
-        )}
+        <div className="row-actions">
+          {canPerform && (
+            <button className="secondary-button" onClick={() => setWardRoundOpen(true)}>
+              <ClipboardPlus size={18} /> Noter un tour de salle
+            </button>
+          )}
+          {canOrder && (
+            <button
+              className="primary-button"
+              onClick={() => {
+                setForm({ ...emptyForm, scheduledAt: localDateTimeInputValue() });
+                setOpen(true);
+              }}
+            >
+              <Plus size={18} /> Programmer un soin
+            </button>
+          )}
+        </div>
       </div>
       {error && <div className="alert error">{error}</div>}
+      {medicationAlertCount > 0 && (
+        <div className="alert warning">
+          <Clock3 size={18} /> {medicationAlertCount} médicament(s) à administrer maintenant ou dans
+          les 30 prochaines minutes.
+        </div>
+      )}
       <section className="panel table-panel">
         <div className="panel-toolbar">
           <div>
@@ -279,6 +371,14 @@ export default function NursingPage() {
                       <strong>{patientName(row.patient)}</strong>
                       <br />
                       <span className="muted">{row.patient.medicalRecordNumber}</span>
+                      {row.hospitalization && (
+                        <>
+                          <br />
+                          <span className="muted">
+                            {row.hospitalization.bed.room.name} · lit {row.hospitalization.bed.code}
+                          </span>
+                        </>
+                      )}
                     </td>
                     <td>
                       <strong>{row.label}</strong>
@@ -306,11 +406,12 @@ export default function NursingPage() {
                     </td>
                     <td>
                       <div className="row-actions">
-                        {canPerform && ['ORDERED', 'SCHEDULED', 'IN_PROGRESS'].includes(row.status) && (
-                          <button className="text-button" onClick={() => openAdministration(row)}>
-                            <CheckCircle2 size={15} /> Confirmer administré
-                          </button>
-                        )}
+                        {canPerform &&
+                          ['ORDERED', 'SCHEDULED', 'IN_PROGRESS'].includes(row.status) && (
+                            <button className="text-button" onClick={() => openAdministration(row)}>
+                              <CheckCircle2 size={15} /> Confirmer administré
+                            </button>
+                          )}
                         {canPerform && ['ORDERED', 'SCHEDULED'].includes(row.status) && (
                           <button className="text-button" onClick={() => openOmission(row)}>
                             <Clock3 size={15} /> Non réalisé
@@ -388,6 +489,32 @@ export default function NursingPage() {
                   onChange={(event) => setForm({ ...form, scheduledAt: event.target.value })}
                 />
               </label>
+              {medicationRequired && (
+                <>
+                  <label className="field">
+                    <span>Répéter toutes les (heures)</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="72"
+                      value={form.frequencyHours}
+                      onChange={(event) => setForm({ ...form, frequencyHours: event.target.value })}
+                      placeholder="Ex. 8"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Durée du traitement (jours)</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="90"
+                      value={form.durationDays}
+                      onChange={(event) => setForm({ ...form, durationDays: event.target.value })}
+                      placeholder="Ex. 7"
+                    />
+                  </label>
+                </>
+              )}
               <label className="field full">
                 <span>Intitulé du soin *</span>
                 <input
@@ -452,6 +579,121 @@ export default function NursingPage() {
         </Modal>
       )}
 
+      {wardRoundOpen && (
+        <Modal
+          title="Tour de salle infirmier"
+          eyebrow="Observation clinique d’un patient hospitalisé"
+          onClose={() => setWardRoundOpen(false)}
+        >
+          <form onSubmit={recordWardRound}>
+            <div className="form-grid">
+              <SearchableSelect
+                required
+                label="Patient hospitalisé"
+                value={wardRound.patientId}
+                onChange={(patientId) => setWardRound({ ...wardRound, patientId })}
+                options={activeHospitalizations.map((stay) => ({
+                  value: stay.patient.id,
+                  label: patientName(stay.patient),
+                  description: `${stay.patient.medicalRecordNumber} · ${stay.bed.room.name} · lit ${stay.bed.code}`,
+                }))}
+              />
+              <label className="field full">
+                <span>État actuel du patient *</span>
+                <textarea
+                  required
+                  minLength={3}
+                  rows={3}
+                  value={wardRound.condition}
+                  onChange={(event) =>
+                    setWardRound({ ...wardRound, condition: event.target.value })
+                  }
+                  placeholder="Conscience, douleur, respiration, mobilité, alimentation…"
+                />
+              </label>
+              <label className="field">
+                <span>Température (°C)</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={wardRound.temperatureC}
+                  onChange={(event) =>
+                    setWardRound({ ...wardRound, temperatureC: event.target.value })
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Pouls (/min)</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={wardRound.pulse}
+                  onChange={(event) => setWardRound({ ...wardRound, pulse: event.target.value })}
+                />
+              </label>
+              <label className="field">
+                <span>SpO₂ (%)</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={wardRound.oxygenPercent}
+                  onChange={(event) =>
+                    setWardRound({ ...wardRound, oxygenPercent: event.target.value })
+                  }
+                />
+              </label>
+              <label className="field full">
+                <span>Observations infirmières</span>
+                <textarea
+                  rows={3}
+                  value={wardRound.observations}
+                  onChange={(event) =>
+                    setWardRound({ ...wardRound, observations: event.target.value })
+                  }
+                />
+              </label>
+              <label className="field full">
+                <span>Actions réalisées / consignes à transmettre</span>
+                <textarea
+                  rows={3}
+                  value={wardRound.actions}
+                  onChange={(event) => setWardRound({ ...wardRound, actions: event.target.value })}
+                />
+              </label>
+              <label className="checkbox-field full">
+                <input
+                  type="checkbox"
+                  checked={wardRound.unstable}
+                  onChange={(event) =>
+                    setWardRound({ ...wardRound, unstable: event.target.checked })
+                  }
+                />
+                <span>
+                  <strong>Patient instable</strong>
+                  <small>
+                    Déclencher immédiatement une alerte critique sonore au médecin avec le dossier,
+                    la chambre et le lit.
+                  </small>
+                </span>
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setWardRoundOpen(false)}
+              >
+                Annuler
+              </button>
+              <button className="primary-button" disabled={submitting}>
+                Enregistrer dans le dossier
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
       {completing && (
         <Modal
           title="Confirmer l’administration"
@@ -472,14 +714,36 @@ export default function NursingPage() {
             }}
           >
             <div className="patient-journey-detail nursing-administration-summary">
-              <div><strong>Soin</strong><span>{completing.label}</span></div>
-              <div><strong>Prévu</strong><span>{formatDateTime(completing.scheduledAt)}</span></div>
-              <div><strong>Médicament</strong><span>{completing.medicationName || '—'}</span></div>
-              <div><strong>Dose / voie</strong><span>{[completing.dose, completing.route, completing.site].filter(Boolean).join(' · ') || '—'}</span></div>
-              {completing.instructions && <div className="full"><strong>Instructions</strong><span>{completing.instructions}</span></div>}
+              <div>
+                <strong>Soin</strong>
+                <span>{completing.label}</span>
+              </div>
+              <div>
+                <strong>Prévu</strong>
+                <span>{formatDateTime(completing.scheduledAt)}</span>
+              </div>
+              <div>
+                <strong>Médicament</strong>
+                <span>{completing.medicationName || '—'}</span>
+              </div>
+              <div>
+                <strong>Dose / voie</strong>
+                <span>
+                  {[completing.dose, completing.route, completing.site]
+                    .filter(Boolean)
+                    .join(' · ') || '—'}
+                </span>
+              </div>
+              {completing.instructions && (
+                <div className="full">
+                  <strong>Instructions</strong>
+                  <span>{completing.instructions}</span>
+                </div>
+              )}
             </div>
             <div className="alert info">
-              L’heure exacte, l’identité de l’infirmier et une signature numérique seront enregistrées automatiquement.
+              L’heure exacte, l’identité de l’infirmier et une signature numérique seront
+              enregistrées automatiquement.
             </div>
             <div className="form-grid">
               {isMedicationAdministration && (
@@ -489,22 +753,32 @@ export default function NursingPage() {
                     <input
                       required
                       value={completion.administeredDose}
-                      onChange={(event) => setCompletion({ ...completion, administeredDose: event.target.value })}
+                      onChange={(event) =>
+                        setCompletion({ ...completion, administeredDose: event.target.value })
+                      }
                     />
                   </label>
                   <label className="field">
-                    <span><ScanLine size={15} /> Code patient / bracelet</span>
+                    <span>
+                      <ScanLine size={15} /> Code patient / bracelet
+                    </span>
                     <input
                       value={completion.patientBarcode}
-                      onChange={(event) => setCompletion({ ...completion, patientBarcode: event.target.value })}
+                      onChange={(event) =>
+                        setCompletion({ ...completion, patientBarcode: event.target.value })
+                      }
                       placeholder="Scanner ou saisir"
                     />
                   </label>
                   <label className="field full">
-                    <span><ScanLine size={15} /> Code du médicament / lot</span>
+                    <span>
+                      <ScanLine size={15} /> Code du médicament / lot
+                    </span>
                     <input
                       value={completion.medicationBarcode}
-                      onChange={(event) => setCompletion({ ...completion, medicationBarcode: event.target.value })}
+                      onChange={(event) =>
+                        setCompletion({ ...completion, medicationBarcode: event.target.value })
+                      }
                       placeholder="Scanner ou saisir"
                     />
                   </label>
@@ -515,7 +789,9 @@ export default function NursingPage() {
                 <textarea
                   rows={3}
                   value={completion.observations}
-                  onChange={(event) => setCompletion({ ...completion, observations: event.target.value })}
+                  onChange={(event) =>
+                    setCompletion({ ...completion, observations: event.target.value })
+                  }
                   placeholder="Ex. patient stable, douleur diminuée…"
                 />
               </label>
@@ -524,13 +800,19 @@ export default function NursingPage() {
                 <textarea
                   rows={3}
                   value={completion.adverseReaction}
-                  onChange={(event) => setCompletion({ ...completion, adverseReaction: event.target.value })}
+                  onChange={(event) =>
+                    setCompletion({ ...completion, adverseReaction: event.target.value })
+                  }
                   placeholder="À renseigner uniquement en cas de réaction ou incident."
                 />
               </label>
             </div>
             <div className="modal-actions">
-              <button type="button" className="secondary-button" onClick={() => setCompleting(null)}>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setCompleting(null)}
+              >
                 Annuler
               </button>
               <button className="primary-button" disabled={submitting}>
@@ -558,17 +840,31 @@ export default function NursingPage() {
             }}
           >
             <div className="patient-journey-detail nursing-administration-summary">
-              <div><strong>Soin</strong><span>{omitting.label}</span></div>
-              <div><strong>Prévu</strong><span>{formatDateTime(omitting.scheduledAt)}</span></div>
-              <div><strong>Traitement</strong><span>{omitting.medicationName || omitting.instructions || '—'}</span></div>
-              <div><strong>Dose / voie</strong><span>{[omitting.dose, omitting.route].filter(Boolean).join(' · ') || '—'}</span></div>
+              <div>
+                <strong>Soin</strong>
+                <span>{omitting.label}</span>
+              </div>
+              <div>
+                <strong>Prévu</strong>
+                <span>{formatDateTime(omitting.scheduledAt)}</span>
+              </div>
+              <div>
+                <strong>Traitement</strong>
+                <span>{omitting.medicationName || omitting.instructions || '—'}</span>
+              </div>
+              <div>
+                <strong>Dose / voie</strong>
+                <span>{[omitting.dose, omitting.route].filter(Boolean).join(' · ') || '—'}</span>
+              </div>
             </div>
             <div className="form-grid">
               <label className="field full">
                 <span>Situation *</span>
                 <select
                   value={omission.administrationOutcome}
-                  onChange={(event) => setOmission({ ...omission, administrationOutcome: event.target.value })}
+                  onChange={(event) =>
+                    setOmission({ ...omission, administrationOutcome: event.target.value })
+                  }
                 >
                   <option value="MISSED">Dose manquée / hors délai</option>
                   <option value="REFUSED">Refus du patient</option>
@@ -582,7 +878,9 @@ export default function NursingPage() {
                   minLength={3}
                   rows={3}
                   value={omission.omissionReason}
-                  onChange={(event) => setOmission({ ...omission, omissionReason: event.target.value })}
+                  onChange={(event) =>
+                    setOmission({ ...omission, omissionReason: event.target.value })
+                  }
                   placeholder="Expliquer précisément pourquoi le soin ou la dose n’a pas été administré…"
                 />
               </label>
@@ -591,7 +889,9 @@ export default function NursingPage() {
                 <textarea
                   rows={3}
                   value={omission.observations}
-                  onChange={(event) => setOmission({ ...omission, observations: event.target.value })}
+                  onChange={(event) =>
+                    setOmission({ ...omission, observations: event.target.value })
+                  }
                 />
               </label>
             </div>
@@ -599,7 +899,10 @@ export default function NursingPage() {
               <button type="button" className="secondary-button" onClick={() => setOmitting(null)}>
                 Annuler
               </button>
-              <button className="danger-button" disabled={submitting || omission.omissionReason.trim().length < 3}>
+              <button
+                className="danger-button"
+                disabled={submitting || omission.omissionReason.trim().length < 3}
+              >
                 Enregistrer la non-administration
               </button>
             </div>

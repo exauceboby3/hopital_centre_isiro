@@ -66,7 +66,10 @@ export interface ConsultationExam {
   validatedAt?: string;
   resultSchema?: ResultField[];
   resultData?: { values?: ResultValue[]; conclusion?: string };
-  careAuthorization?: { status: string; invoice: { number: string; status: string } };
+  careAuthorization?: {
+    status: string;
+    paymentClearance?: { inOrder: boolean; status: 'IN_ORDER' | 'TO_REGULARIZE' };
+  };
 }
 
 export interface Consultation {
@@ -118,7 +121,7 @@ export interface BillableService {
   code: string;
   name: string;
   category?: string;
-  price: string;
+  price?: string;
 }
 
 export interface DoctorAvailability {
@@ -153,7 +156,8 @@ export const decisionOptions: Array<{
   {
     value: 'PRESCRIPTION',
     label: 'Prescrire et retour à domicile',
-    detail: 'Créer une ordonnance structurée et transmettre le patient au circuit caisse puis pharmacie.',
+    detail:
+      'Créer une ordonnance structurée et transmettre le patient au circuit caisse puis pharmacie.',
   },
   {
     value: 'HOSPITALIZATION',
@@ -188,7 +192,9 @@ export const initialDecisionOptions = [
     label: 'Enregistrer l’évaluation',
     detail: 'Conserver la consultation active sans changer d’étape.',
   },
-  ...decisionOptions.filter((option) => ['LABORATORY', 'IMAGING', 'TRANSFER'].includes(option.value)),
+  ...decisionOptions.filter((option) =>
+    ['LABORATORY', 'IMAGING', 'TRANSFER'].includes(option.value),
+  ),
 ];
 
 export const finalDecisions = new Set<ConsultationDecision>([
@@ -206,7 +212,8 @@ export const decisionGuidance: Record<ConsultationDecision, { title: string; det
   },
   LABORATORY: {
     title: 'Examens de laboratoire',
-    detail: 'L’évaluation initiale sera verrouillée après l’envoi. Le médecin devient disponible pendant les analyses.',
+    detail:
+      'L’évaluation initiale sera verrouillée après l’envoi. Le médecin devient disponible pendant les analyses.',
   },
   IMAGING: {
     title: 'Imagerie médicale',
@@ -214,7 +221,8 @@ export const decisionGuidance: Record<ConsultationDecision, { title: string; det
   },
   HOSPITALIZATION: {
     title: 'Indication d’hospitalisation',
-    detail: 'La sortie administrative restera distincte et dépendra du règlement intégral du séjour.',
+    detail:
+      'La sortie administrative restera distincte et dépendra du règlement intégral du séjour.',
   },
   TRANSFER: {
     title: 'Transfert médical',
@@ -222,7 +230,7 @@ export const decisionGuidance: Record<ConsultationDecision, { title: string; det
   },
   PRESCRIPTION: {
     title: 'Ordonnance et retour à domicile',
-    detail: 'L’ordonnance structurée et sa facture doivent être créées avant la clôture.',
+    detail: 'L’ordonnance structurée doit être enregistrée avant la clôture.',
   },
   FOLLOW_UP: {
     title: 'Suivi ambulatoire',
@@ -263,7 +271,10 @@ export function consultationMode(row: Consultation): ConsultationFormMode {
   const stage = row.appointment?.journeyStage;
   if (stage === 'LABORATORY' || stage === 'IMAGING') return 'LABORATORY_VIEW';
   if (stage === 'HOSPITALIZATION') return 'HOSPITALIZATION_VIEW';
-  if (hasLaboratoryHistory(row) && row.examRequests.every((exam) => ['VALIDATED', 'CANCELLED'].includes(exam.status))) {
+  if (
+    hasLaboratoryHistory(row) &&
+    row.examRequests.every((exam) => ['VALIDATED', 'CANCELLED'].includes(exam.status))
+  ) {
     return row.status === 'COMPLETED' ? 'READ_ONLY' : 'POST_LABORATORY';
   }
   if (row.status === 'COMPLETED') return 'READ_ONLY';
@@ -312,9 +323,11 @@ export function saveLabel(decision: ConsultationDecision) {
 export function successMessage(decision: ConsultationDecision) {
   const messages: Record<ConsultationDecision, string> = {
     CONTINUE: 'L’évaluation clinique a été enregistrée.',
-    LABORATORY: 'Le patient a été envoyé au laboratoire. L’évaluation initiale est désormais verrouillée.',
+    LABORATORY:
+      'Le patient a été envoyé au laboratoire. L’évaluation initiale est désormais verrouillée.',
     IMAGING: 'L’ordre d’imagerie a été transmis. Le médecin est disponible pendant l’examen.',
-    HOSPITALIZATION: 'L’indication d’hospitalisation a été transmise. La sortie administrative dépendra du règlement du séjour.',
+    HOSPITALIZATION:
+      'L’indication d’hospitalisation a été transmise. La sortie administrative dépendra du règlement du séjour.',
     TRANSFER: 'Le patient a été transféré dans la file du médecin destinataire.',
     PRESCRIPTION: 'La consultation est clôturée avec une ordonnance structurée.',
     FOLLOW_UP: 'La consultation est clôturée avec un suivi ambulatoire.',

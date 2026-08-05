@@ -37,11 +37,12 @@ export class FinancialAuthorizationController {
 
   @Get('services')
   listServices(
+    @CurrentUser() user: AuthenticatedUser,
     @Query('type', new ParseEnumPipe(BillableServiceType, { optional: true }))
     type?: BillableServiceType,
     @Query('includeInactive') includeInactive?: string,
   ) {
-    return this.authorizations.listServices(type, includeInactive === 'true');
+    return this.authorizations.listServices(type, includeInactive === 'true', user);
   }
 
   @Post('services')
@@ -64,6 +65,7 @@ export class FinancialAuthorizationController {
 
   @Get('authorizations')
   listAuthorizations(
+    @CurrentUser() user: AuthenticatedUser,
     @Query('type', new ParseEnumPipe(BillableServiceType, { optional: true }))
     type?: BillableServiceType,
     @Query('status', new ParseEnumPipe(CareAuthorizationStatus, { optional: true }))
@@ -71,7 +73,7 @@ export class FinancialAuthorizationController {
     @Query('patientId') patientId?: string,
   ) {
     const filters: ListCareAuthorizationsDto = { type, status, patientId };
-    return this.authorizations.listAuthorizations(filters);
+    return this.authorizations.listAuthorizations(filters, user);
   }
 
   @Post('authorizations')

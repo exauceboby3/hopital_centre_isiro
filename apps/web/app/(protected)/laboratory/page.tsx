@@ -65,7 +65,7 @@ interface Exam {
   validatedByLabTech?: { lastName: string; postName?: string; firstName?: string };
   careAuthorization?: {
     status: string;
-    invoice: { number: string; status: string };
+    paymentClearance?: { inOrder: boolean; status: 'IN_ORDER' | 'TO_REGULARIZE' };
     service?: { id: string; code: string; name: string; category?: string };
   };
   catalogMetadata?: { specimenType?: string; method?: string };
@@ -82,8 +82,7 @@ interface ExamGroup {
 const fallbackSchema: ResultField[] = [
   { key: 'resultat', label: 'Résultat', type: 'TEXT', required: true },
 ];
-const schemaFor = (exam: Exam) =>
-  exam.resultSchema?.length ? exam.resultSchema : fallbackSchema;
+const schemaFor = (exam: Exam) => (exam.resultSchema?.length ? exam.resultSchema : fallbackSchema);
 const formatDate = (date: string) =>
   new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(
     new Date(date),
@@ -91,7 +90,7 @@ const formatDate = (date: string) =>
 const isFinanciallyAuthorized = (exam: Exam) =>
   Boolean(
     exam.careAuthorization &&
-      ['AUTHORIZED', 'WAIVED', 'CONSUMED'].includes(exam.careAuthorization.status),
+    ['AUTHORIZED', 'WAIVED', 'CONSUMED'].includes(exam.careAuthorization.status),
   );
 
 export default function LaboratoryPage() {
@@ -106,9 +105,9 @@ export default function LaboratoryPage() {
   const [completing, setCompleting] = useState<Exam | null>(null);
   const [reviewing, setReviewing] = useState<Exam | null>(null);
   const [documentExam, setDocumentExam] = useState<Exam | null>(null);
-  const [resultValues, setResultValues] = useState<
-    Record<string, { value: string; note: string }>
-  >({});
+  const [resultValues, setResultValues] = useState<Record<string, { value: string; note: string }>>(
+    {},
+  );
   const [conclusion, setConclusion] = useState('');
   const [reviewComment, setReviewComment] = useState('');
   const [resultFile, setResultFile] = useState<File | null>(null);
@@ -170,7 +169,6 @@ export default function LaboratoryPage() {
               exam.observations,
               exam.result,
               patientName(exam.requestedByDoctor),
-              exam.careAuthorization?.invoice.number,
               exam.catalogMetadata?.specimenType,
               exam.catalogMetadata?.method,
             ),
@@ -179,9 +177,7 @@ export default function LaboratoryPage() {
     [groups, query, statusFilter],
   );
 
-  const awaitingValidation = rows.filter(
-    (exam) => exam.workflowStatus === 'RESULT_ENTERED',
-  ).length;
+  const awaitingValidation = rows.filter((exam) => exam.workflowStatus === 'RESULT_ENTERED').length;
 
   const openResult = (exam: Exam) => {
     if (!isFinanciallyAuthorized(exam)) {
@@ -196,7 +192,7 @@ export default function LaboratoryPage() {
           return [
             field.key,
             {
-              value: item?.value ?? (index === 0 && !stored.size ? exam.result ?? '' : ''),
+              value: item?.value ?? (index === 0 && !stored.size ? (exam.result ?? '') : ''),
               note: item?.note ?? '',
             },
           ];
@@ -316,7 +312,7 @@ export default function LaboratoryPage() {
         <ListFilters
           query={query}
           onQueryChange={setQuery}
-          placeholder="Patient, dossier, examen, résultat, facture, échantillon…"
+          placeholder="Patient, dossier, examen, résultat, échantillon…"
           status={statusFilter}
           onStatusChange={setStatusFilter}
           statusOptions={[
@@ -340,7 +336,7 @@ export default function LaboratoryPage() {
                 <th>Examens</th>
                 <th>Médecin</th>
                 <th>Avancement</th>
-                <th>Facture</th>
+                <th>Paiement</th>
                 <th>Action</th>
               </tr>
             </thead>
@@ -348,26 +344,54 @@ export default function LaboratoryPage() {
               {loading ? (
                 <tr>
                   <td colSpan={7}>
-                    <div className="empty-state"><Activity className="spin" /> Chargement…</div>
+                    <div className="empty-state">
+                      <Activity className="spin" /> Chargement…
+                    </div>
                   </td>
                 </tr>
               ) : filteredGroups.length === 0 ? (
                 <tr>
                   <td colSpan={7}>
-                    <div className="empty-state"><FlaskConical /><strong>Aucune demande de laboratoire</strong></div>
+                    <div className="empty-state">
+                      <FlaskConical />
+                      <strong>Aucune demande de laboratoire</strong>
+                    </div>
                   </td>
                 </tr>
               ) : (
                 filteredGroups.map((group) => {
                   const workflows = [...new Set(group.exams.map((exam) => exam.workflowStatus))];
                   return (
-                    <tr className="clickable-row" key={group.id} onClick={() => setSelectedGroup(group)}>
-                      <td><strong>{formatDate(group.requestedAt)}</strong><br /><span className="muted">{group.exams.length} examen(s)</span></td>
-                      <td><strong>{patientName(group.patient)}</strong><br /><span className="muted">{group.patient.medicalRecordNumber}</span></td>
+                    <tr
+                      className="clickable-row"
+                      key={group.id}
+                      onClick={() => setSelectedGroup(group)}
+                    >
+                      <td>
+                        <strong>{formatDate(group.requestedAt)}</strong>
+                        <br />
+                        <span className="muted">{group.exams.length} examen(s)</span>
+                      </td>
+                      <td>
+                        <strong>{patientName(group.patient)}</strong>
+                        <br />
+                        <span className="muted">{group.patient.medicalRecordNumber}</span>
+                      </td>
                       <td>{group.exams.map((exam) => exam.type).join(' · ')}</td>
                       <td>{patientName(group.requestedByDoctor)}</td>
-                      <td><div className="status-stack">{workflows.map((workflow) => <StatusBadge status={workflow} key={workflow} />)}</div></td>
-                      <td>{group.exams[0].careAuthorization?.invoice.number ?? '—'}</td>
+                      <td>
+                        <div className="status-stack">
+                          {workflows.map((workflow) => (
+                            <StatusBadge status={workflow} key={workflow} />
+                          ))}
+                        </div>
+                      </td>
+                      <td>
+                        {group.exams[0].careAuthorization?.paymentClearance?.inOrder ||
+                        isFinanciallyAuthorized(group.exams[0])
+                          ? 'En ordre'
+                          : 'À régulariser'}
+                      </td>
                       <td onClick={(event) => event.stopPropagation()}>
                         <button className="text-button" onClick={() => setSelectedGroup(group)}>
                           <TestTube2 size={15} /> Ouvrir
@@ -390,38 +414,106 @@ export default function LaboratoryPage() {
           onClose={() => setSelectedGroup(null)}
         >
           <div className="lab-request-summary">
-            <span><strong>Médecin :</strong> {patientName(selectedGroup.requestedByDoctor)}</span>
-            <span><strong>Examens :</strong> {selectedGroup.exams.length}</span>
+            <span>
+              <strong>Médecin :</strong> {patientName(selectedGroup.requestedByDoctor)}
+            </span>
+            <span>
+              <strong>Examens :</strong> {selectedGroup.exams.length}
+            </span>
           </div>
           <div className="table-scroll">
             <table className="compact-table">
-              <thead><tr><th>Examen</th><th>Échantillon / méthode</th><th>Workflow</th><th>Paiement</th><th>Résultat</th><th>Actions</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Examen</th>
+                  <th>Échantillon / méthode</th>
+                  <th>Workflow</th>
+                  <th>Paiement</th>
+                  <th>Résultat</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
               <tbody>
                 {selectedGroup.exams.map((exam) => (
                   <tr key={exam.id}>
-                    <td><strong>{exam.type}</strong>{exam.observations && <><br /><span className="muted">{exam.observations}</span></>}</td>
-                    <td>{exam.catalogMetadata?.specimenType || 'Non précisé'}<br /><span className="muted">{exam.catalogMetadata?.method || 'Méthode non précisée'}</span></td>
-                    <td><StatusBadge status={exam.workflowStatus} />{exam.reviewComment && <><br /><span className="muted">Correction : {exam.reviewComment}</span></>}</td>
-                    <td><StatusBadge status={exam.careAuthorization?.status ?? 'PENDING'} /><br /><span className="muted">{exam.careAuthorization?.invoice.number ?? '—'}</span></td>
-                    <td><StructuredResult exam={exam} /></td>
+                    <td>
+                      <strong>{exam.type}</strong>
+                      {exam.observations && (
+                        <>
+                          <br />
+                          <span className="muted">{exam.observations}</span>
+                        </>
+                      )}
+                    </td>
+                    <td>
+                      {exam.catalogMetadata?.specimenType || 'Non précisé'}
+                      <br />
+                      <span className="muted">
+                        {exam.catalogMetadata?.method || 'Méthode non précisée'}
+                      </span>
+                    </td>
+                    <td>
+                      <StatusBadge status={exam.workflowStatus} />
+                      {exam.reviewComment && (
+                        <>
+                          <br />
+                          <span className="muted">Correction : {exam.reviewComment}</span>
+                        </>
+                      )}
+                    </td>
+                    <td>
+                      <StatusBadge status={exam.careAuthorization?.status ?? 'PENDING'} />
+                      <br />
+                      <span className="muted">
+                        {exam.careAuthorization?.paymentClearance?.inOrder ||
+                        isFinanciallyAuthorized(exam)
+                          ? 'Paiement en ordre'
+                          : 'Paiement à régulariser'}
+                      </span>
+                    </td>
+                    <td>
+                      <StructuredResult exam={exam} />
+                    </td>
                     <td>
                       <div className="row-actions">
-                        {canEnterResults && ['PAID', 'IN_PROGRESS'].includes(exam.workflowStatus) && (
-                          <button className="text-button" disabled={!isFinanciallyAuthorized(exam)} onClick={() => openResult(exam)}>
-                            <FileScan size={15} /> Saisir
-                          </button>
-                        )}
+                        {canEnterResults &&
+                          ['PAID', 'IN_PROGRESS'].includes(exam.workflowStatus) && (
+                            <button
+                              className="text-button"
+                              disabled={!isFinanciallyAuthorized(exam)}
+                              onClick={() => openResult(exam)}
+                            >
+                              <FileScan size={15} /> Saisir
+                            </button>
+                          )}
                         {canValidate && exam.workflowStatus === 'RESULT_ENTERED' && (
-                          <button className="text-button" onClick={() => { setReviewing(exam); setSelectedGroup(null); }}>
+                          <button
+                            className="text-button"
+                            onClick={() => {
+                              setReviewing(exam);
+                              setSelectedGroup(null);
+                            }}
+                          >
                             <ShieldCheck size={15} /> Valider
                           </button>
                         )}
                         {exam.document && (
-                          <button className="text-button" onClick={() => { setDocumentExam(exam); setSelectedGroup(null); }}>
+                          <button
+                            className="text-button"
+                            onClick={() => {
+                              setDocumentExam(exam);
+                              setSelectedGroup(null);
+                            }}
+                          >
                             <FileScan size={15} /> Document
                           </button>
                         )}
-                        <PrintPreviewButton kind="laboratory" id={exam.id} label="Imprimer" icon={<Printer size={15} />} />
+                        <PrintPreviewButton
+                          kind="laboratory"
+                          id={exam.id}
+                          label="Imprimer"
+                          icon={<Printer size={15} />}
+                        />
                         <CustomFieldsEditor entity="LABORATORY" entityId={exam.id} />
                       </div>
                     </td>
@@ -442,37 +534,143 @@ export default function LaboratoryPage() {
         >
           <form onSubmit={complete}>
             <div className="lab-result-context">
-              <span><strong>Échantillon :</strong> {completing.catalogMetadata?.specimenType || 'Non précisé'}</span>
-              <span><strong>Méthode :</strong> {completing.catalogMetadata?.method || 'Non précisée'}</span>
-              <span><strong>Facture :</strong> {completing.careAuthorization?.invoice.number}</span>
+              <span>
+                <strong>Échantillon :</strong>{' '}
+                {completing.catalogMetadata?.specimenType || 'Non précisé'}
+              </span>
+              <span>
+                <strong>Méthode :</strong> {completing.catalogMetadata?.method || 'Non précisée'}
+              </span>
+              <span>
+                <strong>Paiement :</strong>{' '}
+                {completing.careAuthorization?.paymentClearance?.inOrder ||
+                isFinanciallyAuthorized(completing)
+                  ? 'En ordre'
+                  : 'À régulariser'}
+              </span>
             </div>
             <div className="table-scroll">
               <table className="compact-table lab-entry-table">
-                <thead><tr><th>Rubrique</th><th>Résultat *</th><th>Unité</th><th>Valeur de référence</th><th>Note</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>Rubrique</th>
+                    <th>Résultat *</th>
+                    <th>Unité</th>
+                    <th>Valeur de référence</th>
+                    <th>Note</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {schemaFor(completing).map((field) => (
                     <tr key={field.key}>
-                      <td><strong>{field.label}</strong>{field.required && <span className="required-mark"> *</span>}</td>
+                      <td>
+                        <strong>{field.label}</strong>
+                        {field.required && <span className="required-mark"> *</span>}
+                      </td>
                       <td>
                         {field.type === 'LONG_TEXT' ? (
-                          <textarea required={field.required} rows={2} value={resultValues[field.key]?.value ?? ''} onChange={(event) => setResultValues((current) => ({ ...current, [field.key]: { value: event.target.value, note: current[field.key]?.note ?? '' } }))} />
+                          <textarea
+                            required={field.required}
+                            rows={2}
+                            value={resultValues[field.key]?.value ?? ''}
+                            onChange={(event) =>
+                              setResultValues((current) => ({
+                                ...current,
+                                [field.key]: {
+                                  value: event.target.value,
+                                  note: current[field.key]?.note ?? '',
+                                },
+                              }))
+                            }
+                          />
                         ) : field.type === 'SELECT' ? (
-                          <select required={field.required} value={resultValues[field.key]?.value ?? ''} onChange={(event) => setResultValues((current) => ({ ...current, [field.key]: { value: event.target.value, note: current[field.key]?.note ?? '' } }))}><option value="">Sélectionner</option>{(field.options ?? []).map((option) => <option key={option}>{option}</option>)}</select>
+                          <select
+                            required={field.required}
+                            value={resultValues[field.key]?.value ?? ''}
+                            onChange={(event) =>
+                              setResultValues((current) => ({
+                                ...current,
+                                [field.key]: {
+                                  value: event.target.value,
+                                  note: current[field.key]?.note ?? '',
+                                },
+                              }))
+                            }
+                          >
+                            <option value="">Sélectionner</option>
+                            {(field.options ?? []).map((option) => (
+                              <option key={option}>{option}</option>
+                            ))}
+                          </select>
                         ) : (
-                          <input required={field.required} inputMode={field.type === 'NUMBER' ? 'decimal' : 'text'} value={resultValues[field.key]?.value ?? ''} onChange={(event) => setResultValues((current) => ({ ...current, [field.key]: { value: event.target.value, note: current[field.key]?.note ?? '' } }))} />
+                          <input
+                            required={field.required}
+                            inputMode={field.type === 'NUMBER' ? 'decimal' : 'text'}
+                            value={resultValues[field.key]?.value ?? ''}
+                            onChange={(event) =>
+                              setResultValues((current) => ({
+                                ...current,
+                                [field.key]: {
+                                  value: event.target.value,
+                                  note: current[field.key]?.note ?? '',
+                                },
+                              }))
+                            }
+                          />
                         )}
                       </td>
                       <td>{field.unit || '—'}</td>
                       <td>{field.reference || 'Selon méthode / patient'}</td>
-                      <td><input placeholder="Facultatif" value={resultValues[field.key]?.note ?? ''} onChange={(event) => setResultValues((current) => ({ ...current, [field.key]: { value: current[field.key]?.value ?? '', note: event.target.value } }))} /></td>
+                      <td>
+                        <input
+                          placeholder="Facultatif"
+                          value={resultValues[field.key]?.note ?? ''}
+                          onChange={(event) =>
+                            setResultValues((current) => ({
+                              ...current,
+                              [field.key]: {
+                                value: current[field.key]?.value ?? '',
+                                note: event.target.value,
+                              },
+                            }))
+                          }
+                        />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <label className="field"><span>Conclusion / interprétation</span><textarea rows={3} maxLength={5000} value={conclusion} onChange={(event) => setConclusion(event.target.value)} /></label>
-            <label className="field"><span>Document numérisé (facultatif)</span><input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => setResultFile(event.target.files?.[0] ?? null)} /><small>PDF ou image, maximum 8 Mo.</small></label>
-            <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setCompleting(null)}>Annuler</button><button className="primary-button" disabled={submitting}>{submitting && <Activity className="spin" size={16} />} Soumettre au biologiste</button></div>
+            <label className="field">
+              <span>Conclusion / interprétation</span>
+              <textarea
+                rows={3}
+                maxLength={5000}
+                value={conclusion}
+                onChange={(event) => setConclusion(event.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>Document numérisé (facultatif)</span>
+              <input
+                type="file"
+                accept="application/pdf,image/jpeg,image/png,image/webp"
+                onChange={(event) => setResultFile(event.target.files?.[0] ?? null)}
+              />
+              <small>PDF ou image, maximum 8 Mo.</small>
+            </label>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setCompleting(null)}
+              >
+                Annuler
+              </button>
+              <button className="primary-button" disabled={submitting}>
+                {submitting && <Activity className="spin" size={16} />} Soumettre au biologiste
+              </button>
+            </div>
           </form>
         </Modal>
       )}
@@ -485,11 +683,35 @@ export default function LaboratoryPage() {
           onClose={() => setReviewing(null)}
         >
           <FullResultTable exam={reviewing} />
-          <label className="field"><span>Motif en cas de renvoi au technicien</span><textarea rows={3} minLength={5} value={reviewComment} onChange={(event) => setReviewComment(event.target.value)} /></label>
+          <label className="field">
+            <span>Motif en cas de renvoi au technicien</span>
+            <textarea
+              rows={3}
+              minLength={5}
+              value={reviewComment}
+              onChange={(event) => setReviewComment(event.target.value)}
+            />
+          </label>
           <div className="modal-actions">
-            <button type="button" className="secondary-button" onClick={() => setReviewing(null)}>Fermer</button>
-            <button type="button" className="secondary-button danger" disabled={submitting || reviewComment.trim().length < 5} onClick={() => void reject()}><RotateCcw size={16} /> Renvoyer pour correction</button>
-            <button type="button" className="primary-button" disabled={submitting} onClick={() => void validate()}><CheckCircle2 size={16} /> Valider biologiquement</button>
+            <button type="button" className="secondary-button" onClick={() => setReviewing(null)}>
+              Fermer
+            </button>
+            <button
+              type="button"
+              className="secondary-button danger"
+              disabled={submitting || reviewComment.trim().length < 5}
+              onClick={() => void reject()}
+            >
+              <RotateCcw size={16} /> Renvoyer pour correction
+            </button>
+            <button
+              type="button"
+              className="primary-button"
+              disabled={submitting}
+              onClick={() => void validate()}
+            >
+              <CheckCircle2 size={16} /> Valider biologiquement
+            </button>
           </div>
         </Modal>
       )}
@@ -504,12 +726,22 @@ export default function LaboratoryPage() {
           <div className="lab-document-viewer">
             {documentExam.document?.mimeType.startsWith('image/') ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={apiUrl(`/laboratory/exams/${documentExam.id}/document`)} alt={documentExam.document.fileName} />
+              <img
+                src={apiUrl(`/laboratory/exams/${documentExam.id}/document`)}
+                alt={documentExam.document.fileName}
+              />
             ) : (
-              <iframe src={apiUrl(`/laboratory/exams/${documentExam.id}/document`)} title={documentExam.document?.fileName ?? 'Document laboratoire'} />
+              <iframe
+                src={apiUrl(`/laboratory/exams/${documentExam.id}/document`)}
+                title={documentExam.document?.fileName ?? 'Document laboratoire'}
+              />
             )}
           </div>
-          <div className="modal-actions"><button className="secondary-button" onClick={() => setDocumentExam(null)}>Fermer</button></div>
+          <div className="modal-actions">
+            <button className="secondary-button" onClick={() => setDocumentExam(null)}>
+              Fermer
+            </button>
+          </div>
         </Modal>
       )}
     </>
@@ -524,7 +756,12 @@ function StructuredResult({ exam }: { exam: Exam }) {
     <div className="structured-result-preview">
       {values.slice(0, 3).map((item) => {
         const definition = definitions.get(item.key);
-        return <span key={item.key}><strong>{definition?.label ?? item.key} :</strong> {item.value}{definition?.unit ? ` ${definition.unit}` : ''}</span>;
+        return (
+          <span key={item.key}>
+            <strong>{definition?.label ?? item.key} :</strong> {item.value}
+            {definition?.unit ? ` ${definition.unit}` : ''}
+          </span>
+        );
       })}
       {values.length > 3 && <small>+ {values.length - 3} autre(s)</small>}
     </div>
@@ -537,21 +774,47 @@ function FullResultTable({ exam }: { exam: Exam }) {
   return (
     <>
       {values.length === 0 ? (
-        <div className="empty-state"><XCircle /><strong>Aucun résultat structuré</strong></div>
+        <div className="empty-state">
+          <XCircle />
+          <strong>Aucun résultat structuré</strong>
+        </div>
       ) : (
         <div className="table-scroll">
           <table className="compact-table lab-review-table">
-            <thead><tr><th>Rubrique</th><th>Résultat saisi</th><th>Unité</th><th>Référence</th><th>Note</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Rubrique</th>
+                <th>Résultat saisi</th>
+                <th>Unité</th>
+                <th>Référence</th>
+                <th>Note</th>
+              </tr>
+            </thead>
             <tbody>
               {values.map((item) => {
                 const definition = definitions.get(item.key);
-                return <tr key={item.key}><td>{definition?.label ?? item.key}</td><td><strong>{item.value}</strong></td><td>{definition?.unit || '—'}</td><td>{definition?.reference || 'Selon méthode / patient'}</td><td>{item.note || '—'}</td></tr>;
+                return (
+                  <tr key={item.key}>
+                    <td>{definition?.label ?? item.key}</td>
+                    <td>
+                      <strong>{item.value}</strong>
+                    </td>
+                    <td>{definition?.unit || '—'}</td>
+                    <td>{definition?.reference || 'Selon méthode / patient'}</td>
+                    <td>{item.note || '—'}</td>
+                  </tr>
+                );
               })}
             </tbody>
           </table>
         </div>
       )}
-      {exam.resultData?.conclusion && <div className="lab-result-conclusion"><strong>Conclusion / interprétation</strong><p>{exam.resultData.conclusion}</p></div>}
+      {exam.resultData?.conclusion && (
+        <div className="lab-result-conclusion">
+          <strong>Conclusion / interprétation</strong>
+          <p>{exam.resultData.conclusion}</p>
+        </div>
+      )}
     </>
   );
 }

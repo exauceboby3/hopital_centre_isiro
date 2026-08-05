@@ -162,20 +162,8 @@ function vitalPayload(form: VitalSignForm) {
 
 export default function PatientsPage() {
   const { user } = useAuth();
-  const canCreatePatient = hasAnyRole(user, [
-    'SUPER_ADMIN',
-    'ADMIN',
-    'RECEPTIONIST',
-    'SECRETARY',
-  ]);
-  const canEditPatient = hasAnyRole(user, [
-    'SUPER_ADMIN',
-    'ADMIN',
-    'RECEPTIONIST',
-    'SECRETARY',
-    'DOCTOR',
-    'MEDICAL_BIOLOGIST',
-  ]);
+  const canCreatePatient = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'RECEPTIONIST', 'SECRETARY']);
+  const canEditPatient = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'RECEPTIONIST', 'SECRETARY']);
   const canRecordVitals = hasAnyRole(user, [
     'SUPER_ADMIN',
     'ADMIN',
@@ -298,18 +286,21 @@ export default function PatientsPage() {
             field.type === 'NUMBER' ? Number(customValues[field.key]) : customValues[field.key],
           ]),
       );
-      savedPatient = await api<Patient>(editingPatient ? `/patients/${editingPatient.id}` : '/patients', {
-        method: editingPatient ? 'PATCH' : 'POST',
-        body: JSON.stringify({
-          ...Object.fromEntries(
-            Object.entries(form).filter(
-              ([key, value]) => Boolean(editingPatient) || key === 'sex' || value !== '',
+      savedPatient = await api<Patient>(
+        editingPatient ? `/patients/${editingPatient.id}` : '/patients',
+        {
+          method: editingPatient ? 'PATCH' : 'POST',
+          body: JSON.stringify({
+            ...Object.fromEntries(
+              Object.entries(form).filter(
+                ([key, value]) => Boolean(editingPatient) || key === 'sex' || value !== '',
+              ),
             ),
-          ),
-          ...(editingPatient && !form.dateOfBirth ? { dateOfBirth: undefined } : {}),
-          customFields: normalizedCustomFields,
-        }),
-      });
+            ...(editingPatient && !form.dateOfBirth ? { dateOfBirth: undefined } : {}),
+            customFields: normalizedCustomFields,
+          }),
+        },
+      );
 
       if (canRecordVitals && hasVitals(vitalsForm)) {
         await api(`/patients/${savedPatient.id}/vitals`, {
@@ -518,7 +509,9 @@ export default function PatientsPage() {
                           </div>
                         </div>
                       </td>
-                      <td><span className="record-number">{patient.medicalRecordNumber}</span></td>
+                      <td>
+                        <span className="record-number">{patient.medicalRecordNumber}</span>
+                      </td>
                       <td>
                         {patient.sex === 'MALE' ? 'Masculin' : 'Féminin'}
                         {age !== null ? ` · ${age} ans` : ''}
@@ -529,7 +522,9 @@ export default function PatientsPage() {
                         <span className="muted">Urgence : {patient.emergencyContact || '—'}</span>
                       </td>
                       <td>{patient.bloodType || '—'}</td>
-                      <td>{new Intl.DateTimeFormat('fr-FR').format(new Date(patient.createdAt))}</td>
+                      <td>
+                        {new Intl.DateTimeFormat('fr-FR').format(new Date(patient.createdAt))}
+                      </td>
                       <td>
                         {canRecordVitals ? (
                           <button className="text-button" onClick={() => openVitals(patient)}>
@@ -541,7 +536,10 @@ export default function PatientsPage() {
                       </td>
                       <td>
                         <div className="row-actions compact-actions">
-                          <Link className="text-button" href={`/print?kind=patient&id=${patient.id}`}>
+                          <Link
+                            className="text-button"
+                            href={`/print?kind=patient&id=${patient.id}`}
+                          >
                             <Printer size={15} /> Imprimer
                           </Link>
                           <Link className="text-button" href={`/patients/${patient.id}`}>
@@ -555,7 +553,10 @@ export default function PatientsPage() {
                             <HistoryIcon size={15} /> Historique
                           </button>
                           {canEditPatient && (
-                            <button className="text-button" onClick={() => void openPatient(patient)}>
+                            <button
+                              className="text-button"
+                              onClick={() => void openPatient(patient)}
+                            >
                               <Pencil size={15} /> Corriger
                             </button>
                           )}
@@ -588,7 +589,9 @@ export default function PatientsPage() {
       {modalOpen && (
         <Modal
           wide
-          title={editingPatient ? 'Corriger les informations du patient' : 'Identification du malade'}
+          title={
+            editingPatient ? 'Corriger les informations du patient' : 'Identification du malade'
+          }
           eyebrow={editingPatient ? editingPatient.medicalRecordNumber : 'Réception'}
           onClose={() => setModalOpen(false)}
         >
@@ -617,31 +620,149 @@ export default function PatientsPage() {
                 </div>
               </div>
               <div className="form-grid">
-                <label className="field"><span>Nom *</span><input required minLength={2} maxLength={100} value={form.lastName} onChange={(event) => updateField('lastName', event.target.value)} /></label>
-                <label className="field"><span>Post-nom</span><input maxLength={100} value={form.postName} onChange={(event) => updateField('postName', event.target.value)} /></label>
-                <label className="field"><span>Prénom</span><input maxLength={100} value={form.firstName} onChange={(event) => updateField('firstName', event.target.value)} /></label>
-                <label className="field"><span>Sexe *</span><select value={form.sex} onChange={(event) => updateField('sex', event.target.value)}><option value="MALE">Masculin</option><option value="FEMALE">Féminin</option></select></label>
-                <label className="field"><span>Date de naissance</span><input type="date" value={form.dateOfBirth} onChange={(event) => updateField('dateOfBirth', event.target.value)} /></label>
-                <label className="field"><span>Groupe sanguin</span><select value={form.bloodType} onChange={(event) => updateField('bloodType', event.target.value)}><option value="">Non renseigné</option>{['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((type) => <option key={type}>{type}</option>)}</select></label>
-                <label className="field"><span>Contact / téléphone</span><input maxLength={30} value={form.phone} onChange={(event) => updateField('phone', event.target.value)} /></label>
-                <label className="field"><span>Contact d’urgence</span><input maxLength={255} value={form.emergencyContact} onChange={(event) => updateField('emergencyContact', event.target.value)} /></label>
-                <label className="field full"><span>Adresse</span><textarea rows={2} maxLength={255} value={form.address} onChange={(event) => updateField('address', event.target.value)} /></label>
+                <label className="field">
+                  <span>Nom *</span>
+                  <input
+                    required
+                    minLength={2}
+                    maxLength={100}
+                    value={form.lastName}
+                    onChange={(event) => updateField('lastName', event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>Post-nom</span>
+                  <input
+                    maxLength={100}
+                    value={form.postName}
+                    onChange={(event) => updateField('postName', event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>Prénom</span>
+                  <input
+                    maxLength={100}
+                    value={form.firstName}
+                    onChange={(event) => updateField('firstName', event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>Sexe *</span>
+                  <select
+                    value={form.sex}
+                    onChange={(event) => updateField('sex', event.target.value)}
+                  >
+                    <option value="MALE">Masculin</option>
+                    <option value="FEMALE">Féminin</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Date de naissance</span>
+                  <input
+                    type="date"
+                    value={form.dateOfBirth}
+                    onChange={(event) => updateField('dateOfBirth', event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>Groupe sanguin</span>
+                  <select
+                    value={form.bloodType}
+                    onChange={(event) => updateField('bloodType', event.target.value)}
+                  >
+                    <option value="">Non renseigné</option>
+                    {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((type) => (
+                      <option key={type}>{type}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Contact / téléphone</span>
+                  <input
+                    maxLength={30}
+                    value={form.phone}
+                    onChange={(event) => updateField('phone', event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>Contact d’urgence</span>
+                  <input
+                    maxLength={255}
+                    value={form.emergencyContact}
+                    onChange={(event) => updateField('emergencyContact', event.target.value)}
+                  />
+                </label>
+                <label className="field full">
+                  <span>Adresse</span>
+                  <textarea
+                    rows={2}
+                    maxLength={255}
+                    value={form.address}
+                    onChange={(event) => updateField('address', event.target.value)}
+                  />
+                </label>
                 {customFields.map((field) => (
-                  <label className={`field ${field.type === 'TEXTAREA' ? 'full' : ''}`} key={field.id}>
-                    <span>{field.label} {field.required && '*'}</span>
+                  <label
+                    className={`field ${field.type === 'TEXTAREA' ? 'full' : ''}`}
+                    key={field.id}
+                  >
+                    <span>
+                      {field.label} {field.required && '*'}
+                    </span>
                     {field.type === 'TEXTAREA' ? (
-                      <textarea required={field.required} rows={3} placeholder={field.placeholder} value={String(customValues[field.key] ?? '')} onChange={(event) => setCustomValues({ ...customValues, [field.key]: event.target.value })} />
+                      <textarea
+                        required={field.required}
+                        rows={3}
+                        placeholder={field.placeholder}
+                        value={String(customValues[field.key] ?? '')}
+                        onChange={(event) =>
+                          setCustomValues({ ...customValues, [field.key]: event.target.value })
+                        }
+                      />
                     ) : field.type === 'SELECT' ? (
-                      <select required={field.required} value={String(customValues[field.key] ?? '')} onChange={(event) => setCustomValues({ ...customValues, [field.key]: event.target.value })}>
+                      <select
+                        required={field.required}
+                        value={String(customValues[field.key] ?? '')}
+                        onChange={(event) =>
+                          setCustomValues({ ...customValues, [field.key]: event.target.value })
+                        }
+                      >
                         <option value="">Sélectionner</option>
-                        {(field.options ?? []).map((option) => <option key={option}>{option}</option>)}
+                        {(field.options ?? []).map((option) => (
+                          <option key={option}>{option}</option>
+                        ))}
                       </select>
                     ) : field.type === 'BOOLEAN' ? (
-                      <select required={field.required} value={String(customValues[field.key] ?? '')} onChange={(event) => setCustomValues({ ...customValues, [field.key]: event.target.value === 'true' })}>
-                        <option value="">Sélectionner</option><option value="true">Oui</option><option value="false">Non</option>
+                      <select
+                        required={field.required}
+                        value={String(customValues[field.key] ?? '')}
+                        onChange={(event) =>
+                          setCustomValues({
+                            ...customValues,
+                            [field.key]: event.target.value === 'true',
+                          })
+                        }
+                      >
+                        <option value="">Sélectionner</option>
+                        <option value="true">Oui</option>
+                        <option value="false">Non</option>
                       </select>
                     ) : (
-                      <input required={field.required} type={field.type === 'NUMBER' ? 'number' : field.type === 'DATE' ? 'date' : 'text'} placeholder={field.placeholder} value={String(customValues[field.key] ?? '')} onChange={(event) => setCustomValues({ ...customValues, [field.key]: event.target.value })} />
+                      <input
+                        required={field.required}
+                        type={
+                          field.type === 'NUMBER'
+                            ? 'number'
+                            : field.type === 'DATE'
+                              ? 'date'
+                              : 'text'
+                        }
+                        placeholder={field.placeholder}
+                        value={String(customValues[field.key] ?? '')}
+                        onChange={(event) =>
+                          setCustomValues({ ...customValues, [field.key]: event.target.value })
+                        }
+                      />
                     )}
                     {field.helpText && <small>{field.helpText}</small>}
                   </label>
@@ -667,7 +788,11 @@ export default function PatientsPage() {
             )}
 
             <div className="modal-actions clinical-actions">
-              <button type="button" className="secondary-button" onClick={() => setModalOpen(false)}>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setModalOpen(false)}
+              >
                 Annuler
               </button>
               <button className="primary-button" disabled={submitting}>
@@ -692,16 +817,30 @@ export default function PatientsPage() {
               <HeartPulse size={19} />
               <div>
                 <strong>Nouvelle prise de constantes</strong>
-                <span>Cette mesure sera ajoutée à l’historique du patient sans remplacer les précédentes.</span>
+                <span>
+                  Cette mesure sera ajoutée à l’historique du patient sans remplacer les
+                  précédentes.
+                </span>
               </div>
             </div>
             <div className="form-grid">{renderVitalFields()}</div>
             <div className="modal-actions">
-              <button type="button" className="secondary-button" onClick={() => setVitalsPatient(null)}>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setVitalsPatient(null)}
+              >
                 Annuler
               </button>
-              <button className="primary-button" disabled={submittingVitals || !hasVitals(vitalsForm)}>
-                {submittingVitals ? <Activity className="spin" size={17} /> : <HeartPulse size={17} />}
+              <button
+                className="primary-button"
+                disabled={submittingVitals || !hasVitals(vitalsForm)}
+              >
+                {submittingVitals ? (
+                  <Activity className="spin" size={17} />
+                ) : (
+                  <HeartPulse size={17} />
+                )}
                 Enregistrer les signes vitaux
               </button>
             </div>
@@ -717,18 +856,28 @@ export default function PatientsPage() {
           onClose={() => setHistory(null)}
         >
           <div className="patient-history-summary">
-            <div><HistoryIcon size={22} /><span><strong>{history.entries.length}</strong> acte(s) et événement(s)</span></div>
+            <div>
+              <HistoryIcon size={22} />
+              <span>
+                <strong>{history.entries.length}</strong> acte(s) et événement(s)
+              </span>
+            </div>
             <p>Chaque date regroupe les actes, leurs auteurs, services, statuts et signatures.</p>
           </div>
           {history.groups.length === 0 ? (
-            <div className="empty-state"><Clock3 size={28} /><strong>Aucun événement médical enregistré</strong></div>
+            <div className="empty-state">
+              <Clock3 size={28} />
+              <strong>Aucun événement médical enregistré</strong>
+            </div>
           ) : (
             <div className="patient-history-timeline">
               {history.groups.map((group) => (
                 <section className="patient-history-date-group" key={group.date}>
                   <div className="patient-history-date-header">
                     <CalendarDays size={16} />{' '}
-                    {new Intl.DateTimeFormat('fr-CD', { dateStyle: 'full' }).format(new Date(`${group.date}T12:00:00`))}
+                    {new Intl.DateTimeFormat('fr-CD', { dateStyle: 'full' }).format(
+                      new Date(`${group.date}T12:00:00`),
+                    )}
                   </div>
                   {group.entries.map((entry) => (
                     <article key={`${entry.kind}-${entry.id}`}>
@@ -739,7 +888,10 @@ export default function PatientsPage() {
                         {entry.signature && (
                           <span className="patient-history-signature">
                             <FileSignature size={14} /> Signé par {entry.signature.doctorName} le{' '}
-                            {new Intl.DateTimeFormat('fr-CD', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(entry.signature.signedAt))}
+                            {new Intl.DateTimeFormat('fr-CD', {
+                              dateStyle: 'medium',
+                              timeStyle: 'short',
+                            }).format(new Date(entry.signature.signedAt))}
                           </span>
                         )}
                       </div>
@@ -747,7 +899,12 @@ export default function PatientsPage() {
                         {entry.status && <StatusBadge status={entry.status} />}
                         <span>{entry.department || 'Service non précisé'}</span>
                         <span>{entry.author || 'Auteur non précisé'}</span>
-                        <time>{new Intl.DateTimeFormat('fr-CD', { hour: '2-digit', minute: '2-digit' }).format(new Date(entry.date))}</time>
+                        <time>
+                          {new Intl.DateTimeFormat('fr-CD', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          }).format(new Date(entry.date))}
+                        </time>
                       </div>
                     </article>
                   ))}

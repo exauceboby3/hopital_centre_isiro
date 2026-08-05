@@ -33,7 +33,7 @@ interface Medication {
   name: string;
   strength?: string;
   stockQuantity: number;
-  unitPrice: string;
+  unitPrice?: string;
 }
 interface Policy {
   id: string;
@@ -70,7 +70,8 @@ interface Prescription {
   status: string;
   prescribedAt: string;
   patient: Patient;
-  invoice: { id: string; number: string; status: string };
+  invoice?: { id: string; number: string; status: string };
+  paymentClearance?: { inOrder: boolean; status: 'IN_ORDER' | 'TO_REGULARIZE' };
   items: Array<{
     id: string;
     dosage: string;
@@ -177,14 +178,7 @@ interface EnterpriseReport {
 }
 
 const clinicalRoles: Role[] = ['SUPER_ADMIN', 'ADMIN', 'DOCTOR', 'SURGEON', 'MIDWIFE', 'NURSE'];
-const financialRoles: Role[] = [
-  'SUPER_ADMIN',
-  'ADMIN',
-  'CASHIER',
-  'ACCOUNTANT',
-  'RECEPTIONIST',
-  'SECRETARY',
-];
+const financialRoles: Role[] = ['SUPER_ADMIN', 'ADMIN', 'CASHIER', 'ACCOUNTANT'];
 const sections: Array<{
   id: Section;
   label: string;
@@ -215,7 +209,7 @@ const sections: Array<{
     id: 'hr',
     label: 'Gardes & paie',
     icon: UsersRound,
-    roles: ['SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT'],
+    roles: ['SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT', 'HR'],
   },
   {
     id: 'accounting',
@@ -235,16 +229,24 @@ const emptyPrescriptionItem = {
 };
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api';
 
-async function optional<T>(path: string, fallback: T): Promise<T> {
-  try {
-    return await api<T>(path);
-  } catch {
-    return fallback;
-  }
-}
-
 export default function EnterprisePage() {
   const { user } = useAuth();
+  const canUseInsurance = hasAnyRole(user, financialRoles);
+  const canUseClinical = hasAnyRole(user, clinicalRoles);
+  const canUsePrescriptions = hasAnyRole(user, [...clinicalRoles, 'PHARMACIST', 'STOREKEEPER']);
+  const canBrowseMedicationCatalog = hasAnyRole(user, [
+    'SUPER_ADMIN',
+    'ADMIN',
+    'DOCTOR',
+    'SURGEON',
+    'MIDWIFE',
+    'PHARMACIST',
+    'STOREKEEPER',
+  ]);
+  const canUsePharmacy = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'PHARMACIST', 'STOREKEEPER']);
+  const canUseRadiology = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'RADIOLOGIST', 'DOCTOR']);
+  const canUseHr = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT', 'HR']);
+  const canUseAccounting = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT']);
   const [section, setSection] = useState<Section>('insurance');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -359,50 +361,79 @@ export default function EnterprisePage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const data = await Promise.all([
-      optional<{ items: Patient[] }>('/patients/lookup?limit=200', { items: [] }),
-      optional<Medication[]>('/pharmacy/medications', []),
-      optional<Policy[]>('/operations/insurance/policies', []),
-      optional<Invoice[]>('/billing/invoices', []),
-      optional<ClinicalOrder[]>('/operations/clinical-orders', []),
-      optional<User[]>('/enterprise/hr/employees', []),
-      optional<Coverage[]>('/enterprise/insurance/coverages', []),
-      optional<Prescription[]>('/enterprise/prescriptions', []),
-      optional<Batch[]>('/enterprise/pharmacy/batches', []),
-      optional<Inventory[]>('/enterprise/pharmacy/inventories', []),
-      optional<SpecialtyCase[]>('/enterprise/specialties', []),
-      optional<RadiologyStudy[]>('/enterprise/radiology/studies', []),
-      optional<Shift[]>('/enterprise/hr/shifts', []),
-      optional<Attendance[]>('/enterprise/hr/attendance', []),
-      optional<Payroll[]>('/enterprise/hr/payroll', []),
-      optional<Account[]>('/enterprise/accounting/accounts', []),
-      optional<Journal[]>('/enterprise/accounting/journal', []),
-      optional<EnterpriseReport | null>('/enterprise/reports/summary', null),
-      optional<typeof pacsForm | null>('/enterprise/radiology/pacs', null),
-      optional<UtilityBill[]>('/enterprise/accounting/utilities', []),
-    ]);
-    setPatients(data[0].items);
-    setMedications(data[1]);
-    setPolicies(data[2]);
-    setInvoices(data[3]);
-    setOrders(data[4]);
-    setEmployees(data[5]);
-    setCoverages(data[6]);
-    setPrescriptions(data[7]);
-    setBatches(data[8]);
-    setInventories(data[9]);
-    setSpecialties(data[10]);
-    setStudies(data[11]);
-    setShifts(data[12]);
-    setAttendance(data[13]);
-    setPayroll(data[14]);
-    setAccounts(data[15]);
-    setJournal(data[16]);
-    setReport(data[17]);
-    if (data[18]) setPacsForm(data[18]);
-    setUtilityBills(data[19]);
-    setLoading(false);
-  }, []);
+    setError('');
+    try {
+      const data = await Promise.all([
+        canUseClinical || canUseInsurance || canUseRadiology
+          ? api<{ items: Patient[] }>('/patients/lookup?limit=200')
+          : Promise.resolve({ items: [] }),
+        canBrowseMedicationCatalog
+          ? api<Medication[]>('/pharmacy/medications')
+          : Promise.resolve([]),
+        canUseInsurance ? api<Policy[]>('/operations/insurance/policies') : Promise.resolve([]),
+        canUseInsurance ? api<Invoice[]>('/billing/invoices') : Promise.resolve([]),
+        canUseClinical ? api<ClinicalOrder[]>('/operations/clinical-orders') : Promise.resolve([]),
+        canUseHr ? api<User[]>('/enterprise/hr/employees') : Promise.resolve([]),
+        canUseInsurance ? api<Coverage[]>('/enterprise/insurance/coverages') : Promise.resolve([]),
+        canUsePrescriptions
+          ? api<Prescription[]>('/enterprise/prescriptions')
+          : Promise.resolve([]),
+        canUsePharmacy ? api<Batch[]>('/enterprise/pharmacy/batches') : Promise.resolve([]),
+        canUsePharmacy ? api<Inventory[]>('/enterprise/pharmacy/inventories') : Promise.resolve([]),
+        canUseClinical ? api<SpecialtyCase[]>('/enterprise/specialties') : Promise.resolve([]),
+        canUseRadiology
+          ? api<RadiologyStudy[]>('/enterprise/radiology/studies')
+          : Promise.resolve([]),
+        canUseHr ? api<Shift[]>('/enterprise/hr/shifts') : Promise.resolve([]),
+        canUseHr ? api<Attendance[]>('/enterprise/hr/attendance') : Promise.resolve([]),
+        canUseHr ? api<Payroll[]>('/enterprise/hr/payroll') : Promise.resolve([]),
+        canUseAccounting ? api<Account[]>('/enterprise/accounting/accounts') : Promise.resolve([]),
+        canUseAccounting ? api<Journal[]>('/enterprise/accounting/journal') : Promise.resolve([]),
+        canUseAccounting
+          ? api<EnterpriseReport | null>('/enterprise/reports/summary')
+          : Promise.resolve(null),
+        canUseRadiology
+          ? api<typeof pacsForm | null>('/enterprise/radiology/pacs')
+          : Promise.resolve(null),
+        canUseAccounting
+          ? api<UtilityBill[]>('/enterprise/accounting/utilities')
+          : Promise.resolve([]),
+      ]);
+      setPatients(data[0].items);
+      setMedications(data[1]);
+      setPolicies(data[2]);
+      setInvoices(data[3]);
+      setOrders(data[4]);
+      setEmployees(data[5]);
+      setCoverages(data[6]);
+      setPrescriptions(data[7]);
+      setBatches(data[8]);
+      setInventories(data[9]);
+      setSpecialties(data[10]);
+      setStudies(data[11]);
+      setShifts(data[12]);
+      setAttendance(data[13]);
+      setPayroll(data[14]);
+      setAccounts(data[15]);
+      setJournal(data[16]);
+      setReport(data[17]);
+      if (data[18]) setPacsForm(data[18]);
+      setUtilityBills(data[19]);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Chargement impossible.');
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    canUseAccounting,
+    canBrowseMedicationCatalog,
+    canUseClinical,
+    canUseHr,
+    canUseInsurance,
+    canUsePharmacy,
+    canUsePrescriptions,
+    canUseRadiology,
+  ]);
 
   useEffect(() => {
     void load();
@@ -621,7 +652,7 @@ export default function EnterprisePage() {
           setItems={setPrescriptionItems}
           onSubmit={submitPrescription}
           mutate={mutate}
-          canCreate={hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'DOCTOR', 'SURGEON'])}
+          canCreate={hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'DOCTOR', 'SURGEON', 'MIDWIFE'])}
           canDispense={hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'PHARMACIST'])}
         />
       )}
@@ -897,8 +928,10 @@ function PrescriptionSection(props: {
                     <option value="">Médicament</option>
                     {medications.map((medication) => (
                       <option value={medication.id} key={medication.id}>
-                        {medication.name} {medication.strength} — stock {medication.stockQuantity} —{' '}
-                        {currency(medication.unitPrice)}
+                        {medication.name} {medication.strength} — stock {medication.stockQuantity}
+                        {medication.unitPrice !== undefined
+                          ? ` — ${currency(medication.unitPrice)}`
+                          : ''}
                       </option>
                     ))}
                   </select>
@@ -947,13 +980,13 @@ function PrescriptionSection(props: {
               >
                 <Plus size={15} /> Médicament
               </button>
-              <button className="primary-button">Prescrire et facturer</button>
+              <button className="primary-button">Enregistrer l’ordonnance</button>
             </div>
           </form>
         </details>
       )}
       <DataTable
-        headers={['Ordonnance', 'Patient', 'Traitement', 'Facture', 'Statut', 'Actions']}
+        headers={['Ordonnance', 'Patient', 'Traitement', 'Paiement', 'Statut', 'Actions']}
         empty="Aucune ordonnance."
       >
         {rows.map((row) => (
@@ -969,14 +1002,19 @@ function PrescriptionSection(props: {
             <td>
               {row.items.map((item) => (
                 <div key={item.id}>
-                  {item.medicationName || item.medication?.name || 'Médicament'}{item.availability !== 'INTERNAL' ? ' · achat extérieur' : ''} — {item.dosage}, {item.frequency}, {item.durationDays} j
+                  {item.medicationName || item.medication?.name || 'Médicament'}
+                  {item.availability !== 'INTERNAL' ? ' · achat extérieur' : ''} — {item.dosage},{' '}
+                  {item.frequency}, {item.durationDays} j
                 </div>
               ))}
             </td>
             <td>
-              {row.invoice.number}
+              {row.invoice?.number ||
+                (row.paymentClearance?.inOrder ? 'Paiement en ordre' : 'Paiement à régulariser')}
               <br />
-              <StatusBadge status={row.invoice.status} />
+              <StatusBadge
+                status={row.invoice?.status || row.paymentClearance?.status || 'TO_REGULARIZE'}
+              />
             </td>
             <td>
               <StatusBadge status={row.status} />
