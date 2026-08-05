@@ -7,15 +7,21 @@ import {
   randomUUID,
   timingSafeEqual,
 } from 'node:crypto';
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { Prisma, Role } from '@prisma/client';
+import { AttendanceStatus, Prisma, Role } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { AccessTokenPayload, RefreshTokenPayload } from '../common/authenticated-user';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
-import { durationToSeconds } from './auth.constants';
+import {
+  canSignAttendanceExit,
+  classifyLoginAttendance,
+  durationToSeconds,
+  hospitalAttendanceMoment,
+  hospitalUtcOffsetMinutes,
+} from './auth.constants';
 import { LoginDto } from './dto/login.dto';
 
 export interface TokenPair {
@@ -47,13 +53,19 @@ const TOTP_PERIOD_SECONDS = 30;
 const TOTP_DIGITS = 6;
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
+function isWorkingAttendanceStatus(status: AttendanceStatus): boolean {
+  return status === AttendanceStatus.PRESENT || status === AttendanceStatus.LATE;
+}
+
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly accessSecret: string;
   private readonly refreshSecret: string;
   private readonly accessTtlSeconds: number;
   private readonly refreshTtlSeconds: number;
   private readonly totpEncryptionKey: Buffer;
+  private readonly hospitalUtcOffsetMinutes: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -65,6 +77,9 @@ export class AuthService {
     this.refreshSecret = config.getOrThrow<string>('JWT_REFRESH_SECRET');
     this.accessTtlSeconds = durationToSeconds(config.get('JWT_ACCESS_TTL', '15m'), 900);
     this.refreshTtlSeconds = durationToSeconds(config.get('JWT_REFRESH_TTL', '7d'), 604800);
+    this.hospitalUtcOffsetMinutes = hospitalUtcOffsetMinutes(
+      config.get('HOSPITAL_UTC_OFFSET_MINUTES', '120'),
+    );
     this.totpEncryptionKey = createHash('sha256')
       .update(config.get('TOTP_ENCRYPTION_KEY', `${this.accessSecret}:hospital-totp`))
       .digest();
@@ -96,13 +111,17 @@ export class AuthService {
       throw new UnauthorizedException('Code de vérification à deux facteurs requis ou incorrect.');
     }
 
+    const loggedInAt = new Date();
     await Promise.all([
       this.prisma.user.update({
         where: { id: user.id },
-        data: { lastActiveAt: new Date() },
+        data: { lastActiveAt: loggedInAt },
       }),
       this.clearFailures(user.id),
       this.recordLoginEvent(username, user.id, true, context, 'Connexion réussie'),
+      this.recordLoginAttendance(user.id, loggedInAt, context).catch((error: unknown) => {
+        this.logAttendanceError('signature automatique de l’arrivée', error);
+      }),
     ]);
 
     const tokens = await this.createSession(
@@ -236,6 +255,9 @@ export class AuthService {
 
     try {
       const payload = await this.verifyRefreshToken(refreshToken);
+      await this.recordAttendanceExit(payload.sub, new Date(), 'LOGOUT').catch((error: unknown) => {
+        this.logAttendanceError('signature automatique de la sortie', error);
+      });
       await this.prisma.authSession.updateMany({
         where: { id: payload.sid, userId: payload.sub, revokedAt: null },
         data: { revokedAt: new Date() },
@@ -243,6 +265,144 @@ export class AuthService {
     } catch {
       return;
     }
+  }
+
+  private async recordLoginAttendance(
+    userId: string,
+    loggedInAt: Date,
+    context: ClientContext,
+  ): Promise<void> {
+    const moment = hospitalAttendanceMoment(loggedInAt, this.hospitalUtcOffsetMinutes);
+    const classification = classifyLoginAttendance(moment.localMinutes);
+    const uniqueWhere = {
+      employeeId_date: { employeeId: userId, date: moment.attendanceDate },
+    };
+    const attendance = await this.prisma.attendanceRecord.findUnique({ where: uniqueWhere });
+
+    if (!attendance) {
+      try {
+        await this.prisma.$transaction(async (transaction) => {
+          const created = await transaction.attendanceRecord.create({
+            data: {
+              employeeId: userId,
+              date: moment.attendanceDate,
+              status: classification.status,
+              clockIn: loggedInAt,
+              minutesLate: classification.minutesLate,
+              notes: 'Pointage automatique signé par la première connexion réussie.',
+            },
+          });
+          await transaction.auditLog.create({
+            data: {
+              userId,
+              action: 'ATTENDANCE_AUTO_CLOCK_IN',
+              entity: 'AttendanceRecord',
+              entityId: created.id,
+              ipAddress: context.ipAddress,
+              metadata: {
+                source: 'LOGIN',
+                userAgent: context.userAgent ?? null,
+                clockIn: loggedInAt.toISOString(),
+                status: classification.status,
+                minutesLate: classification.minutesLate,
+              },
+            },
+          });
+        });
+        return;
+      } catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+          throw error;
+        }
+        return;
+      }
+    }
+
+    if (!attendance || !isWorkingAttendanceStatus(attendance.status)) {
+      return;
+    }
+
+    if (!attendance.clockIn) {
+      await this.prisma.$transaction(async (transaction) => {
+        const updated = await transaction.attendanceRecord.updateMany({
+          where: {
+            id: attendance.id,
+            clockIn: null,
+            status: { in: [AttendanceStatus.PRESENT, AttendanceStatus.LATE] },
+          },
+          data: {
+            clockIn: loggedInAt,
+            status: classification.status,
+            minutesLate: classification.minutesLate,
+          },
+        });
+        if (updated.count === 0) return;
+        await transaction.auditLog.create({
+          data: {
+            userId,
+            action: 'ATTENDANCE_AUTO_CLOCK_IN',
+            entity: 'AttendanceRecord',
+            entityId: attendance.id,
+            ipAddress: context.ipAddress,
+            metadata: {
+              source: 'LOGIN',
+              userAgent: context.userAgent ?? null,
+              clockIn: loggedInAt.toISOString(),
+              status: classification.status,
+              minutesLate: classification.minutesLate,
+            },
+          },
+        });
+      });
+      return;
+    }
+
+    await this.recordAttendanceExit(userId, loggedInAt, 'LOGIN');
+  }
+
+  private async recordAttendanceExit(
+    userId: string,
+    activityAt: Date,
+    source: 'LOGIN' | 'LOGOUT',
+  ): Promise<void> {
+    const moment = hospitalAttendanceMoment(activityAt, this.hospitalUtcOffsetMinutes);
+    if (!canSignAttendanceExit(moment.localMinutes)) return;
+
+    const attendance = await this.prisma.attendanceRecord.findUnique({
+      where: {
+        employeeId_date: { employeeId: userId, date: moment.attendanceDate },
+      },
+    });
+    if (
+      !attendance?.clockIn ||
+      attendance.clockOut ||
+      !isWorkingAttendanceStatus(attendance.status) ||
+      attendance.clockIn.getTime() >= activityAt.getTime()
+    ) {
+      return;
+    }
+
+    await this.prisma.$transaction(async (transaction) => {
+      const updated = await transaction.attendanceRecord.updateMany({
+        where: { id: attendance.id, clockOut: null },
+        data: { clockOut: activityAt },
+      });
+      if (updated.count === 0) return;
+      await transaction.auditLog.create({
+        data: {
+          userId,
+          action: 'ATTENDANCE_AUTO_CLOCK_OUT',
+          entity: 'AttendanceRecord',
+          entityId: attendance.id,
+          metadata: { source, clockOut: activityAt.toISOString() },
+        },
+      });
+    });
+  }
+
+  private logAttendanceError(action: string, error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error);
+    this.logger.error(`Échec de la ${action} : ${message}`);
   }
 
   private async findTwoFactor(userId: string): Promise<TwoFactorRow | null> {

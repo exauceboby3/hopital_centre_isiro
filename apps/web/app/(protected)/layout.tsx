@@ -7,6 +7,7 @@ import './archive-professional.css';
 import './interaction-fixes.css';
 import './patient-subfolders.css';
 import './financial-access.css';
+import './nursing-workflow.css';
 import './clinical-governance.css';
 import './clinical-safety.css';
 import './quality-continuity.css';

@@ -13,7 +13,9 @@ import {
   UserRoundCheck,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { StatusBadge } from '@/components/status-badge';
 import { api } from '@/lib/api';
+import { formatHospitalTime } from '@/lib/display';
 
 interface Summary {
   patients: number | null;
@@ -160,8 +162,19 @@ export default function DashboardPage() {
             </span>
           </div>
           <span className="muted">
-            Ma présence : {summary.presence.mine?.status ?? 'non pointée'}
+            Ma présence :{' '}
+            {summary.presence.mine ? (
+              <StatusBadge status={summary.presence.mine.status} />
+            ) : (
+              'non pointée'
+            )}
           </span>
+          {summary.presence.mine?.clockIn && (
+            <span className="muted">
+              Arrivée {formatHospitalTime(summary.presence.mine.clockIn)} · sortie{' '}
+              {formatHospitalTime(summary.presence.mine.clockOut)}
+            </span>
+          )}
         </article>
 
         {summary.visibility.doctorAvailability && (

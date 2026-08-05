@@ -9,6 +9,7 @@ x-api-environment: &api-environment
   JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
   JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
   JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
+  HOSPITAL_UTC_OFFSET_MINUTES: ${HOSPITAL_UTC_OFFSET_MINUTES:-120}
   VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
   VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:administration@hopitalcentreisiro.online}
   PROFILE_UPLOAD_DIR: /app/uploads/profiles

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   AppointmentStatus,
   ExamStatus,
@@ -10,18 +11,34 @@ import {
   ShiftStatus,
 } from '@prisma/client';
 import { AuthenticatedUser, hasAnyRole } from '../common/authenticated-user';
+import { hospitalAttendanceMoment, hospitalUtcOffsetMinutes } from '../auth/auth.constants';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly hospitalUtcOffsetMinutes: number;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    config: ConfigService,
+  ) {
+    this.hospitalUtcOffsetMinutes = hospitalUtcOffsetMinutes(
+      config.get('HOSPITAL_UTC_OFFSET_MINUTES', '120'),
+    );
+  }
 
   async summary(user: AuthenticatedUser) {
-    const start = new Date();
+    const now = new Date();
+    const start = new Date(now);
     start.setHours(0, 0, 0, 0);
     const end = new Date(start);
     end.setDate(end.getDate() + 1);
-    const now = new Date();
+    const attendanceStart = hospitalAttendanceMoment(
+      now,
+      this.hospitalUtcOffsetMinutes,
+    ).attendanceDate;
+    const attendanceEnd = new Date(attendanceStart);
+    attendanceEnd.setUTCDate(attendanceEnd.getUTCDate() + 1);
     const canSeeFinance = hasAnyRole(user, [
       Role.SUPER_ADMIN,
       Role.ADMIN,
@@ -132,12 +149,15 @@ export class DashboardService {
       this.prisma.message.count({ where: { receiverId: user.id, readAt: null } }),
       this.prisma.attendanceRecord.count({
         where: {
-          date: { gte: start, lt: end },
+          date: { gte: attendanceStart, lt: attendanceEnd },
           status: { in: [AttendanceStatus.PRESENT, AttendanceStatus.LATE] },
         },
       }),
       this.prisma.attendanceRecord.count({
-        where: { date: { gte: start, lt: end }, status: AttendanceStatus.ABSENT },
+        where: {
+          date: { gte: attendanceStart, lt: attendanceEnd },
+          status: AttendanceStatus.ABSENT,
+        },
       }),
       this.prisma.staffShift.count({
         where: {
@@ -153,7 +173,10 @@ export class DashboardService {
         ? this.prisma.doctorProfile.count({ where: { user: { isActive: true } } })
         : Promise.resolve(null),
       this.prisma.attendanceRecord.findFirst({
-        where: { employeeId: user.id, date: { gte: start, lt: end } },
+        where: {
+          employeeId: user.id,
+          date: { gte: attendanceStart, lt: attendanceEnd },
+        },
         orderBy: { date: 'desc' },
       }),
     ]);
