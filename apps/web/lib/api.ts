@@ -91,7 +91,19 @@ async function request<T>(path: string, init: RequestInit, allowRefresh: boolean
   if (response.status === 204) {
     return undefined as T;
   }
-  return response.json() as Promise<T>;
+
+  const responseBody = await response.text();
+  if (!responseBody.trim()) {
+    return undefined as T;
+  }
+
+  try {
+    return JSON.parse(responseBody) as T;
+  } catch {
+    const message = 'Le serveur a renvoyé une réponse illisible. Rechargez la page puis réessayez.';
+    notifyError(message);
+    throw new ApiError(message, response.status, 'INVALID_JSON_RESPONSE');
+  }
 }
 
 export function api<T>(path: string, init: RequestInit = {}): Promise<T> {
