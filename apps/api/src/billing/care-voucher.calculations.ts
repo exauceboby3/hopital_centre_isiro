@@ -23,9 +23,9 @@ export function calculateVoucherSplit(
   const theoreticalSponsor = money(total * (coveragePercent / 100));
   const remainingCeiling =
     ceilingAmount == null ? null : money(Math.max(0, ceilingAmount - alreadyUsed));
-  const sponsorAmount = money(
-    remainingCeiling == null ? theoreticalSponsor : Math.min(theoreticalSponsor, remainingCeiling),
-  );
+  // Le plafond sert au suivi budgétaire. Il ne réduit jamais la prise en charge
+  // acceptée par le garant et peut donc être dépassé.
+  const sponsorAmount = theoreticalSponsor;
   return {
     coveragePercent: money(coveragePercent),
     grossAmount: money(total),

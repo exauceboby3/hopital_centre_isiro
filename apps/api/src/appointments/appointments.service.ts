@@ -44,6 +44,33 @@ const appointmentInclude = {
 type AppointmentRow = Prisma.AppointmentGetPayload<{ include: typeof appointmentInclude }>;
 const financialRoles = [Role.SUPER_ADMIN, Role.ADMIN, Role.CASHIER, Role.ACCOUNTANT] as const;
 
+export function parseNewAppointmentDate(value: string, now = new Date()): Date {
+  const scheduledAt = new Date(value);
+  if (Number.isNaN(scheduledAt.getTime())) {
+    throw new BadRequestException('La date du rendez-vous est invalide.');
+  }
+  if (scheduledAt.getTime() < now.getTime()) {
+    throw new BadRequestException(
+      'Un nouveau rendez-vous ne peut pas être programmé dans le passé.',
+    );
+  }
+  return scheduledAt;
+}
+
+export function canOperationallyReassignBeforeReception(
+  appointment: {
+    doctorAcknowledgedAt: Date | null;
+    consultation: { startedAt: Date | null } | null;
+  },
+  user: AuthenticatedUser,
+): boolean {
+  return (
+    !appointment.doctorAcknowledgedAt &&
+    !appointment.consultation?.startedAt &&
+    hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN, Role.RECEPTIONIST, Role.SECRETARY])
+  );
+}
+
 @Injectable()
 export class AppointmentsService {
   constructor(
@@ -145,15 +172,7 @@ export class AppointmentsService {
   create(dto: CreateAppointmentDto, user: AuthenticatedUser) {
     return this.prisma.$transaction(async (transaction) => {
       const { billableServiceId, ...appointmentData } = dto;
-      const scheduledAt = new Date(dto.scheduledAt);
-      if (Number.isNaN(scheduledAt.getTime())) {
-        throw new BadRequestException('La date du rendez-vous est invalide.');
-      }
-      if (scheduledAt.getTime() < Date.now() - 5 * 60_000) {
-        throw new BadRequestException(
-          'Un nouveau rendez-vous ne peut pas être programmé dans le passé.',
-        );
-      }
+      const scheduledAt = parseNewAppointmentDate(dto.scheduledAt);
       if (dto.doctorId) await this.assertActiveDoctor(transaction, dto.doctorId);
 
       const activeEpisode = await transaction.appointment.findFirst({
@@ -377,7 +396,10 @@ export class AppointmentsService {
         include: { doctor: true, patient: true, consultation: true },
       });
       if (!appointment) throw new NotFoundException('Rendez-vous introuvable.');
-      this.assertAssignedDoctor(appointment.doctor?.userId, user);
+      const canReassignBeforeReception = canOperationallyReassignBeforeReception(appointment, user);
+      if (!canReassignBeforeReception) {
+        this.assertAssignedDoctor(appointment.doctor?.userId, user);
+      }
       if (
         appointment.status !== AppointmentStatus.CHECKED_IN ||
         appointment.journeyStage === PatientJourneyStage.COMPLETED ||

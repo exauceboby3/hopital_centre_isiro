@@ -10,10 +10,10 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/components/auth-provider';
 import { ListFilters } from '@/components/list-filters';
 import { Modal } from '@/components/modal';
-import { SearchableSelect } from '@/components/searchable-select';
 import { StatusBadge } from '@/components/status-badge';
 import { api } from '@/lib/api';
 import { currency, matchesSearch, patientName } from '@/lib/display';
@@ -39,6 +39,7 @@ interface CareVoucher {
   id: string;
   number: string;
   issuerName: string;
+  sponsorType: 'COMPANY' | 'INDIVIDUAL';
   coveragePercent: string;
   ceilingAmount?: string;
   usedAmount: string;
@@ -47,16 +48,15 @@ interface CareVoucher {
   status: 'ACTIVE' | 'SUSPENDED' | 'EXHAUSTED' | 'EXPIRED' | 'CANCELLED';
   notes?: string;
   createdAt: string;
-  patient: Patient;
+  patient?: Patient;
   createdBy: { username: string };
   coverages: VoucherCoverage[];
 }
 
 const emptyVoucher = {
-  patientId: '',
+  sponsorType: 'COMPANY' as 'COMPANY' | 'INDIVIDUAL',
   number: '',
   issuerName: '',
-  coveragePercent: '100',
   ceilingAmount: '',
   validFrom: '',
   validUntil: '',
@@ -77,7 +77,6 @@ export default function CareVouchersPage() {
   const authorized = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'CASHIER', 'ACCOUNTANT']);
   const canManageStatus = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT']);
   const [vouchers, setVouchers] = useState<CareVoucher[]>([]);
-  const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -93,12 +92,8 @@ export default function CareVouchersPage() {
     }
     setLoading(true);
     try {
-      const [voucherRows, patientRows] = await Promise.all([
-        api<CareVoucher[]>('/billing/vouchers'),
-        api<{ items: Patient[] }>('/patients/lookup?limit=200'),
-      ]);
+      const voucherRows = await api<CareVoucher[]>('/billing/vouchers');
       setVouchers(voucherRows);
-      setPatients(patientRows.items);
     } catch (reason) {
       notifyError(reason instanceof Error ? reason.message : 'Chargement des bons impossible.');
     } finally {
@@ -123,7 +118,7 @@ export default function CareVouchersPage() {
         method: 'POST',
         body: JSON.stringify({
           ...form,
-          coveragePercent: Number(form.coveragePercent),
+          coveragePercent: 100,
           ceilingAmount: form.ceilingAmount ? Number(form.ceilingAmount) : undefined,
           validFrom: form.validFrom || undefined,
           validUntil: form.validUntil || undefined,
@@ -172,8 +167,8 @@ export default function CareVouchersPage() {
             voucher.number,
             voucher.issuerName,
             voucher.status,
-            patientName(voucher.patient),
-            voucher.patient.medicalRecordNumber,
+            voucher.patient ? patientName(voucher.patient) : '',
+            voucher.patient?.medicalRecordNumber,
             voucher.notes,
           ),
       ),
@@ -298,9 +293,14 @@ export default function CareVouchersPage() {
                         <span className="muted">Créé par {voucher.createdBy.username}</span>
                       </td>
                       <td>
-                        <strong>{patientName(voucher.patient)}</strong>
+                        <strong>
+                          {voucher.patient ? patientName(voucher.patient) : 'Tous bénéficiaires'}
+                        </strong>
                         <br />
-                        <span className="muted">{voucher.patient.medicalRecordNumber}</span>
+                        <span className="muted">
+                          {voucher.patient?.medicalRecordNumber ??
+                            (voucher.sponsorType === 'COMPANY' ? 'Société' : 'Personne garante')}
+                        </span>
                       </td>
                       <td>{voucher.issuerName}</td>
                       <td>{Number(voucher.coveragePercent).toLocaleString('fr-FR')} %</td>
@@ -389,18 +389,22 @@ export default function CareVouchersPage() {
         <Modal title="Créer un bon de soins" eyebrow="Prise en charge" onClose={close} wide>
           <form onSubmit={createVoucher}>
             <div className="form-grid">
-              <SearchableSelect
-                required
-                className="full"
-                label="Patient bénéficiaire"
-                value={form.patientId}
-                onChange={(patientId) => setForm({ ...form, patientId })}
-                options={patients.map((patient) => ({
-                  value: patient.id,
-                  label: patientName(patient),
-                  description: patient.medicalRecordNumber,
-                }))}
-              />
+              <label className="field">
+                <span>Type de garant *</span>
+                <select
+                  required
+                  value={form.sponsorType}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      sponsorType: event.target.value as 'COMPANY' | 'INDIVIDUAL',
+                    })
+                  }
+                >
+                  <option value="COMPANY">Société</option>
+                  <option value="INDIVIDUAL">Personne</option>
+                </select>
+              </label>
               <label className="field">
                 <span>Numéro du bon *</span>
                 <input
@@ -412,25 +416,13 @@ export default function CareVouchersPage() {
                 />
               </label>
               <label className="field">
-                <span>Organisme émetteur *</span>
+                <span>Nom de la société ou du garant *</span>
                 <input
                   required
                   minLength={2}
                   maxLength={160}
                   value={form.issuerName}
                   onChange={(event) => setForm({ ...form, issuerName: event.target.value })}
-                />
-              </label>
-              <label className="field">
-                <span>Pourcentage couvert *</span>
-                <input
-                  required
-                  type="number"
-                  min="0.01"
-                  max="100"
-                  step="0.01"
-                  value={form.coveragePercent}
-                  onChange={(event) => setForm({ ...form, coveragePercent: event.target.value })}
                 />
               </label>
               <label className="field">
@@ -473,15 +465,14 @@ export default function CareVouchersPage() {
               </label>
             </div>
             <div className="alert info">
-              Le bon pourra être appliqué depuis la facture du patient avant le premier
-              encaissement. Le système calculera automatiquement la part du patient et celle de
-              l’organisme.
+              Le bon pourra être attribué à n’importe quel patient avant le premier encaissement.
+              Toute la facture sera imputée au garant, même si le plafond indicatif est dépassé.
             </div>
             <div className="modal-actions">
               <button className="secondary-button" type="button" onClick={close}>
                 Annuler
               </button>
-              <button className="primary-button" disabled={submitting || !form.patientId}>
+              <button className="primary-button" disabled={submitting}>
                 Enregistrer le bon
               </button>
             </div>
@@ -492,7 +483,7 @@ export default function CareVouchersPage() {
       {selected && (
         <Modal
           title={selected.number}
-          eyebrow={`${patientName(selected.patient)} — ${selected.issuerName}`}
+          eyebrow={`${selected.patient ? patientName(selected.patient) : selected.sponsorType === 'COMPANY' ? 'Société' : 'Personne garante'} — ${selected.issuerName}`}
           onClose={() => setSelected(null)}
           wide
         >
@@ -555,6 +546,9 @@ export default function CareVouchersPage() {
             </table>
           </div>
           <div className="modal-actions">
+            <Link className="primary-button" href={`/print?kind=care-voucher&id=${selected.id}`}>
+              Facture consolidée du garant
+            </Link>
             <button className="secondary-button" type="button" onClick={() => setSelected(null)}>
               Fermer
             </button>

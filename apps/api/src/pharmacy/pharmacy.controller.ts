@@ -38,6 +38,7 @@ export class PharmacyController {
     Role.PHARMACIST,
     Role.STOREKEEPER,
     Role.DOCTOR,
+    Role.NURSE,
     Role.SURGEON,
     Role.MIDWIFE,
   )
@@ -50,8 +51,8 @@ export class PharmacyController {
 
   @Post()
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.PHARMACIST)
-  create(@Body() dto: CreateMedicationDto) {
-    return this.pharmacy.create(dto);
+  create(@Body() dto: CreateMedicationDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.pharmacy.create(dto, user.id);
   }
 
   @Patch(':id')

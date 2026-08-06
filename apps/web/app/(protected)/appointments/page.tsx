@@ -13,6 +13,7 @@ import {
   Stethoscope,
   UserRoundCheck,
   WalletCards,
+  Send,
 } from 'lucide-react';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
@@ -22,7 +23,12 @@ import { Modal } from '@/components/modal';
 import { SearchableSelect } from '@/components/searchable-select';
 import { StatusBadge } from '@/components/status-badge';
 import { api } from '@/lib/api';
-import { localDateTimeInputValue, matchesSearch, patientName } from '@/lib/display';
+import {
+  isiroLocalDateTimeToDate,
+  localDateTimeInputValue,
+  matchesSearch,
+  patientName,
+} from '@/lib/display';
 import { hasAnyRole } from '@/lib/roles';
 import { Patient } from '@/lib/types';
 
@@ -59,6 +65,7 @@ interface Appointment {
   status: string;
   journeyStage: string;
   journeyUpdatedAt: string;
+  doctorAcknowledgedAt?: string;
   patient: Patient & { vitalSigns?: VitalSign[] };
   doctor?: {
     id: string;
@@ -126,8 +133,12 @@ export default function AppointmentsPage() {
   const [doctors, setDoctors] = useState<DoctorAvailability[]>([]);
   const [services, setServices] = useState<BillableService[]>([]);
   const [form, setForm] = useState(emptyForm);
+  const [minimumScheduledAt, setMinimumScheduledAt] = useState('');
   const [vitals, setVitals] = useState(emptyVitals);
   const [createOpen, setCreateOpen] = useState(false);
+  const [directReferral, setDirectReferral] = useState(false);
+  const [transferring, setTransferring] = useState<Appointment | null>(null);
+  const [transfer, setTransfer] = useState({ doctorId: '', reason: '' });
   const [doctorsOpen, setDoctorsOpen] = useState(false);
   const [vitalAppointment, setVitalAppointment] = useState<Appointment | null>(null);
   const [viewing, setViewing] = useState<Appointment | null>(null);
@@ -176,19 +187,32 @@ export default function AppointmentsPage() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    setSubmitting(true);
     setError('');
+    const scheduledAt = directReferral ? null : isiroLocalDateTimeToDate(form.scheduledAt);
+    if (
+      !directReferral &&
+      (!scheduledAt || Number.isNaN(scheduledAt.getTime()) || scheduledAt.getTime() < Date.now())
+    ) {
+      setError('Choisissez une date et une heure futures selon l’heure d’Isiro.');
+      return;
+    }
+    setSubmitting(true);
     try {
-      await api('/appointments', {
+      const service =
+        services.find((entry) => entry.id === form.billableServiceId)?.name ?? 'Consultation';
+      await api(directReferral ? '/appointments/direct-referral' : '/appointments', {
         method: 'POST',
-        body: JSON.stringify({
-          ...form,
-          service:
-            services.find((service) => service.id === form.billableServiceId)?.name ??
-            'Consultation',
-          doctorId: form.doctorId || undefined,
-          scheduledAt: new Date(form.scheduledAt).toISOString(),
-        }),
+        body: JSON.stringify(
+          directReferral
+            ? {
+                patientId: form.patientId,
+                doctorId: form.doctorId,
+                billableServiceId: form.billableServiceId,
+                reason: form.reason || undefined,
+                service,
+              }
+            : { ...form, service, scheduledAt: scheduledAt!.toISOString() },
+        ),
       });
       setCreateOpen(false);
       setForm(emptyForm);
@@ -196,6 +220,29 @@ export default function AppointmentsPage() {
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Enregistrement impossible.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const submitTransfer = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!transferring) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      await api(`/appointments/${transferring.id}/transfer`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          doctorId: transfer.doctorId,
+          reason: transfer.reason || 'Réaffectation avant la prise en charge médicale',
+        }),
+      });
+      setTransferring(null);
+      setTransfer({ doctorId: '', reason: '' });
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Réaffectation impossible.');
     } finally {
       setSubmitting(false);
     }
@@ -275,15 +322,35 @@ export default function AppointmentsPage() {
           <p>Un patient actif apparaît une seule fois pendant son parcours.</p>
         </div>
         {canCreate && (
-          <button
-            className="primary-button"
-            onClick={() => {
-              setForm({ ...emptyForm, scheduledAt: localDateTimeInputValue() });
-              setCreateOpen(true);
-            }}
-          >
-            <Plus size={18} /> Nouveau rendez-vous
-          </button>
+          <div className="row-actions">
+            <button
+              className="secondary-button"
+              onClick={() => {
+                setDirectReferral(true);
+                setForm(emptyForm);
+                setError('');
+                setCreateOpen(true);
+              }}
+            >
+              <Send size={18} /> Transfert direct
+            </button>
+            <button
+              className="primary-button"
+              onClick={() => {
+                setDirectReferral(false);
+                const now = new Date();
+                setMinimumScheduledAt(localDateTimeInputValue(now));
+                setForm({
+                  ...emptyForm,
+                  scheduledAt: localDateTimeInputValue(new Date(now.getTime() + 15 * 60_000)),
+                });
+                setError('');
+                setCreateOpen(true);
+              }}
+            >
+              <Plus size={18} /> Nouveau rendez-vous
+            </button>
+          </div>
         )}
       </div>
 
@@ -484,6 +551,20 @@ export default function AppointmentsPage() {
                               <HeartPulse size={15} /> Signes vitaux
                             </button>
                           )}
+                          {scope === 'active' &&
+                            row.status === 'CHECKED_IN' &&
+                            !row.doctorAcknowledgedAt &&
+                            canCreate && (
+                              <button
+                                className="text-button"
+                                onClick={() => {
+                                  setTransferring(row);
+                                  setTransfer({ doctorId: '', reason: '' });
+                                }}
+                              >
+                                <Send size={15} /> Renvoyer
+                              </button>
+                            )}
                           {scope === 'active' && (
                             <button
                               className="text-button danger"
@@ -559,8 +640,8 @@ export default function AppointmentsPage() {
 
       {createOpen && (
         <Modal
-          title="Planifier un rendez-vous"
-          eyebrow="Réception"
+          title={directReferral ? 'Transférer directement au médecin' : 'Planifier un rendez-vous'}
+          eyebrow={directReferral ? 'Orientation immédiate' : 'Réception'}
           onClose={() => setCreateOpen(false)}
         >
           <form onSubmit={submit}>
@@ -578,6 +659,7 @@ export default function AppointmentsPage() {
                 }))}
               />
               <SearchableSelect
+                required
                 className="full"
                 label="Médecin affecté"
                 value={form.doctorId}
@@ -588,15 +670,19 @@ export default function AppointmentsPage() {
                   description: `${doctor.specialty} · ${doctor.availability}`,
                 }))}
               />
-              <label className="field">
-                <span>Date et heure *</span>
-                <input
-                  required
-                  type="datetime-local"
-                  value={form.scheduledAt}
-                  onChange={(event) => setForm({ ...form, scheduledAt: event.target.value })}
-                />
-              </label>
+              {!directReferral && (
+                <label className="field">
+                  <span>Date et heure d’Isiro (UTC+2) *</span>
+                  <input
+                    required
+                    type="datetime-local"
+                    min={minimumScheduledAt}
+                    value={form.scheduledAt}
+                    onChange={(event) => setForm({ ...form, scheduledAt: event.target.value })}
+                  />
+                  <small>Le premier créneau proposé est dans 15 minutes.</small>
+                </label>
+              )}
               <label className="field">
                 <span>Type de consultation *</span>
                 <select
@@ -630,7 +716,55 @@ export default function AppointmentsPage() {
                 Annuler
               </button>
               <button className="primary-button" disabled={submitting}>
-                Enregistrer
+                {directReferral ? 'Transférer le dossier' : 'Enregistrer'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {transferring && (
+        <Modal
+          title="Renvoyer vers un autre médecin"
+          eyebrow={patientName(transferring.patient)}
+          onClose={() => setTransferring(null)}
+        >
+          <form onSubmit={submitTransfer}>
+            <div className="form-grid">
+              <SearchableSelect
+                required
+                className="full"
+                label="Nouveau médecin"
+                value={transfer.doctorId}
+                onChange={(doctorId) => setTransfer({ ...transfer, doctorId })}
+                options={doctors
+                  .filter((doctor) => doctor.id !== transferring.doctor?.id)
+                  .map((doctor) => ({
+                    value: doctor.id,
+                    label: doctor.name,
+                    description: `${doctor.specialty} · ${doctor.availability}`,
+                  }))}
+              />
+              <label className="field full">
+                <span>Motif du renvoi</span>
+                <textarea
+                  rows={3}
+                  maxLength={1000}
+                  value={transfer.reason}
+                  onChange={(event) => setTransfer({ ...transfer, reason: event.target.value })}
+                />
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setTransferring(null)}
+              >
+                Annuler
+              </button>
+              <button className="primary-button" disabled={submitting || !transfer.doctorId}>
+                Confirmer le renvoi
               </button>
             </div>
           </form>

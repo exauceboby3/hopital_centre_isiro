@@ -2,6 +2,8 @@ import {
   currency,
   formatHospitalTime,
   hospitalDateKey,
+  isiroLocalDateTimeToDate,
+  localDateTimeInputValue,
   matchesSearch,
   patientName,
 } from './display';
@@ -30,5 +32,13 @@ describe('display helpers', () => {
     expect(formatHospitalTime(value)).toBe('00:30');
     expect(hospitalDateKey(value)).toBe('2026-08-06');
     expect(formatHospitalTime(undefined)).toBe('Non signée');
+  });
+
+  it('convertit les rendez-vous selon l’heure d’Isiro indépendamment de l’appareil', () => {
+    const instant = new Date('2026-08-05T22:30:00.000Z');
+
+    expect(localDateTimeInputValue(instant)).toBe('2026-08-06T00:30');
+    expect(isiroLocalDateTimeToDate('2026-08-06T00:30').toISOString()).toBe(instant.toISOString());
+    expect(Number.isNaN(isiroLocalDateTimeToDate('date-invalide').getTime())).toBe(true);
   });
 });

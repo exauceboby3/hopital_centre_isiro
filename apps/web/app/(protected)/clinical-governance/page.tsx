@@ -27,7 +27,7 @@ import { api } from '@/lib/api';
 import { localDateTimeInputValue, patientName } from '@/lib/display';
 import { notifyError, notifySuccess } from '@/lib/notifications';
 import { hasAnyRole } from '@/lib/roles';
-import { Patient } from '@/lib/types';
+import { Patient, User } from '@/lib/types';
 
 interface FinancialInvoice {
   id: string;
@@ -279,6 +279,7 @@ const escapeHtml = (value: string) =>
 export default function ClinicalGovernancePage() {
   const { user } = useAuth();
   const [patients, setPatients] = useState<Patient[]>([]);
+  const [doctors, setDoctors] = useState<User[]>([]);
   const [patientId, setPatientId] = useState('');
   const [center, setCenter] = useState<CommandCenter | null>(null);
   const [financialAccess, setFinancialAccess] = useState<BasicFinancialAccess | null>(null);
@@ -362,10 +363,23 @@ export default function ClinicalGovernancePage() {
   const canViewGraceReport = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT']);
 
   useEffect(() => {
-    void api<{ items: Patient[] }>('/patients/lookup?limit=250')
-      .then((result) => setPatients(result.items))
+    void Promise.all([
+      api<{ items: Patient[] }>('/patients/lookup?limit=250'),
+      api<User[]>('/users'),
+    ])
+      .then(([patientRows, users]) => {
+        setPatients(patientRows.items);
+        setDoctors(
+          users.filter(
+            (entry) =>
+              entry.isActive &&
+              (['DOCTOR', 'SURGEON'].includes(entry.role) ||
+                entry.additionalRoles?.some((role) => ['DOCTOR', 'SURGEON'].includes(role))),
+          ),
+        );
+      })
       .catch((reason) =>
-        notifyError(reason instanceof Error ? reason.message : 'Patients indisponibles.'),
+        notifyError(reason instanceof Error ? reason.message : 'Référentiels indisponibles.'),
       );
   }, []);
 
@@ -1594,16 +1608,24 @@ export default function ClinicalGovernancePage() {
                   }
                 />
               </label>
-              <label className="field">
-                <span>Médecin déclarant *</span>
-                <input
-                  required
-                  value={deathForm.declaringDoctorName}
-                  onChange={(event) =>
-                    setDeathForm({ ...deathForm, declaringDoctorName: event.target.value })
-                  }
-                />
-              </label>
+              <SearchableSelect
+                required
+                label="Médecin déclarant"
+                value={
+                  doctors.find((doctor) => doctor.username === deathForm.declaringDoctorName)?.id ??
+                  ''
+                }
+                onChange={(doctorId) => {
+                  const doctor = doctors.find((entry) => entry.id === doctorId);
+                  setDeathForm({ ...deathForm, declaringDoctorName: doctor?.username ?? '' });
+                }}
+                options={doctors.map((doctor) => ({
+                  value: doctor.id,
+                  label: doctor.username,
+                  description: doctor.role === 'SURGEON' ? 'Chirurgien' : 'Médecin',
+                }))}
+                helpText="Sélection issue des utilisateurs médicaux actifs."
+              />
               <label className="field full">
                 <span>Cause / contexte *</span>
                 <textarea

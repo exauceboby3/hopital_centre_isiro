@@ -36,4 +36,10 @@ export class CreateMedicationDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   unitPrice: number;
+
+  @ApiProperty({ default: 0, description: 'Quantité réellement disponible lors de la création' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  initialStock: number;
 }

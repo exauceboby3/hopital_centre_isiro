@@ -73,6 +73,7 @@ const emptyForm: StaffForm = {
 };
 export default function StaffPage() {
   const { user } = useAuth();
+  const canManageStaff = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'HR']);
   const [staff, setStaff] = useState<StaffUser[]>([]);
   const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
@@ -86,7 +87,7 @@ export default function StaffPage() {
   const [query, setQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const load = useCallback(async () => {
-    if (!hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN'])) {
+    if (!canManageStaff) {
       setLoading(false);
       return;
     }
@@ -106,18 +107,18 @@ export default function StaffPage() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [canManageStaff]);
   useEffect(() => {
     void load();
     const timer = window.setInterval(() => void load(), 60_000);
     return () => window.clearInterval(timer);
   }, [load]);
-  if (!hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN']))
+  if (!canManageStaff)
     return (
       <section className="panel restricted">
         <ShieldAlert size={36} />
         <h1>Accès réservé</h1>
-        <p>La gestion du personnel est réservée à l’administrateur.</p>
+        <p>La gestion du personnel est réservée à l’administration et aux ressources humaines.</p>
       </section>
     );
   const submit = async (e: FormEvent) => {
@@ -184,7 +185,7 @@ export default function StaffPage() {
     <>
       <div className="page-heading">
         <div>
-          <span className="eyebrow">Administration</span>
+          <span className="eyebrow">Ressources humaines</span>
           <h1>Personnel</h1>
           <p>Comptes, profils et accès professionnels.</p>
         </div>

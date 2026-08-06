@@ -43,13 +43,29 @@ export class PharmacyService {
     });
   }
 
-  create(dto: CreateMedicationDto) {
-    return this.prisma.medication.create({
-      data: {
-        ...dto,
-        code: dto.code.trim().toUpperCase(),
-        unitPrice: new Prisma.Decimal(dto.unitPrice),
-      },
+  create(dto: CreateMedicationDto, userId: string) {
+    const { initialStock, ...medicationData } = dto;
+    return this.prisma.$transaction(async (transaction) => {
+      const medication = await transaction.medication.create({
+        data: {
+          ...medicationData,
+          code: dto.code.trim().toUpperCase(),
+          stockQuantity: initialStock,
+          unitPrice: new Prisma.Decimal(dto.unitPrice),
+        },
+      });
+      if (initialStock > 0) {
+        await transaction.stockMovement.create({
+          data: {
+            medicationId: medication.id,
+            userId,
+            type: StockMovementType.ENTRY,
+            quantity: initialStock,
+            reason: 'Stock initial à la création du médicament',
+          },
+        });
+      }
+      return medication;
     });
   }
 

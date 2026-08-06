@@ -18,17 +18,35 @@ export function matchesSearch(query: string, ...values: unknown[]): boolean {
   ).includes(needle);
 }
 
+// IANA has no Africa/Isiro identifier. Africa/Lubumbashi is the official
+// identifier for eastern DR Congo (CAT, UTC+2), including Isiro.
+const ISIRO_TIME_ZONE = 'Africa/Lubumbashi';
+const ISIRO_UTC_OFFSET = '+02:00';
+
 export function localDateTimeInputValue(date = new Date()): string {
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: ISIRO_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((entry) => entry.type === type)?.value ?? '';
+  return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}`;
 }
 
-const HOSPITAL_TIME_ZONE = 'Africa/Lubumbashi';
+export function isiroLocalDateTimeToDate(value: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return new Date(Number.NaN);
+  return new Date(`${value}:00.000${ISIRO_UTC_OFFSET}`);
+}
 
 export function formatHospitalTime(value?: string | Date | null, empty = 'Non signée'): string {
   if (!value) return empty;
   return new Intl.DateTimeFormat('fr-FR', {
-    timeZone: HOSPITAL_TIME_ZONE,
+    timeZone: ISIRO_TIME_ZONE,
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value));
@@ -36,7 +54,7 @@ export function formatHospitalTime(value?: string | Date | null, empty = 'Non si
 
 export function hospitalDateKey(value: string | Date): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: HOSPITAL_TIME_ZONE,
+    timeZone: ISIRO_TIME_ZONE,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

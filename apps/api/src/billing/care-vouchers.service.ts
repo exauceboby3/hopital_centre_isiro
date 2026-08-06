@@ -24,7 +24,10 @@ const INTERNAL_GRACE_ISSUER = 'MESURE DE GRÂCE INTERNE';
 const voucherInclude = {
   patient: true,
   createdBy: { select: { id: true, username: true } },
-  coverages: { include: { invoice: true }, orderBy: { createdAt: 'desc' } },
+  coverages: {
+    include: { invoice: { include: { patient: true, items: true } } },
+    orderBy: { createdAt: 'desc' },
+  },
 } satisfies Prisma.CareVoucherInclude;
 
 const coverageInclude = {
@@ -50,6 +53,17 @@ export class CareVouchersService {
     });
   }
 
+  async findOne(id: string) {
+    const voucher = await this.prisma.careVoucher.findUnique({
+      where: { id },
+      include: voucherInclude,
+    });
+    if (!voucher || voucher.issuerName === INTERNAL_GRACE_ISSUER) {
+      throw new NotFoundException('Bon de soins introuvable.');
+    }
+    return voucher;
+  }
+
   coverages(invoiceId?: string) {
     return this.prisma.voucherCoverage.findMany({
       where: invoiceId ? { invoiceId } : undefined,
@@ -70,15 +84,18 @@ export class CareVouchersService {
         'Utilisez le module Fiche & grâce pour créer une mesure de grâce interne.',
       );
     }
-    const patient = await this.prisma.patient.findFirst({
-      where: { id: dto.patientId, archivedAt: null },
-      select: { id: true },
-    });
-    if (!patient) throw new NotFoundException('Patient actif introuvable.');
+    if (dto.patientId) {
+      const patient = await this.prisma.patient.findFirst({
+        where: { id: dto.patientId, archivedAt: null },
+        select: { id: true },
+      });
+      if (!patient) throw new NotFoundException('Patient actif introuvable.');
+    }
     try {
       return await this.prisma.careVoucher.create({
         data: {
           patientId: dto.patientId,
+          sponsorType: dto.sponsorType,
           createdById: userId,
           number: dto.number.trim().toUpperCase(),
           issuerName: dto.issuerName.trim(),
@@ -142,7 +159,7 @@ export class CareVouchersService {
         if (invoice.insuranceCoverage || invoice.voucherCoverage) {
           throw new BadRequestException('Cette facture possède déjà une prise en charge.');
         }
-        if (invoice.patientId !== voucher.patientId) {
+        if (voucher.patientId && invoice.patientId !== voucher.patientId) {
           throw new BadRequestException('Le bon de soins ne correspond pas au patient facturé.');
         }
         const now = new Date();
@@ -159,9 +176,6 @@ export class CareVouchersService {
           voucher.ceilingAmount == null ? null : Number(voucher.ceilingAmount),
           Number(voucher.usedAmount),
         );
-        if (split.sponsorAmount <= 0) {
-          throw new BadRequestException('Le plafond de ce bon de soins est épuisé.');
-        }
         const coverage = await transaction.voucherCoverage.create({
           data: {
             invoiceId: invoice.id,
@@ -180,10 +194,8 @@ export class CareVouchersService {
           where: { id: voucher.id },
           data: {
             usedAmount: new Prisma.Decimal(nextUsed),
-            status:
-              voucher.ceilingAmount != null && nextUsed >= Number(voucher.ceilingAmount)
-                ? CareVoucherStatus.EXHAUSTED
-                : undefined,
+            // Le plafond est informatif : un garant continue à prendre en charge
+            // les factures même lorsque le cumul le dépasse.
           },
         });
         const patientPaid = invoice.payments

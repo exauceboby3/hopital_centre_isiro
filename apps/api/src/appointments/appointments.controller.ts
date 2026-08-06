@@ -25,6 +25,7 @@ import { AppointmentAcknowledgementService } from './appointment-acknowledgement
 import { AppointmentsService } from './appointments.service';
 import { DoctorAvailabilityService } from './doctor-availability.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
+import { DirectReferralDto } from './dto/direct-referral.dto';
 import { TransferAppointmentDto } from './dto/transfer-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 
@@ -90,6 +91,17 @@ export class AppointmentsController {
     return appointment;
   }
 
+  @Post('direct-referral')
+  async directReferral(@Body() dto: DirectReferralDto, @CurrentUser() user: AuthenticatedUser) {
+    await this.financialAccess.assertCareAccess(dto.patientId, BillableServiceType.CONSULTATION);
+    const appointment = await this.appointments.create(
+      { ...dto, scheduledAt: new Date().toISOString() },
+      user,
+    );
+    await this.governance.ensureEpisodeForAppointment(appointment.id, user.id);
+    return appointment;
+  }
+
   @Patch(':id')
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -128,7 +140,7 @@ export class AppointmentsController {
   }
 
   @Patch(':id/transfer')
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN, ...clinicianRoles)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.RECEPTIONIST, Role.SECRETARY, ...clinicianRoles)
   transfer(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: TransferAppointmentDto,

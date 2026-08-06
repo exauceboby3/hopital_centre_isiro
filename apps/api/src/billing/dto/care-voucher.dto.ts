@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { CareVoucherStatus } from '@prisma/client';
+import { CareVoucherSponsorType, CareVoucherStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   IsDateString,
@@ -16,8 +16,13 @@ import {
 
 export class CreateCareVoucherDto {
   @ApiProperty()
+  @IsOptional()
   @IsUUID()
-  patientId: string;
+  patientId?: string;
+
+  @ApiProperty({ enum: CareVoucherSponsorType })
+  @IsEnum(CareVoucherSponsorType)
+  sponsorType: CareVoucherSponsorType;
 
   @ApiProperty()
   @IsString()

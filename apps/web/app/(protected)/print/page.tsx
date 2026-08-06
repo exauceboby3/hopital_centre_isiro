@@ -81,6 +81,22 @@ interface GroupedFinancialDocument {
   balance: number;
   generatedAt: string;
 }
+
+interface CareVoucherDocument {
+  number: string;
+  issuerName: string;
+  sponsorType: 'COMPANY' | 'INDIVIDUAL';
+  ceilingAmount?: string;
+  usedAmount: string;
+  validFrom?: string;
+  validUntil?: string;
+  coverages: Array<{
+    id: string;
+    status: string;
+    sponsorAmount: string;
+    invoice: Invoice;
+  }>;
+}
 interface Exam {
   id: string;
   type: string;
@@ -315,6 +331,7 @@ interface PatientHistoryDocument {
 type PrintableDocument =
   | Invoice
   | GroupedFinancialDocument
+  | CareVoucherDocument
   | Exam
   | ClinicalOrder
   | Transfusion
@@ -372,6 +389,7 @@ function PrintDocument() {
       attendance: `/enterprise/hr/attendance/${id}`,
       payroll: `/enterprise/hr/payroll/${id}`,
       accounting: `/enterprise/accounting/journal/${id}`,
+      'care-voucher': `/billing/vouchers/${id}`,
       'grouped-invoice': `/billing/invoices/documents/grouped?ids=${encodeURIComponent(ids)}`,
       'grouped-receipt': `/billing/invoices/documents/grouped?ids=${encodeURIComponent(ids)}`,
     };
@@ -420,6 +438,7 @@ function PrintDocument() {
     attendance: 'FICHE DE PRÉSENCE',
     payroll: 'ÉTAT DE PAIE',
     accounting: 'PIÈCE COMPTABLE',
+    'care-voucher': 'FACTURE CONSOLIDÉE DU GARANT',
     'grouped-invoice': 'FACTURE RÉCAPITULATIVE',
     'grouped-receipt': 'REÇU RÉCAPITULATIF',
   };
@@ -517,6 +536,9 @@ function PrintDocument() {
         {kind === 'attendance' && <AttendanceDocument attendance={document as Attendance} />}
         {kind === 'payroll' && <PayrollDocument payroll={document as Payroll} />}
         {kind === 'accounting' && <AccountingDocument entry={document as JournalEntry} />}
+        {kind === 'care-voucher' && (
+          <CareVoucherDocumentView voucher={document as CareVoucherDocument} />
+        )}
         <footer className="print-footer">
           <p>{template?.footerText || profile.invoiceFooter}</p>
           <div>
@@ -785,6 +807,72 @@ function GroupedFinancialDocumentView({
       ) : (
         <div className="alert error">Aucun paiement enregistré.</div>
       )}
+    </>
+  );
+}
+
+function CareVoucherDocumentView({ voucher }: { voucher: CareVoucherDocument }) {
+  const coverages = voucher.coverages.filter((coverage) => coverage.status !== 'CANCELLED');
+  const total = coverages.reduce((sum, coverage) => sum + Number(coverage.sponsorAmount), 0);
+  const overrun = voucher.ceilingAmount
+    ? Math.max(0, Number(voucher.usedAmount) - Number(voucher.ceilingAmount))
+    : 0;
+  return (
+    <>
+      <section className="print-meta">
+        <p>
+          <strong>Garant :</strong> {voucher.issuerName}
+        </p>
+        <p>
+          <strong>Type :</strong>{' '}
+          {voucher.sponsorType === 'COMPANY' ? 'Société' : 'Personne garante'}
+        </p>
+        <p>
+          <strong>Bon :</strong> {voucher.number}
+        </p>
+        <p>
+          <strong>Plafond :</strong>{' '}
+          {voucher.ceilingAmount ? currency(voucher.ceilingAmount) : 'Sans plafond'}
+        </p>
+      </section>
+      <table className="print-table">
+        <thead>
+          <tr>
+            <th>Patient</th>
+            <th>Dossier</th>
+            <th>Facture</th>
+            <th>Actes</th>
+            <th>Montant garanti</th>
+          </tr>
+        </thead>
+        <tbody>
+          {coverages.map((coverage) => (
+            <tr key={coverage.id}>
+              <td>{patientName(coverage.invoice.patient)}</td>
+              <td>{coverage.invoice.patient.medicalRecordNumber}</td>
+              <td>{coverage.invoice.number}</td>
+              <td>{coverage.invoice.items.map((item) => item.description).join(', ')}</td>
+              <td>{currency(coverage.sponsorAmount)}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colSpan={4}>TOTAL À FACTURER AU GARANT</td>
+            <td>{currency(total)}</td>
+          </tr>
+          {overrun > 0 && (
+            <tr>
+              <td colSpan={4}>DÉPASSEMENT DU PLAFOND INDICATIF</td>
+              <td>{currency(overrun)}</td>
+            </tr>
+          )}
+        </tfoot>
+      </table>
+      <p className="print-validation">
+        Cette facture consolidée regroupe les soins attribués au bon. Aucun montant n’est à
+        encaisser auprès des patients concernés.
+      </p>
     </>
   );
 }

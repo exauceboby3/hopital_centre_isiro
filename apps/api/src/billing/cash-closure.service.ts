@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PaymentMethod, PaymentPayer, Prisma } from '@prisma/client';
+import { PaymentMethod, PaymentPayer, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { businessDayRange } from './cash-closure.rules';
 import { CreateCashClosureDto } from './dto/cash-closure.dto';
@@ -60,7 +60,7 @@ export class CashClosureService {
             payments
               .filter(predicate)
               .reduce((total, payment) => total + Number(payment.amount), 0);
-          return transaction.cashClosure.create({
+          const closure = await transaction.cashClosure.create({
             data: {
               businessDate: range.businessDate,
               closedById: userId,
@@ -93,6 +93,27 @@ export class CashClosureService {
             },
             include: closureInclude,
           });
+          const administrators = await transaction.user.findMany({
+            where: {
+              isActive: true,
+              id: { not: userId },
+              OR: [
+                { role: { in: [Role.SUPER_ADMIN, Role.ADMIN] } },
+                { additionalRoles: { hasSome: [Role.SUPER_ADMIN, Role.ADMIN] } },
+              ],
+            },
+            select: { id: true },
+          });
+          if (administrators.length) {
+            await transaction.message.createMany({
+              data: administrators.map((administrator) => ({
+                senderId: userId,
+                receiverId: administrator.id,
+                content: `Clôture de caisse du ${dto.businessDate} : ${closure.invoiceCount} facture(s), ${closure.paymentCount} paiement(s), ${Number(closure.totalCollected).toLocaleString('fr-FR')} CDF encaissés. Le rapport est disponible dans Caisse et comptabilité.`,
+              })),
+            });
+          }
+          return closure;
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );

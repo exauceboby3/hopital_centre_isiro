@@ -87,13 +87,14 @@ interface CareVoucher {
   id: string;
   number: string;
   issuerName: string;
+  sponsorType: 'COMPANY' | 'INDIVIDUAL';
   coveragePercent: string;
   ceilingAmount?: string;
   usedAmount: string;
   validFrom?: string;
   validUntil?: string;
   status: string;
-  patient: Patient;
+  patient?: Patient;
 }
 interface BillableService {
   id: string;
@@ -131,10 +132,9 @@ const emptyService = {
   requiresPrepayment: true,
 };
 const emptyVoucher = {
-  patientId: '',
+  sponsorType: 'COMPANY' as 'COMPANY' | 'INDIVIDUAL',
   number: '',
   issuerName: '',
-  coveragePercent: '100',
   ceilingAmount: '',
   validFrom: '',
   validUntil: '',
@@ -425,7 +425,7 @@ export default function BillingPage() {
         method: 'POST',
         body: JSON.stringify({
           ...voucher,
-          coveragePercent: Number(voucher.coveragePercent),
+          coveragePercent: 100,
           ceilingAmount: voucher.ceilingAmount ? Number(voucher.ceilingAmount) : undefined,
           validFrom: voucher.validFrom || undefined,
           validUntil: voucher.validUntil || undefined,
@@ -510,20 +510,13 @@ export default function BillingPage() {
     );
   const eligibleVouchers = allocating
     ? vouchers.filter(
-        (entry) => entry.patient.id === allocating.patient.id && entry.status === 'ACTIVE',
+        (entry) =>
+          (!entry.patient || entry.patient.id === allocating.patient.id) &&
+          entry.status === 'ACTIVE',
       )
     : [];
   const selectedVoucher = eligibleVouchers.find((entry) => entry.id === allocation.careVoucherId);
-  const remainingVoucherCeiling = selectedVoucher?.ceilingAmount
-    ? Math.max(0, Number(selectedVoucher.ceilingAmount) - Number(selectedVoucher.usedAmount))
-    : Number.POSITIVE_INFINITY;
-  const sponsorPreview =
-    allocating && selectedVoucher
-      ? Math.min(
-          (Number(allocating.total) * Number(selectedVoucher.coveragePercent)) / 100,
-          remainingVoucherCeiling,
-        )
-      : 0;
+  const sponsorPreview = allocating && selectedVoucher ? Number(allocating.total) : 0;
   const filteredServices = services.filter((entry) =>
     matchesSearch(tariffQuery, entry.code, entry.name, entry.type, entry.price),
   );
@@ -531,8 +524,8 @@ export default function BillingPage() {
     matchesSearch(
       voucherQuery,
       entry.number,
-      patientName(entry.patient),
-      entry.patient.medicalRecordNumber,
+      entry.patient ? patientName(entry.patient) : '',
+      entry.patient?.medicalRecordNumber,
       entry.issuerName,
       entry.status,
     ),
@@ -856,9 +849,12 @@ export default function BillingPage() {
                     <span className="record-number">{entry.number}</span>
                   </td>
                   <td>
-                    {patientName(entry.patient)}
+                    {entry.patient ? patientName(entry.patient) : 'Tous bénéficiaires'}
                     <br />
-                    <span className="muted">{entry.patient.medicalRecordNumber}</span>
+                    <span className="muted">
+                      {entry.patient?.medicalRecordNumber ??
+                        (entry.sponsorType === 'COMPANY' ? 'Société' : 'Personne garante')}
+                    </span>
                   </td>
                   <td>{entry.issuerName}</td>
                   <td>{Number(entry.coveragePercent).toLocaleString('fr-FR')} %</td>
@@ -1345,18 +1341,22 @@ export default function BillingPage() {
         >
           <form onSubmit={createVoucher}>
             <div className="form-grid">
-              <SearchableSelect
-                required
-                className="full"
-                label="Bénéficiaire"
-                value={voucher.patientId}
-                onChange={(patientId) => setVoucher({ ...voucher, patientId })}
-                options={patients.map((patient) => ({
-                  value: patient.id,
-                  label: patientName(patient),
-                  description: patient.medicalRecordNumber,
-                }))}
-              />
+              <label className="field">
+                <span>Type de garant *</span>
+                <select
+                  required
+                  value={voucher.sponsorType}
+                  onChange={(event) =>
+                    setVoucher({
+                      ...voucher,
+                      sponsorType: event.target.value as 'COMPANY' | 'INDIVIDUAL',
+                    })
+                  }
+                >
+                  <option value="COMPANY">Société</option>
+                  <option value="INDIVIDUAL">Personne</option>
+                </select>
+              </label>
               <label className="field">
                 <span>Numéro du bon *</span>
                 <input
@@ -1368,27 +1368,13 @@ export default function BillingPage() {
                 />
               </label>
               <label className="field">
-                <span>Organisme émetteur *</span>
+                <span>Nom de la société ou du garant *</span>
                 <input
                   required
                   minLength={2}
                   maxLength={160}
                   value={voucher.issuerName}
                   onChange={(event) => setVoucher({ ...voucher, issuerName: event.target.value })}
-                />
-              </label>
-              <label className="field">
-                <span>Couverture organisme (%) *</span>
-                <input
-                  required
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  value={voucher.coveragePercent}
-                  onChange={(event) =>
-                    setVoucher({ ...voucher, coveragePercent: event.target.value })
-                  }
                 />
               </label>
               <label className="field">
@@ -1431,8 +1417,8 @@ export default function BillingPage() {
               </label>
             </div>
             <div className="alert info">
-              Le système calcule la part du patient et celle de l’organisme à chaque facture, sans
-              dépasser le plafond restant.
+              Toute la facture est imputée au garant. Le plafond est uniquement suivi et peut être
+              dépassé sans demander un paiement au patient.
             </div>
             <div className="modal-actions">
               <button
@@ -1460,13 +1446,13 @@ export default function BillingPage() {
               <SearchableSelect
                 required
                 className="full"
-                label="Bon actif du patient"
+                label="Bon actif à attribuer au patient"
                 value={allocation.careVoucherId}
                 onChange={(careVoucherId) => setAllocation({ ...allocation, careVoucherId })}
                 options={eligibleVouchers.map((entry) => ({
                   value: entry.id,
                   label: `${entry.number} — ${entry.issuerName}`,
-                  description: `${Number(entry.coveragePercent).toLocaleString('fr-FR')} % · ${entry.ceilingAmount ? `reste ${currency(Math.max(0, Number(entry.ceilingAmount) - Number(entry.usedAmount)))}` : 'sans plafond'}`,
+                  description: `${entry.sponsorType === 'COMPANY' ? 'Société' : 'Personne'} · ${entry.ceilingAmount ? `plafond indicatif ${currency(entry.ceilingAmount)}` : 'sans plafond'}`,
                 }))}
               />
               <label className="field">
@@ -1504,8 +1490,8 @@ export default function BillingPage() {
               </div>
             ) : eligibleVouchers.length === 0 ? (
               <div className="alert error">
-                Aucun bon actif n’est disponible pour ce patient. Enregistrez d’abord son bon de
-                soins.
+                Aucun bon actif n’est disponible. Enregistrez d’abord le bon de la société ou de la
+                personne garante.
               </div>
             ) : null}
             <div className="modal-actions">

@@ -15,7 +15,7 @@ import {
 import { useEffect, useState } from 'react';
 import { StatusBadge } from '@/components/status-badge';
 import { api } from '@/lib/api';
-import { formatHospitalTime } from '@/lib/display';
+import { formatHospitalTime, patientName } from '@/lib/display';
 
 interface Summary {
   patients: number | null;
@@ -34,6 +34,23 @@ interface Summary {
     mine?: { status: string; clockIn?: string; clockOut?: string } | null;
   };
   doctors: { total: number | null; busy: number | null; available: number | null };
+  supervision: {
+    enabled: boolean;
+    byStage: Array<{ stage: string; count: number }>;
+    recentJourneys: Array<{
+      id: string;
+      journeyStage: string;
+      journeyUpdatedAt: string;
+      service: string;
+      patient: {
+        medicalRecordNumber: string;
+        lastName: string;
+        postName?: string;
+        firstName?: string;
+      };
+      doctor?: { lastName: string; postName?: string; firstName?: string } | null;
+    }>;
+  };
   visibility: {
     finance: boolean;
     stock: boolean;
@@ -58,6 +75,7 @@ const initialSummary: Summary = {
   lowStock: null,
   presence: { present: 0, absent: 0, onDuty: 0, mine: null },
   doctors: { total: null, busy: null, available: null },
+  supervision: { enabled: false, byStage: [], recentJourneys: [] },
   visibility: {
     finance: false,
     stock: false,
@@ -76,12 +94,16 @@ export default function DashboardPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api<Summary>('/dashboard/summary')
-      .then(setSummary)
-      .catch((exception: unknown) =>
-        setError(exception instanceof Error ? exception.message : 'Chargement impossible.'),
-      )
-      .finally(() => setLoading(false));
+    const refresh = () =>
+      api<Summary>('/dashboard/summary')
+        .then(setSummary)
+        .catch((exception: unknown) =>
+          setError(exception instanceof Error ? exception.message : 'Chargement impossible.'),
+        )
+        .finally(() => setLoading(false));
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 15_000);
+    return () => window.clearInterval(timer);
   }, []);
 
   const metrics = [
@@ -254,6 +276,58 @@ export default function DashboardPage() {
           </article>
         )}
       </section>
+
+      {summary.supervision.enabled && (
+        <section className="panel table-panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">
+                Supervision administrative · actualisation 15 secondes
+              </span>
+              <h2>Parcours des patients en temps réel</h2>
+            </div>
+            <Activity size={23} />
+          </div>
+          <div className="appointment-stage-summary">
+            {summary.supervision.byStage.map((entry) => (
+              <div className="appointment-stage-card" key={entry.stage}>
+                <StatusBadge status={entry.stage} />
+                <strong>{entry.count}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Patient</th>
+                  <th>Service</th>
+                  <th>Médecin</th>
+                  <th>Étape actuelle</th>
+                  <th>Dernier mouvement</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.supervision.recentJourneys.map((journey) => (
+                  <tr key={journey.id}>
+                    <td>
+                      <strong>{patientName(journey.patient)}</strong>
+                      <br />
+                      <span className="muted">{journey.patient.medicalRecordNumber}</span>
+                    </td>
+                    <td>{journey.service}</td>
+                    <td>{journey.doctor ? patientName(journey.doctor) : 'Non affecté'}</td>
+                    <td>
+                      <StatusBadge status={journey.journeyStage} />
+                    </td>
+                    <td>{formatHospitalTime(journey.journeyUpdatedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
     </>
   );
 }

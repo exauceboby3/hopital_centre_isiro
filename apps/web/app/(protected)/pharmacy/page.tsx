@@ -63,6 +63,7 @@ const emptyMedication = {
   name: '',
   form: '',
   strength: '',
+  initialStock: '0',
   minimumStock: '5',
   unitPrice: '0',
 };
@@ -115,6 +116,7 @@ export default function PharmacyPage() {
         body: JSON.stringify({
           ...medication,
           minimumStock: Number(medication.minimumStock),
+          initialStock: Number(medication.initialStock),
           unitPrice: Number(medication.unitPrice),
         }),
       });
@@ -440,6 +442,17 @@ export default function PharmacyPage() {
                   value={medication.strength}
                   onChange={(e) => setMedication({ ...medication, strength: e.target.value })}
                 />
+              </label>
+              <label className="field">
+                <span>Stock initial *</span>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={medication.initialStock}
+                  onChange={(e) => setMedication({ ...medication, initialStock: e.target.value })}
+                />
+                <small>Cette quantité est enregistrée immédiatement comme entrée de stock.</small>
               </label>
               <label className="field">
                 <span>Seuil minimal *</span>

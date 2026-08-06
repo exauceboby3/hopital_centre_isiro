@@ -48,6 +48,11 @@ export class CareVouchersController {
     return this.vouchers.coverages(invoiceId);
   }
 
+  @Get(':id')
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.vouchers.findOne(id);
+  }
+
   @Post()
   create(@Body() dto: CreateCareVoucherDto, @CurrentUser() user: AuthenticatedUser) {
     return this.vouchers.create(dto, user.id);

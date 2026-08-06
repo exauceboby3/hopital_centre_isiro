@@ -747,6 +747,9 @@ export class ClinicalGovernanceService {
     });
     const rows = [];
     for (const voucher of vouchers) {
+      // Les mesures de grâce internes restent obligatoirement nominatives,
+      // contrairement aux bons de sociétés utilisables par plusieurs patients.
+      if (!voucher.patientId || !voucher.patient) continue;
       const metadata = this.parseGrace(voucher.notes);
       const validFrom = voucher.validFrom ?? voucher.createdAt;
       const validUntil = voucher.validUntil ?? voucher.createdAt;
@@ -812,7 +815,8 @@ export class ClinicalGovernanceService {
     });
     const alerts = [];
     for (const voucher of vouchers) {
-      if (!voucher.validUntil) continue;
+      if (!voucher.validUntil || !voucher.patientId || !voucher.patient) continue;
+      const medicalRecordNumber = voucher.patient.medicalRecordNumber;
       const minutes = Math.max(Math.floor((voucher.validUntil.getTime() - Date.now()) / 60_000), 0);
       const threshold = minutes <= 15 ? 15 : minutes <= 60 ? 60 : minutes <= 360 ? 360 : null;
       if (!threshold) continue;
@@ -836,7 +840,7 @@ export class ClinicalGovernanceService {
             data: admins.map((admin) => ({
               senderId: voucher.createdById,
               receiverId: admin.id,
-              content: `Alerte mesure de grâce : ${voucher.number} pour ${voucher.patient.medicalRecordNumber} expire dans environ ${minutes} minute(s).`,
+              content: `Alerte mesure de grâce : ${voucher.number} pour ${medicalRecordNumber} expire dans environ ${minutes} minute(s).`,
             })),
           });
         }

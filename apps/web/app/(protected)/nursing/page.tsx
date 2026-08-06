@@ -51,6 +51,14 @@ interface ActiveHospitalization {
   bed: { code: string; room: { name: string; code: string } };
 }
 
+interface MedicationOption {
+  id: string;
+  name: string;
+  form?: string | null;
+  strength?: string | null;
+  stockQuantity: number;
+}
+
 const careTypes = [
   ['INJECTION', 'Injection'],
   ['INFUSION', 'Perfusion'],
@@ -115,6 +123,8 @@ export default function NursingPage() {
   const [rows, setRows] = useState<NursingCare[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [nurses, setNurses] = useState<User[]>([]);
+  const [medications, setMedications] = useState<MedicationOption[]>([]);
+  const [selectedMedicationId, setSelectedMedicationId] = useState('');
   const [activeHospitalizations, setActiveHospitalizations] = useState<ActiveHospitalization[]>([]);
   const [medicationAlertCount, setMedicationAlertCount] = useState(0);
   const [worklistNow, setWorklistNow] = useState(() => new Date());
@@ -138,11 +148,12 @@ export default function NursingPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [careRows, patientRows, users, stays] = await Promise.all([
+      const [careRows, patientRows, users, stays, medicationRows] = await Promise.all([
         api<NursingCare[]>('/nursing-care'),
         api<{ items: Patient[] }>('/patients/lookup?limit=200'),
         api<User[]>('/users'),
         api<ActiveHospitalization[]>('/hospitalizations?status=ACTIVE'),
+        api<MedicationOption[]>('/pharmacy/medications'),
       ]);
       setRows(careRows);
       setWorklistNow(new Date());
@@ -160,6 +171,7 @@ export default function NursingPage() {
         users.filter((entry) => entry.role === 'NURSE' || entry.additionalRoles?.includes('NURSE')),
       );
       setActiveHospitalizations(stays);
+      setMedications(medicationRows);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Chargement des soins impossible.');
     } finally {
@@ -195,6 +207,7 @@ export default function NursingPage() {
       });
       setOpen(false);
       setForm(emptyForm);
+      setSelectedMedicationId('');
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Création du soin impossible.');
@@ -681,14 +694,25 @@ export default function NursingPage() {
                   onChange={(event) => setForm({ ...form, label: event.target.value })}
                 />
               </label>
-              <label className="field">
-                <span>Médicament {medicationRequired ? '*' : ''}</span>
-                <input
-                  required={medicationRequired}
-                  value={form.medicationName}
-                  onChange={(event) => setForm({ ...form, medicationName: event.target.value })}
-                />
-              </label>
+              <SearchableSelect
+                required={medicationRequired}
+                label="Médicament"
+                value={selectedMedicationId}
+                onChange={(medicationId) => {
+                  const medication = medications.find((entry) => entry.id === medicationId);
+                  setSelectedMedicationId(medicationId);
+                  setForm({ ...form, medicationName: medication?.name ?? '' });
+                }}
+                options={medications.map((medication) => ({
+                  value: medication.id,
+                  label: medication.name,
+                  description: `${
+                    [medication.form, medication.strength].filter(Boolean).join(' · ') ||
+                    'Présentation non précisée'
+                  } · stock ${medication.stockQuantity}`,
+                }))}
+                helpText="Sélection issue du catalogue de la pharmacie."
+              />
               <label className="field">
                 <span>Dose {medicationRequired ? '*' : ''}</span>
                 <input

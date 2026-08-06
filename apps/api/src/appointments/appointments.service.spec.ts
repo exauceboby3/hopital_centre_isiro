@@ -1,13 +1,62 @@
-import {
-  AppointmentStatus,
-  ConsultationStatus,
-  PatientJourneyStage,
-  Role,
-} from '@prisma/client';
+import { AppointmentStatus, ConsultationStatus, PatientJourneyStage, Role } from '@prisma/client';
 import { FinancialAuthorizationService } from '../billing/financial-authorization.service';
 import { AuthenticatedUser } from '../common/authenticated-user';
 import { PrismaService } from '../prisma/prisma.service';
-import { AppointmentsService } from './appointments.service';
+import {
+  AppointmentsService,
+  canOperationallyReassignBeforeReception,
+  parseNewAppointmentDate,
+} from './appointments.service';
+
+describe('parseNewAppointmentDate', () => {
+  const now = new Date('2026-08-06T08:00:00.000Z');
+
+  it('rejette une date invalide ou passée', () => {
+    expect(() => parseNewAppointmentDate('date-invalide', now)).toThrow(
+      'La date du rendez-vous est invalide.',
+    );
+    expect(() => parseNewAppointmentDate('2026-08-06T07:59:59.999Z', now)).toThrow(
+      'Un nouveau rendez-vous ne peut pas être programmé dans le passé.',
+    );
+  });
+
+  it('accepte l’heure présente et une heure future', () => {
+    expect(parseNewAppointmentDate(now.toISOString(), now)).toEqual(now);
+    expect(parseNewAppointmentDate('2026-08-06T08:15:00.000Z', now)).toEqual(
+      new Date('2026-08-06T08:15:00.000Z'),
+    );
+  });
+});
+
+describe('réaffectation avant réception médicale', () => {
+  const receptionist: AuthenticatedUser = {
+    id: 'reception',
+    username: 'reception',
+    role: Role.RECEPTIONIST,
+    additionalRoles: [],
+  };
+
+  it('autorise la réception avant que le médecin commence', () => {
+    expect(
+      canOperationallyReassignBeforeReception(
+        { doctorAcknowledgedAt: null, consultation: { startedAt: null } },
+        receptionist,
+      ),
+    ).toBe(true);
+  });
+
+  it('bloque la réception dès que le médecin a reçu le patient', () => {
+    expect(
+      canOperationallyReassignBeforeReception(
+        {
+          doctorAcknowledgedAt: new Date('2026-08-06T08:00:00.000Z'),
+          consultation: { startedAt: new Date('2026-08-06T08:00:00.000Z') },
+        },
+        receptionist,
+      ),
+    ).toBe(false);
+  });
+});
 
 const doctorUser = (id: string): AuthenticatedUser => ({
   id,
@@ -28,47 +77,47 @@ const activeAppointment = (options?: {
   const doctorUserId = options?.doctorUserId ?? 'doctor-user-a';
   const consultationStatus = options?.consultationStatus ?? ConsultationStatus.IN_PROGRESS;
   const certificate = options?.certificate ?? null;
-  return ({
-  id: 'appointment-1',
-  patientId: 'patient-1',
-  doctorId: doctorProfileId,
-  createdById: 'reception-user',
-  scheduledAt: new Date('2026-08-02T07:30:00.000Z'),
-  service: 'Consultation générale',
-  reason: 'Fièvre',
-  status: AppointmentStatus.CHECKED_IN,
-  journeyStage: PatientJourneyStage.IN_CONSULTATION,
-  journeyUpdatedAt: new Date('2026-08-02T08:00:00.000Z'),
-  notes: 'Patient stable',
-  createdAt: new Date('2026-08-02T07:00:00.000Z'),
-  updatedAt: new Date('2026-08-02T08:00:00.000Z'),
-  doctorAcknowledgedAt: startedAt,
-  doctor: { id: doctorProfileId, userId: doctorUserId },
-  patient: {
-    id: 'patient-1',
-    medicalRecordNumber: 'CHI-2026-000001',
-    lastName: 'MALU',
-    postName: null,
-    firstName: 'Jean',
-    vitalSigns: [],
-  },
-  consultation: {
-    id: 'consultation-1',
+  return {
+    id: 'appointment-1',
     patientId: 'patient-1',
     doctorId: doctorProfileId,
-    appointmentId: 'appointment-1',
-    status: consultationStatus,
+    createdById: 'reception-user',
+    scheduledAt: new Date('2026-08-02T07:30:00.000Z'),
+    service: 'Consultation générale',
     reason: 'Fièvre',
-    report: 'Rapport initial conservé',
-    orientation: null,
-    prescription: null,
-    certificate,
-    startedAt,
-    completedAt: null,
-    createdAt: new Date('2026-08-02T08:00:00.000Z'),
+    status: AppointmentStatus.CHECKED_IN,
+    journeyStage: PatientJourneyStage.IN_CONSULTATION,
+    journeyUpdatedAt: new Date('2026-08-02T08:00:00.000Z'),
+    notes: 'Patient stable',
+    createdAt: new Date('2026-08-02T07:00:00.000Z'),
     updatedAt: new Date('2026-08-02T08:00:00.000Z'),
-  },
-  });
+    doctorAcknowledgedAt: startedAt,
+    doctor: { id: doctorProfileId, userId: doctorUserId },
+    patient: {
+      id: 'patient-1',
+      medicalRecordNumber: 'CHI-2026-000001',
+      lastName: 'MALU',
+      postName: null,
+      firstName: 'Jean',
+      vitalSigns: [],
+    },
+    consultation: {
+      id: 'consultation-1',
+      patientId: 'patient-1',
+      doctorId: doctorProfileId,
+      appointmentId: 'appointment-1',
+      status: consultationStatus,
+      reason: 'Fièvre',
+      report: 'Rapport initial conservé',
+      orientation: null,
+      prescription: null,
+      certificate,
+      startedAt,
+      completedAt: null,
+      createdAt: new Date('2026-08-02T08:00:00.000Z'),
+      updatedAt: new Date('2026-08-02T08:00:00.000Z'),
+    },
+  };
 };
 
 function createService(options?: {
@@ -129,24 +178,22 @@ function createService(options?: {
     audit?: AuditInput;
   } = {};
   const appointmentFindUnique = jest.fn().mockResolvedValue(appointment);
-  const appointmentUpdateMany = jest.fn<
-    Promise<{ count: number }>,
-    [AppointmentClaimInput]
-  >((input) => {
-    captures.appointment = input;
-    return Promise.resolve({ count: options?.appointmentClaimCount ?? 1 });
-  });
+  const appointmentUpdateMany = jest.fn<Promise<{ count: number }>, [AppointmentClaimInput]>(
+    (input) => {
+      captures.appointment = input;
+      return Promise.resolve({ count: options?.appointmentClaimCount ?? 1 });
+    },
+  );
   const appointmentFindUniqueOrThrow = jest
     .fn()
     .mockResolvedValueOnce(notificationRow)
     .mockResolvedValueOnce(resultRow);
-  const consultationUpdateMany = jest.fn<
-    Promise<{ count: number }>,
-    [ConsultationMoveInput]
-  >((input) => {
-    captures.consultation = input;
-    return Promise.resolve({ count: options?.consultationClaimCount ?? 1 });
-  });
+  const consultationUpdateMany = jest.fn<Promise<{ count: number }>, [ConsultationMoveInput]>(
+    (input) => {
+      captures.consultation = input;
+      return Promise.resolve({ count: options?.consultationClaimCount ?? 1 });
+    },
+  );
   const auditCreate = jest.fn<Promise<{ id: string }>, [AuditInput]>((input) => {
     captures.audit = input;
     return Promise.resolve({ id: 'audit-1' });
@@ -182,11 +229,9 @@ function createService(options?: {
 describe('AppointmentsService.transfer', () => {
   it('conserve le début et l’historique clinique lors d’un transfert après traitement commencé', async () => {
     const startedAt = new Date('2026-08-02T08:00:00.000Z');
-    const {
-      service,
-      captures,
-      messageCreate,
-    } = createService({ appointment: activeAppointment({ startedAt }) });
+    const { service, captures, messageCreate } = createService({
+      appointment: activeAppointment({ startedAt }),
+    });
 
     await service.transfer(
       'appointment-1',

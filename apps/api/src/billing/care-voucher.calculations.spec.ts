@@ -15,10 +15,10 @@ describe('calcul des bons de soins', () => {
     });
   });
 
-  it('respecte le plafond restant du bon', () => {
+  it('couvre toute la part du garant même lorsque le plafond est dépassé', () => {
     expect(calculateVoucherSplit(50000, 100, 60000, 30000)).toMatchObject({
-      patientAmount: 20000,
-      sponsorAmount: 30000,
+      patientAmount: 0,
+      sponsorAmount: 50000,
       remainingCeiling: 30000,
     });
   });

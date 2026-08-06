@@ -87,6 +87,7 @@ export class DashboardService {
       Role.LAB_TECHNICIAN,
     ]);
     const canSeeDoctorAvailability = canSeeAppointments;
+    const canSuperviseJourneys = hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN]);
 
     const [
       patients,
@@ -181,6 +182,36 @@ export class DashboardService {
       }),
     ]);
 
+    const [journeyGroups, recentJourneys] = canSuperviseJourneys
+      ? await Promise.all([
+          this.prisma.appointment.groupBy({
+            by: ['journeyStage'],
+            where: { status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CHECKED_IN] } },
+            _count: { _all: true },
+          }),
+          this.prisma.appointment.findMany({
+            where: { status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CHECKED_IN] } },
+            orderBy: { journeyUpdatedAt: 'desc' },
+            take: 12,
+            select: {
+              id: true,
+              journeyStage: true,
+              journeyUpdatedAt: true,
+              service: true,
+              patient: {
+                select: {
+                  medicalRecordNumber: true,
+                  lastName: true,
+                  postName: true,
+                  firstName: true,
+                },
+              },
+              doctor: { select: { lastName: true, postName: true, firstName: true } },
+            },
+          }),
+        ])
+      : [[], []];
+
     return {
       patients,
       appointmentsToday,
@@ -208,6 +239,14 @@ export class DashboardService {
           doctorsTotal !== null && doctorsBusy !== null
             ? Math.max(0, doctorsTotal - doctorsBusy)
             : null,
+      },
+      supervision: {
+        enabled: canSuperviseJourneys,
+        byStage: journeyGroups.map((entry) => ({
+          stage: entry.journeyStage,
+          count: entry._count._all,
+        })),
+        recentJourneys,
       },
       visibility: {
         finance: canSeeFinance,
