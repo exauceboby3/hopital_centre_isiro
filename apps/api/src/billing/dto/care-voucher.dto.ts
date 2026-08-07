@@ -26,11 +26,6 @@ export class CreateCareVoucherDto {
 
   @ApiProperty()
   @IsString()
-  @Length(2, 80)
-  number: string;
-
-  @ApiProperty()
-  @IsString()
   @Length(2, 160)
   issuerName: string;
 

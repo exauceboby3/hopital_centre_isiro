@@ -11,6 +11,7 @@ import {
   Prisma,
   VoucherCoverageStatus,
 } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { calculateVoucherSplit } from './care-voucher.calculations';
 import {
@@ -20,6 +21,11 @@ import {
 } from './dto/care-voucher.dto';
 
 const INTERNAL_GRACE_ISSUER = 'MESURE DE GRÂCE INTERNE';
+
+export function generateCareVoucherNumber(now = new Date(), entropy = randomUUID()) {
+  const suffix = entropy.replaceAll('-', '').slice(0, 10).toUpperCase();
+  return `BON-${now.getUTCFullYear()}-${suffix}`;
+}
 
 const voucherInclude = {
   patient: true,
@@ -91,29 +97,37 @@ export class CareVouchersService {
       });
       if (!patient) throw new NotFoundException('Patient actif introuvable.');
     }
-    try {
-      return await this.prisma.careVoucher.create({
-        data: {
-          patientId: dto.patientId,
-          sponsorType: dto.sponsorType,
-          createdById: userId,
-          number: dto.number.trim().toUpperCase(),
-          issuerName: dto.issuerName.trim(),
-          coveragePercent: new Prisma.Decimal(dto.coveragePercent),
-          ceilingAmount:
-            dto.ceilingAmount == null ? undefined : new Prisma.Decimal(dto.ceilingAmount),
-          validFrom,
-          validUntil,
-          notes: dto.notes?.trim(),
-        },
-        include: voucherInclude,
-      });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new ConflictException('Ce numéro de bon de soins existe déjà.');
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await this.prisma.careVoucher.create({
+          data: {
+            patientId: dto.patientId,
+            sponsorType: dto.sponsorType,
+            createdById: userId,
+            number: generateCareVoucherNumber(),
+            issuerName: dto.issuerName.trim(),
+            coveragePercent: new Prisma.Decimal(dto.coveragePercent),
+            ceilingAmount:
+              dto.ceilingAmount == null ? undefined : new Prisma.Decimal(dto.ceilingAmount),
+            validFrom,
+            validUntil,
+            notes: dto.notes?.trim(),
+          },
+          include: voucherInclude,
+        });
+      } catch (error) {
+        const duplicateNumber =
+          error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+        if (duplicateNumber && attempt < 2) continue;
+        if (duplicateNumber) {
+          throw new ConflictException(
+            'Impossible de générer un numéro de bon unique. Veuillez réessayer.',
+          );
+        }
+        throw error;
       }
-      throw error;
     }
+    throw new ConflictException('Impossible de générer un numéro de bon unique.');
   }
 
   async updateStatus(id: string, dto: UpdateCareVoucherStatusDto) {

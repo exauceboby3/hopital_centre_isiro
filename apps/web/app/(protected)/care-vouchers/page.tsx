@@ -55,7 +55,6 @@ interface CareVoucher {
 
 const emptyVoucher = {
   sponsorType: 'COMPANY' as 'COMPANY' | 'INDIVIDUAL',
-  number: '',
   issuerName: '',
   ceilingAmount: '',
   validFrom: '',
@@ -114,7 +113,7 @@ export default function CareVouchersPage() {
     event.preventDefault();
     setSubmitting(true);
     try {
-      await api('/billing/vouchers', {
+      const created = await api<CareVoucher>('/billing/vouchers', {
         method: 'POST',
         body: JSON.stringify({
           ...form,
@@ -127,7 +126,7 @@ export default function CareVouchersPage() {
       });
       close();
       notifySuccess(
-        'Le bon de soins est enregistré et peut maintenant être appliqué aux factures du patient.',
+        `Le bon ${created.number} est enregistré et peut maintenant être appliqué aux factures.`,
         'Bon de soins créé',
       );
       await load();
@@ -406,16 +405,6 @@ export default function CareVouchersPage() {
                 </select>
               </label>
               <label className="field">
-                <span>Numéro du bon *</span>
-                <input
-                  required
-                  minLength={2}
-                  maxLength={80}
-                  value={form.number}
-                  onChange={(event) => setForm({ ...form, number: event.target.value })}
-                />
-              </label>
-              <label className="field">
                 <span>Nom de la société ou du garant *</span>
                 <input
                   required
@@ -465,8 +454,9 @@ export default function CareVouchersPage() {
               </label>
             </div>
             <div className="alert info">
-              Le bon pourra être attribué à n’importe quel patient avant le premier encaissement.
-              Toute la facture sera imputée au garant, même si le plafond indicatif est dépassé.
+              Le numéro du bon sera attribué automatiquement lors de l’enregistrement. Le bon pourra
+              être attribué à n’importe quel patient avant le premier encaissement. Toute la facture
+              sera imputée au garant, même si le plafond indicatif est dépassé.
             </div>
             <div className="modal-actions">
               <button className="secondary-button" type="button" onClick={close}>

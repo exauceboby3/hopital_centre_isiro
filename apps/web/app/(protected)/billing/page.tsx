@@ -133,7 +133,6 @@ const emptyService = {
 };
 const emptyVoucher = {
   sponsorType: 'COMPANY' as 'COMPANY' | 'INDIVIDUAL',
-  number: '',
   issuerName: '',
   ceilingAmount: '',
   validFrom: '',
@@ -1358,16 +1357,6 @@ export default function BillingPage() {
                 </select>
               </label>
               <label className="field">
-                <span>Numéro du bon *</span>
-                <input
-                  required
-                  minLength={2}
-                  maxLength={80}
-                  value={voucher.number}
-                  onChange={(event) => setVoucher({ ...voucher, number: event.target.value })}
-                />
-              </label>
-              <label className="field">
                 <span>Nom de la société ou du garant *</span>
                 <input
                   required
@@ -1415,6 +1404,9 @@ export default function BillingPage() {
                   onChange={(event) => setVoucher({ ...voucher, notes: event.target.value })}
                 />
               </label>
+              <div className="alert info full">
+                Le numéro du bon sera généré automatiquement lors de l’enregistrement.
+              </div>
             </div>
             <div className="alert info">
               Toute la facture est imputée au garant. Le plafond est uniquement suivi et peut être
