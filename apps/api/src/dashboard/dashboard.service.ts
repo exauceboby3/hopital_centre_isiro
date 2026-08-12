@@ -11,6 +11,7 @@ import {
   ShiftStatus,
 } from '@prisma/client';
 import { AuthenticatedUser, hasAnyRole } from '../common/authenticated-user';
+import { hospitalDayRange, OPERATIONAL_CYCLE_MARKER_QUERY } from '../common/hospital-time';
 import { hospitalAttendanceMoment, hospitalUtcOffsetMinutes } from '../auth/auth.constants';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -29,10 +30,15 @@ export class DashboardService {
 
   async summary(user: AuthenticatedUser) {
     const now = new Date();
-    const start = new Date(now);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
+    const { start, end } = hospitalDayRange(now);
+    const cycleMarker = await this.prisma.auditLog.findFirst(OPERATIONAL_CYCLE_MARKER_QUERY);
+    const cycleStartedAt = cycleMarker?.createdAt ?? null;
+    const activityStartedAt = cycleStartedAt && cycleStartedAt > start ? cycleStartedAt : start;
+    const consultationCreatedAt =
+      activityStartedAt === cycleStartedAt
+        ? { gt: activityStartedAt, lt: end }
+        : { gte: activityStartedAt, lt: end };
+    const cycleCreatedAt = cycleStartedAt ? { createdAt: { gt: cycleStartedAt } } : {};
     const attendanceStart = hospitalAttendanceMoment(
       now,
       this.hospitalUtcOffsetMinutes,
@@ -107,28 +113,37 @@ export class DashboardService {
       myAttendance,
     ] = await Promise.all([
       canSeePatients
-        ? this.prisma.patient.count({ where: { archivedAt: null } })
+        ? this.prisma.patient.count({ where: { archivedAt: null, ...cycleCreatedAt } })
         : Promise.resolve(null),
       canSeeAppointments
         ? this.prisma.appointment.count({
             where: {
               scheduledAt: { gte: start, lt: end },
+              ...(cycleStartedAt ? { createdAt: { gt: cycleStartedAt } } : {}),
               status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CHECKED_IN] },
             },
           })
         : Promise.resolve(null),
       canSeeClinical
-        ? this.prisma.consultation.count({ where: { createdAt: { gte: start, lt: end } } })
+        ? this.prisma.consultation.count({
+            where: { createdAt: consultationCreatedAt },
+          })
         : Promise.resolve(null),
       canSeeLaboratory
         ? this.prisma.examRequest.count({
             where: {
               status: { in: [ExamStatus.REQUESTED, ExamStatus.IN_PROGRESS, ExamStatus.COMPLETED] },
+              ...(cycleStartedAt ? { requestedAt: { gt: cycleStartedAt } } : {}),
             },
           })
         : Promise.resolve(null),
       canSeeClinical
-        ? this.prisma.hospitalization.count({ where: { status: HospitalizationStatus.ACTIVE } })
+        ? this.prisma.hospitalization.count({
+            where: {
+              status: HospitalizationStatus.ACTIVE,
+              ...(cycleStartedAt ? { admittedAt: { gt: cycleStartedAt } } : {}),
+            },
+          })
         : Promise.resolve(null),
       canSeeClinical ? this.prisma.bed.count() : Promise.resolve(null),
       canSeeFinance
@@ -186,11 +201,17 @@ export class DashboardService {
       ? await Promise.all([
           this.prisma.appointment.groupBy({
             by: ['journeyStage'],
-            where: { status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CHECKED_IN] } },
+            where: {
+              status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CHECKED_IN] },
+              ...cycleCreatedAt,
+            },
             _count: { _all: true },
           }),
           this.prisma.appointment.findMany({
-            where: { status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CHECKED_IN] } },
+            where: {
+              status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CHECKED_IN] },
+              ...cycleCreatedAt,
+            },
             orderBy: { journeyUpdatedAt: 'desc' },
             take: 12,
             select: {
@@ -248,6 +269,7 @@ export class DashboardService {
         })),
         recentJourneys,
       },
+      operationalCycleStartedAt: cycleStartedAt,
       visibility: {
         finance: canSeeFinance,
         stock: canSeeStock,

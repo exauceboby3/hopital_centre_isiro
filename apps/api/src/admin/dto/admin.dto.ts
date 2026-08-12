@@ -123,6 +123,13 @@ export class CleanupAuditLogsDto {
   confirmation: string;
 }
 
+export class ResetOperationalCycleDto {
+  @ApiProperty({ example: 'REINITIALISER' })
+  @IsString()
+  @Equals('REINITIALISER')
+  confirmation: string;
+}
+
 export class ListAuditLogsDto {
   @ApiPropertyOptional()
   @IsOptional()

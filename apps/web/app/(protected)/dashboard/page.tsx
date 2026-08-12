@@ -27,6 +27,7 @@ interface Summary {
   occupancyRate: number | null;
   pendingRevenue: number | null;
   lowStock: number | null;
+  operationalCycleStartedAt: string | null;
   presence: {
     present: number;
     absent: number;
@@ -73,6 +74,7 @@ const initialSummary: Summary = {
   occupancyRate: null,
   pendingRevenue: null,
   lowStock: null,
+  operationalCycleStartedAt: null,
   presence: { present: 0, absent: 0, onDuty: 0, mine: null },
   doctors: { total: null, busy: null, available: null },
   supervision: { enabled: false, byStage: [], recentJourneys: [] },
@@ -108,7 +110,12 @@ export default function DashboardPage() {
 
   const metrics = [
     summary.visibility.patients
-      ? { label: 'Patients actifs', value: summary.patients, icon: Users, tone: 'blue' }
+      ? {
+          label: summary.operationalCycleStartedAt ? 'Patients du cycle' : 'Patients actifs',
+          value: summary.patients,
+          icon: Users,
+          tone: 'blue',
+        }
       : null,
     summary.visibility.appointments
       ? {
@@ -128,7 +135,7 @@ export default function DashboardPage() {
       : null,
     summary.visibility.laboratory
       ? {
-          label: 'Examens en attente',
+          label: summary.operationalCycleStartedAt ? 'Examens du cycle' : 'Examens en attente',
           value: summary.pendingExams,
           icon: FlaskConical,
           tone: 'orange',
@@ -227,19 +234,34 @@ export default function DashboardPage() {
             <div className="panel-heading">
               <div>
                 <span className="eyebrow">Hospitalisation</span>
-                <h2>Occupation des lits</h2>
+                <h2>
+                  {summary.operationalCycleStartedAt
+                    ? 'Hospitalisations du cycle'
+                    : 'Occupation des lits'}
+                </h2>
               </div>
               <BedDouble size={23} />
             </div>
             <div className="occupancy-value">
-              <strong>{summary.occupancyRate ?? 0}%</strong>
-              <span>
-                {summary.activeHospitalizations ?? 0} lits occupés sur {summary.totalBeds ?? 0}
-              </span>
+              {summary.operationalCycleStartedAt ? (
+                <>
+                  <strong>{summary.activeHospitalizations ?? 0}</strong>
+                  <span>admission(s) active(s) enregistrée(s) depuis la remise à zéro</span>
+                </>
+              ) : (
+                <>
+                  <strong>{summary.occupancyRate ?? 0}%</strong>
+                  <span>
+                    {summary.activeHospitalizations ?? 0} lits occupés sur {summary.totalBeds ?? 0}
+                  </span>
+                </>
+              )}
             </div>
-            <div className="progress-track">
-              <div style={{ width: `${Math.min(summary.occupancyRate ?? 0, 100)}%` }} />
-            </div>
+            {!summary.operationalCycleStartedAt && (
+              <div className="progress-track">
+                <div style={{ width: `${Math.min(summary.occupancyRate ?? 0, 100)}%` }} />
+              </div>
+            )}
           </article>
         )}
 
@@ -285,6 +307,9 @@ export default function DashboardPage() {
                 Supervision administrative · actualisation 15 secondes
               </span>
               <h2>Parcours des patients en temps réel</h2>
+              {summary.operationalCycleStartedAt && (
+                <span className="muted">Activité enregistrée depuis la dernière remise à zéro</span>
+              )}
             </div>
             <Activity size={23} />
           </div>

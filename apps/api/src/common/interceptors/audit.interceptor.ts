@@ -25,9 +25,14 @@ export class AuditInterceptor implements NestInterceptor {
       return next.handle();
     }
 
+    const resetsOperationalCycle =
+      request.method === 'POST' && request.path === '/admin/operational-cycle/reset';
+
     return next.handle().pipe(
       tap({
-        next: () => this.writeLog(request, 'SUCCESS', response.statusCode),
+        next: () => {
+          if (!resetsOperationalCycle) this.writeLog(request, 'SUCCESS', response.statusCode);
+        },
         error: (error: { status?: number }) =>
           this.writeLog(request, 'FAILED', error.status ?? 500),
       }),

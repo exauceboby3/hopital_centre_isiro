@@ -1,4 +1,13 @@
+import { Prisma } from '@prisma/client';
+
 const DEFAULT_HOSPITAL_UTC_OFFSET_MINUTES = 120;
+
+export const OPERATIONAL_CYCLE_RESET_ACTION = 'OPERATIONAL_CYCLE_RESET';
+export const OPERATIONAL_CYCLE_MARKER_QUERY = {
+  where: { action: OPERATIONAL_CYCLE_RESET_ACTION },
+  select: { createdAt: true },
+  orderBy: { createdAt: 'desc' },
+} satisfies Prisma.AuditLogFindFirstArgs;
 
 function offsetMinutes() {
   const configured = Number(process.env.HOSPITAL_UTC_OFFSET_MINUTES);

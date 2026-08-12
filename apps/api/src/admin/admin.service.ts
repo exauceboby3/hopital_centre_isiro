@@ -8,12 +8,18 @@ import {
 import { InvoiceStatus, Prisma, Role } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { AuthenticatedUser } from '../common/authenticated-user';
+import {
+  hospitalDayRange,
+  OPERATIONAL_CYCLE_MARKER_QUERY,
+  OPERATIONAL_CYCLE_RESET_ACTION,
+} from '../common/hospital-time';
 import { PrismaService } from '../prisma/prisma.service';
 import { publicUserSelect } from '../users/users.service';
 import {
   CleanupAuditLogsDto,
   CreateAdministrativeUserDto,
   ListAuditLogsDto,
+  ResetOperationalCycleDto,
   UpdateManagedUserDto,
 } from './dto/admin.dto';
 import { canManagePrivilegedRole, wouldRemoveLastSuperAdmin } from './admin.rules';
@@ -23,8 +29,13 @@ export class AdminService {
   constructor(private readonly prisma: PrismaService) {}
 
   async overview(actor: AuthenticatedUser) {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
+    const { start } = hospitalDayRange();
+    const cycleMarker =
+      actor.role === Role.SUPER_ADMIN
+        ? await this.prisma.auditLog.findFirst(OPERATIONAL_CYCLE_MARKER_QUERY)
+        : null;
+    const auditStartedAt =
+      cycleMarker?.createdAt && cycleMarker.createdAt > start ? cycleMarker.createdAt : start;
     const visibleUsers = actor.role === Role.SUPER_ADMIN ? {} : { role: { not: Role.SUPER_ADMIN } };
     const [users, activeUsers, services, alerts, auditToday, pendingInvoices, pendingRevenue] =
       await Promise.all([
@@ -33,7 +44,14 @@ export class AdminService {
         this.prisma.billableService.count({ where: { isActive: true } }),
         this.prisma.emergencyAlert.count({ where: { status: 'ACTIVE' } }),
         actor.role === Role.SUPER_ADMIN
-          ? this.prisma.auditLog.count({ where: { createdAt: { gte: start } } })
+          ? this.prisma.auditLog.count({
+              where: {
+                createdAt:
+                  auditStartedAt === cycleMarker?.createdAt
+                    ? { gt: auditStartedAt }
+                    : { gte: auditStartedAt },
+              },
+            })
           : Promise.resolve(0),
         this.prisma.invoice.count({
           where: { status: { in: [InvoiceStatus.PENDING, InvoiceStatus.PARTIALLY_PAID] } },
@@ -207,10 +225,45 @@ export class AdminService {
       throw new BadRequestException('La date de nettoyage doit être antérieure à maintenant.');
     }
     const [deleted, idempotency] = await Promise.all([
-      this.prisma.auditLog.deleteMany({ where: { createdAt: { lt: before } } }),
+      this.prisma.auditLog.deleteMany({
+        where: {
+          createdAt: { lt: before },
+          action: { not: OPERATIONAL_CYCLE_RESET_ACTION },
+        },
+      }),
       this.prisma.idempotencyRecord.deleteMany({ where: { expiresAt: { lt: new Date() } } }),
     ]);
     return { deleted: deleted.count, expiredIdempotencyKeys: idempotency.count, before };
+  }
+
+  async resetOperationalCycle(dto: ResetOperationalCycleDto, actor: AuthenticatedUser) {
+    if (dto.confirmation !== 'REINITIALISER') {
+      throw new BadRequestException('La confirmation de réinitialisation est incorrecte.');
+    }
+    const marker = await this.prisma.auditLog.create({
+      data: {
+        userId: actor.id,
+        action: OPERATIONAL_CYCLE_RESET_ACTION,
+        entity: 'operational-cycle',
+        metadata: {
+          preservedData: true,
+          counters: [
+            'patients',
+            'appointments',
+            'consultations',
+            'laboratory',
+            'hospitalizations',
+            'patientJourneys',
+          ],
+          message: 'Début d’un nouveau cycle opérationnel',
+        },
+      },
+      select: { id: true, createdAt: true },
+    });
+    return {
+      cycleStartedAt: marker.createdAt,
+      preservedData: true,
+    };
   }
 
   private async findUser(id: string) {

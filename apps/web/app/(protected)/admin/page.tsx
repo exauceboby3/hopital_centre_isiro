@@ -11,6 +11,7 @@ import {
   Pill,
   Plus,
   Receipt,
+  RotateCcw,
   Settings2,
   SlidersHorizontal,
   ShieldAlert,
@@ -239,6 +240,9 @@ export default function AdminPage() {
   });
   const [cleanupOpen, setCleanupOpen] = useState(false);
   const [cleanup, setCleanup] = useState({ before: '', confirmation: '' });
+  const [resetOperationalOpen, setResetOperationalOpen] = useState(false);
+  const [resetOperationalConfirmation, setResetOperationalConfirmation] = useState('');
+  const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
@@ -432,6 +436,28 @@ export default function AdminPage() {
       await load();
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Nettoyage impossible.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const resetOperationalCycle = async (event: FormEvent) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setError('');
+    setNotice('');
+    try {
+      await api('/admin/operational-cycle/reset', {
+        method: 'POST',
+        body: JSON.stringify({ confirmation: resetOperationalConfirmation }),
+      });
+      setResetOperationalOpen(false);
+      setResetOperationalConfirmation('');
+      setNotice(
+        'Le nouveau cycle opérationnel a commencé à zéro. Toutes les données précédentes restent conservées dans leurs historiques.',
+      );
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Réinitialisation impossible.');
     } finally {
       setSubmitting(false);
     }
@@ -647,6 +673,7 @@ export default function AdminPage() {
         <Settings2 size={30} />
       </div>
       {error && <div className="alert error">{error}</div>}
+      {notice && <div className="alert success">{notice}</div>}
       <div className="admin-tabs">
         {visibleSections.map((item) => (
           <button
@@ -702,6 +729,21 @@ export default function AdminPage() {
               <strong>{overview.activeAlerts}</strong>
             </article>
           </section>
+          {user?.role === 'SUPER_ADMIN' && (
+            <section className="panel operational-cycle-panel">
+              <div className="panel-toolbar">
+                <div>
+                  <strong>Cycle opérationnel</strong>
+                  <span>
+                    Remettre à zéro les compteurs courants sans supprimer les données historiques.
+                  </span>
+                </div>
+                <button className="secondary-button" onClick={() => setResetOperationalOpen(true)}>
+                  <RotateCcw size={16} /> Repartir à zéro
+                </button>
+              </div>
+            </section>
+          )}
           <section className="admin-control-grid">
             {controlLinks.map(({ href, label, icon: Icon }) => (
               <Link href={href} className="panel admin-control-card" key={href}>
@@ -1435,6 +1477,13 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody>
+                {!logs.length && (
+                  <tr>
+                    <td colSpan={6} className="muted">
+                      Aucune action enregistrée.
+                    </td>
+                  </tr>
+                )}
                 {logs.map((log) => (
                   <tr key={log.id}>
                     <td>
@@ -1900,6 +1949,48 @@ export default function AdminPage() {
                 disabled={submitting || cleanup.confirmation !== 'NETTOYER'}
               >
                 Nettoyer définitivement
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {resetOperationalOpen && (
+        <Modal
+          title="Réinitialiser l’activité courante"
+          eyebrow="Action réservée au super-administrateur"
+          onClose={() => setResetOperationalOpen(false)}
+        >
+          <form onSubmit={resetOperationalCycle}>
+            <div className="alert info">
+              Les compteurs des patients, rendez-vous, files d’attente, consultations, examens de
+              laboratoire et hospitalisations repartiront à zéro. Tous les anciens dossiers, soins,
+              factures, paiements, stocks, présences, comptes et utilisateurs resteront conservés.
+            </div>
+            <div className="form-grid">
+              <label className="field full">
+                <span>Écrire REINITIALISER *</span>
+                <input
+                  required
+                  autoComplete="off"
+                  value={resetOperationalConfirmation}
+                  onChange={(event) => setResetOperationalConfirmation(event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setResetOperationalOpen(false)}
+              >
+                Annuler
+              </button>
+              <button
+                className="primary-button"
+                disabled={submitting || resetOperationalConfirmation !== 'REINITIALISER'}
+              >
+                Commencer le nouveau cycle
               </button>
             </div>
           </form>

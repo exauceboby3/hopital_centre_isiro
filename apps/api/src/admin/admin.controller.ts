@@ -22,6 +22,7 @@ import {
   CleanupAuditLogsDto,
   CreateAdministrativeUserDto,
   ListAuditLogsDto,
+  ResetOperationalCycleDto,
   UpdateManagedUserDto,
 } from './dto/admin.dto';
 
@@ -73,5 +74,14 @@ export class AdminController {
   @Roles(Role.SUPER_ADMIN)
   cleanupAuditLogs(@Body() dto: CleanupAuditLogsDto) {
     return this.admin.cleanupAuditLogs(dto);
+  }
+
+  @Post('operational-cycle/reset')
+  @Roles(Role.SUPER_ADMIN)
+  resetOperationalCycle(
+    @Body() dto: ResetOperationalCycleDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.admin.resetOperationalCycle(dto, user);
   }
 }
