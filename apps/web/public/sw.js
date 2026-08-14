@@ -1,4 +1,4 @@
-const CACHE = 'hopital-isiro-shell-v3';
+const CACHE = 'hopital-isiro-shell-v4';
 const SHELL = ['/offline', '/manifest.webmanifest', '/software-logo.svg'];
 
 async function cacheShell() {
@@ -73,6 +73,22 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
+function notificationOptions(payload, defaultBody, defaultTag) {
+  const urgent = payload.urgency === 'high';
+  return {
+    body: payload.body || defaultBody,
+    icon: '/software-logo.svg',
+    badge: '/software-logo.svg',
+    tag: payload.tag || defaultTag,
+    renotify: Boolean(payload.tag),
+    requireInteraction: urgent,
+    silent: false,
+    vibrate: urgent ? [450, 120, 450, 120, 800] : [220, 100, 220],
+    timestamp: Date.now(),
+    data: { url: payload.url || '/dashboard' },
+  };
+}
+
 self.addEventListener('push', (event) => {
   let payload = {};
   try {
@@ -81,15 +97,11 @@ self.addEventListener('push', (event) => {
     payload = { body: event.data?.text() };
   }
   const title = payload.title || 'Centre Hospitalier d’Isiro';
-  const options = {
-    body: payload.body || 'Une nouvelle information professionnelle est disponible.',
-    icon: '/software-logo.svg',
-    badge: '/software-logo.svg',
-    tag: payload.tag || 'hospital-notification',
-    renotify: Boolean(payload.tag),
-    requireInteraction: payload.urgency === 'high',
-    data: { url: payload.url || '/dashboard' },
-  };
+  const options = notificationOptions(
+    payload,
+    'Une nouvelle information professionnelle est disponible.',
+    'hospital-notification',
+  );
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
@@ -97,13 +109,14 @@ self.addEventListener('message', (event) => {
   if (event.data?.type !== 'SHOW_NOTIFICATION') return;
   const payload = event.data.payload || {};
   event.waitUntil(
-    self.registration.showNotification(payload.title || 'Centre Hospitalier d’Isiro', {
-      body: payload.body || 'Une nouvelle information est disponible.',
-      icon: '/software-logo.svg',
-      badge: '/software-logo.svg',
-      tag: payload.tag || 'hospital-local-notification',
-      data: { url: payload.url || '/dashboard' },
-    }),
+    self.registration.showNotification(
+      payload.title || 'Centre Hospitalier d’Isiro',
+      notificationOptions(
+        payload,
+        'Une nouvelle information est disponible.',
+        'hospital-local-notification',
+      ),
+    ),
   );
 });
 

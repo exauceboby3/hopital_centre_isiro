@@ -3,6 +3,7 @@
 import { Activity, CheckCircle2, Copy, KeyRound, LockKeyhole, ShieldCheck, ShieldOff } from 'lucide-react';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
+import { PushNotificationSettings } from '@/components/push-notification-settings';
 import { api } from '@/lib/api';
 import { notifyError, notifySuccess } from '@/lib/notifications';
 
@@ -167,6 +168,8 @@ export default function SecuritySettingsPage() {
           </div>
         </section>
       </div>
+
+      <PushNotificationSettings />
 
       {setup && !status?.enabled && (
         <section className="panel quality-warning">

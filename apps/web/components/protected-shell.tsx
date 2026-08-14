@@ -32,6 +32,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { canAccessPath } from '@/lib/access-control';
 import { api } from '@/lib/api';
 import { HOSPITAL_PROFILE_UPDATED_EVENT, HospitalBranding, publishBranding } from '@/lib/branding';
+import { scheduleHospitalNotificationSound } from '@/lib/notification-sound';
 import { effectiveRoles, hasAnyRole, roleLabels } from '@/lib/roles';
 import { Modal } from './modal';
 import { useAuth } from './auth-provider';
@@ -96,19 +97,7 @@ export function ProtectedShell({ children }: Readonly<{ children: React.ReactNod
     const context = audioContext.current ?? new AudioContextClass();
     audioContext.current = context;
     void context.resume();
-    for (let index = 0; index < repeats; index += 1) {
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      const start = context.currentTime + index * 0.22;
-      oscillator.frequency.value = frequency;
-      oscillator.type = 'sine';
-      gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(0.18, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.16);
-      oscillator.connect(gain).connect(context.destination);
-      oscillator.start(start);
-      oscillator.stop(start + 0.17);
-    }
+    scheduleHospitalNotificationSound(context, frequency, repeats);
   }, []);
   useEffect(() => {
     if (!loading && !user) router.replace('/login');

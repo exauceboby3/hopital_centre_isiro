@@ -2,58 +2,16 @@
 
 import { BellRing, LoaderCircle, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api } from '@/lib/api';
 import { notifyError, notifySuccess, notifyWarning } from '@/lib/notifications';
-import { ensureServiceWorker, serviceWorkerSupported } from '@/lib/service-worker';
+import {
+  pushNotificationsSupported,
+  pushSynchronizationIntervalMs,
+  sendPushNotificationTest,
+  synchronizePushSubscription,
+} from '@/lib/push-notifications';
 import { useAuth } from './auth-provider';
 
-interface PushConfiguration {
-  enabled: boolean;
-  publicKey: string;
-  privacy: string;
-}
-
 const DISMISSED_KEY = 'chi-push-notification-prompt-dismissed-v1';
-
-function decodeApplicationServerKey(value: string): ArrayBuffer {
-  const padding = '='.repeat((4 - (value.length % 4)) % 4);
-  const base64 = (value + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const raw = window.atob(base64);
-  const bytes = Uint8Array.from(raw, (character) => character.charCodeAt(0));
-  const result = new ArrayBuffer(bytes.byteLength);
-  new Uint8Array(result).set(bytes);
-  return result;
-}
-
-async function sendSubscriptionToServer(subscription: PushSubscription) {
-  const serialized = subscription.toJSON();
-  const p256dh = serialized.keys?.p256dh;
-  const auth = serialized.keys?.auth;
-  if (!serialized.endpoint || !p256dh || !auth) {
-    throw new Error('L’abonnement de notification produit par le navigateur est incomplet.');
-  }
-  await api('/push-notifications/subscribe', {
-    method: 'POST',
-    body: JSON.stringify({ endpoint: serialized.endpoint, keys: { p256dh, auth } }),
-  });
-}
-
-async function createOrSynchronizeSubscription() {
-  const configuration = await api<PushConfiguration>('/push-notifications/public-key');
-  if (!configuration.enabled || !configuration.publicKey) {
-    throw new Error('Le service de notification du serveur est indisponible.');
-  }
-
-  const registration = await ensureServiceWorker();
-  const existing = await registration.pushManager.getSubscription();
-  const subscription =
-    existing ??
-    (await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: decodeApplicationServerKey(configuration.publicKey),
-    }));
-  await sendSubscriptionToServer(subscription);
-}
 
 export function PushNotificationManager() {
   const { user } = useAuth();
@@ -61,7 +19,7 @@ export function PushNotificationManager() {
   const [permission, setPermission] = useState<NotificationPermission>('default');
   const [busy, setBusy] = useState(false);
   const [dismissed, setDismissed] = useState(true);
-  const initialized = useRef(false);
+  const initializedUserId = useRef<string | null>(null);
 
   const hidePrompt = useCallback(() => {
     setDismissed(true);
@@ -73,13 +31,10 @@ export function PushNotificationManager() {
   }, []);
 
   useEffect(() => {
-    if (!user || initialized.current) return;
-    initialized.current = true;
+    if (!user || initializedUserId.current === user.id) return;
+    initializedUserId.current = user.id;
 
-    const available =
-      serviceWorkerSupported() &&
-      'Notification' in window &&
-      'PushManager' in window;
+    const available = pushNotificationsSupported();
     setSupported(available);
     if (!available) return;
 
@@ -97,7 +52,7 @@ export function PushNotificationManager() {
     if (currentPermission !== 'default') {
       setDismissed(true);
       if (currentPermission === 'granted') {
-        void createOrSynchronizeSubscription().catch((error) => {
+        void synchronizePushSubscription(user.id, { force: true }).catch((error) => {
           console.error('Synchronisation silencieuse des notifications impossible', error);
         });
       }
@@ -107,8 +62,29 @@ export function PushNotificationManager() {
     setDismissed(previouslyDismissed);
   }, [user]);
 
+  useEffect(() => {
+    if (!user || !supported || Notification.permission !== 'granted') return;
+
+    const synchronize = () => {
+      if (document.visibilityState === 'hidden' || !navigator.onLine) return;
+      void synchronizePushSubscription(user.id).catch((error) => {
+        console.error('Réparation automatique des notifications impossible', error);
+      });
+    };
+    const onVisibilityChange = () => synchronize();
+
+    window.addEventListener('online', synchronize);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    const timer = window.setInterval(synchronize, pushSynchronizationIntervalMs);
+    return () => {
+      window.removeEventListener('online', synchronize);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.clearInterval(timer);
+    };
+  }, [supported, user]);
+
   const enable = async () => {
-    if (!supported || busy || Notification.permission !== 'default') {
+    if (!user || !supported || busy || Notification.permission !== 'default') {
       setPermission(Notification.permission);
       setDismissed(true);
       return;
@@ -127,9 +103,12 @@ export function PushNotificationManager() {
         return;
       }
 
-      await createOrSynchronizeSubscription();
+      await synchronizePushSubscription(user.id, { force: true });
+      await sendPushNotificationTest();
       hidePrompt();
-      notifySuccess('Les notifications sont maintenant actives sur cet appareil.');
+      notifySuccess(
+        'Les notifications sont actives. Une notification de test vient d’être envoyée.',
+      );
     } catch (error) {
       notifyError(
         error instanceof Error ? error.message : 'Impossible d’activer les notifications.',
