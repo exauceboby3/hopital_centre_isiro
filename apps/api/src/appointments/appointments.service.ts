@@ -44,12 +44,14 @@ const appointmentInclude = {
 type AppointmentRow = Prisma.AppointmentGetPayload<{ include: typeof appointmentInclude }>;
 const financialRoles = [Role.SUPER_ADMIN, Role.ADMIN, Role.CASHIER, Role.ACCOUNTANT] as const;
 
+const APPOINTMENT_CLOCK_GRACE_MS = 2 * 60_000;
+
 export function parseNewAppointmentDate(value: string, now = new Date()): Date {
   const scheduledAt = new Date(value);
   if (Number.isNaN(scheduledAt.getTime())) {
     throw new BadRequestException('La date du rendez-vous est invalide.');
   }
-  if (scheduledAt.getTime() < now.getTime()) {
+  if (scheduledAt.getTime() < now.getTime() - APPOINTMENT_CLOCK_GRACE_MS) {
     throw new BadRequestException(
       'Un nouveau rendez-vous ne peut pas être programmé dans le passé.',
     );
@@ -396,14 +398,17 @@ export class AppointmentsService {
         include: { doctor: true, patient: true, consultation: true },
       });
       if (!appointment) throw new NotFoundException('Rendez-vous introuvable.');
+      const reactivatingCancelledAppointment =
+        appointment.status === AppointmentStatus.CANCELLED &&
+        appointment.journeyStage === PatientJourneyStage.CANCELLED;
       const canReassignBeforeReception = canOperationallyReassignBeforeReception(appointment, user);
       if (!canReassignBeforeReception) {
         this.assertAssignedDoctor(appointment.doctor?.userId, user);
       }
       if (
-        appointment.status !== AppointmentStatus.CHECKED_IN ||
-        appointment.journeyStage === PatientJourneyStage.COMPLETED ||
-        appointment.journeyStage === PatientJourneyStage.CANCELLED
+        (!reactivatingCancelledAppointment &&
+          appointment.status !== AppointmentStatus.CHECKED_IN) ||
+        appointment.journeyStage === PatientJourneyStage.COMPLETED
       ) {
         throw new ConflictException(
           'Seul un patient actif dans la file médicale ou en consultation peut être transféré.',
@@ -432,15 +437,22 @@ export class AppointmentsService {
         where: {
           id,
           doctorId: previousDoctorId,
-          status: AppointmentStatus.CHECKED_IN,
-          journeyStage: {
-            notIn: [PatientJourneyStage.COMPLETED, PatientJourneyStage.CANCELLED],
-          },
+          status: reactivatingCancelledAppointment
+            ? AppointmentStatus.CANCELLED
+            : AppointmentStatus.CHECKED_IN,
+          journeyStage: reactivatingCancelledAppointment
+            ? PatientJourneyStage.CANCELLED
+            : {
+                notIn: [PatientJourneyStage.COMPLETED, PatientJourneyStage.CANCELLED],
+              },
         },
         data: {
           doctorId,
+          status: reactivatingCancelledAppointment ? AppointmentStatus.SCHEDULED : undefined,
           doctorAcknowledgedAt: null,
-          journeyStage: PatientJourneyStage.WAITING_DOCTOR,
+          journeyStage: reactivatingCancelledAppointment
+            ? PatientJourneyStage.AWAITING_PAYMENT
+            : PatientJourneyStage.WAITING_DOCTOR,
           journeyUpdatedAt: new Date(),
           notes: [appointment.notes, `Transfert : ${transferReason}`].filter(Boolean).join('\n'),
         },
@@ -475,7 +487,9 @@ export class AppointmentsService {
       await transaction.auditLog.create({
         data: {
           userId: user.id,
-          action: 'PATIENT_TRANSFERRED',
+          action: reactivatingCancelledAppointment
+            ? 'CANCELLED_APPOINTMENT_REACTIVATED'
+            : 'PATIENT_TRANSFERRED',
           entity: 'Appointment',
           entityId: id,
           metadata: {

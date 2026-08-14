@@ -81,6 +81,35 @@ export class PharmacyService {
     });
   }
 
+  async deactivate(id: string, userId: string) {
+    return this.prisma.$transaction(async (transaction) => {
+      const medication = await transaction.medication.findFirst({
+        where: { id, isActive: true },
+        select: { id: true, code: true, name: true, stockQuantity: true },
+      });
+      if (!medication) throw new NotFoundException('Médicament introuvable ou déjà supprimé.');
+
+      await transaction.medication.update({
+        where: { id },
+        data: { isActive: false },
+      });
+      await transaction.auditLog.create({
+        data: {
+          userId,
+          action: 'MEDICATION_DEACTIVATED',
+          entity: 'Medication',
+          entityId: id,
+          metadata: {
+            code: medication.code,
+            name: medication.name,
+            stockQuantity: medication.stockQuantity,
+          },
+        },
+      });
+      return { id, isActive: false };
+    });
+  }
+
   async moveStock(id: string, dto: CreateStockMovementDto, userId: string) {
     await this.ensureExists(id);
     if (dto.type !== StockMovementType.ADJUSTMENT && dto.quantity < 0) {

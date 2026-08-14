@@ -191,7 +191,9 @@ export default function AppointmentsPage() {
     const scheduledAt = directReferral ? null : isiroLocalDateTimeToDate(form.scheduledAt);
     if (
       !directReferral &&
-      (!scheduledAt || Number.isNaN(scheduledAt.getTime()) || scheduledAt.getTime() < Date.now())
+      (!scheduledAt ||
+        Number.isNaN(scheduledAt.getTime()) ||
+        scheduledAt.getTime() < Date.now() - 2 * 60_000)
     ) {
       setError('Choisissez une date et une heure futures selon l’heure d’Isiro.');
       return;
@@ -240,6 +242,7 @@ export default function AppointmentsPage() {
       });
       setTransferring(null);
       setTransfer({ doctorId: '', reason: '' });
+      setScope('active');
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Réaffectation impossible.');
@@ -563,6 +566,20 @@ export default function AppointmentsPage() {
                                 }}
                               >
                                 <Send size={15} /> Renvoyer
+                              </button>
+                            )}
+                          {scope === 'history' &&
+                            row.status === 'CANCELLED' &&
+                            !row.doctorAcknowledgedAt &&
+                            canCreate && (
+                              <button
+                                className="text-button"
+                                onClick={() => {
+                                  setTransferring(row);
+                                  setTransfer({ doctorId: '', reason: '' });
+                                }}
+                              >
+                                <Send size={15} /> Réorienter
                               </button>
                             )}
                           {scope === 'active' && (

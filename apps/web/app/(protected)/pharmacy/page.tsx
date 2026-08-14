@@ -8,6 +8,7 @@ import {
   Plus,
   Printer,
   Stethoscope,
+  Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
@@ -148,7 +149,26 @@ export default function PharmacyPage() {
     }
   };
   const canMove = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'PHARMACIST', 'STOREKEEPER']);
+  const canManageMedications = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'PHARMACIST']);
   const canDispensePrescription = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'PHARMACIST']);
+  const removeMedication = async (row: Medication) => {
+    if (
+      !window.confirm(
+        `Supprimer « ${row.name} » du stock actif ? Son historique restera conservé.`,
+      )
+    )
+      return;
+    setSubmitting(true);
+    setError('');
+    try {
+      await api(`/pharmacy/medications/${row.id}`, { method: 'DELETE' });
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Suppression du médicament impossible.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
   const dispensePrescription = async (id: string) => {
     setSubmitting(true);
     try {
@@ -396,6 +416,16 @@ export default function PharmacyPage() {
                               <ArrowDownUp size={15} />
                               Inventaire
                             </button>
+                            {canManageMedications && (
+                              <button
+                                className="text-button danger"
+                                disabled={submitting}
+                                onClick={() => void removeMedication(row)}
+                              >
+                                <Trash2 size={15} />
+                                Supprimer
+                              </button>
+                            )}
                           </div>
                         )}
                       </td>

@@ -45,3 +45,49 @@ describe('PharmacyService.create', () => {
     });
   });
 });
+
+describe('PharmacyService.deactivate', () => {
+  it('retire le médicament du stock actif sans supprimer son historique', async () => {
+    const medicationUpdate = jest.fn().mockResolvedValue({ id: 'medication-1' });
+    const auditCreate = jest.fn().mockResolvedValue({ id: 'audit-1' });
+    const transaction = {
+      medication: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'medication-1',
+          code: 'PARA-500',
+          name: 'Paracétamol',
+          stockQuantity: 12,
+        }),
+        update: medicationUpdate,
+      },
+      auditLog: { create: auditCreate },
+    };
+    const prisma = {
+      $transaction: (callback: (client: typeof transaction) => Promise<unknown>) =>
+        callback(transaction),
+    } as unknown as PrismaService;
+    const service = new PharmacyService(prisma, {} as FinancialAuthorizationService);
+
+    await expect(service.deactivate('medication-1', 'pharmacist-1')).resolves.toEqual({
+      id: 'medication-1',
+      isActive: false,
+    });
+    expect(medicationUpdate).toHaveBeenCalledWith({
+      where: { id: 'medication-1' },
+      data: { isActive: false },
+    });
+    expect(auditCreate).toHaveBeenCalledWith({
+      data: {
+        userId: 'pharmacist-1',
+        action: 'MEDICATION_DEACTIVATED',
+        entity: 'Medication',
+        entityId: 'medication-1',
+        metadata: {
+          code: 'PARA-500',
+          name: 'Paracétamol',
+          stockQuantity: 12,
+        },
+      },
+    });
+  });
+});

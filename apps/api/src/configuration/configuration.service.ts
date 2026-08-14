@@ -28,6 +28,7 @@ const PRINT_TARGETS: Record<string, { department: string; documentType: string }
   specialty: { department: 'SPECIALTY', documentType: 'SPECIALTY_REPORT' },
   radiology: { department: 'RADIOLOGY', documentType: 'RADIOLOGY_REPORT' },
   coverage: { department: 'INSURANCE', documentType: 'COVERAGE_CERTIFICATE' },
+  'care-voucher': { department: 'INSURANCE', documentType: 'CARE_VOUCHER' },
   inventory: { department: 'PHARMACY', documentType: 'INVENTORY_REPORT' },
   shift: { department: 'HUMAN_RESOURCES', documentType: 'SHIFT_SCHEDULE' },
   attendance: { department: 'HUMAN_RESOURCES', documentType: 'ATTENDANCE_REPORT' },

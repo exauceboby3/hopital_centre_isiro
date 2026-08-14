@@ -11,17 +11,20 @@ import {
 describe('parseNewAppointmentDate', () => {
   const now = new Date('2026-08-06T08:00:00.000Z');
 
-  it('rejette une date invalide ou passée', () => {
+  it('rejette une date invalide ou passée au-delà de la tolérance réseau', () => {
     expect(() => parseNewAppointmentDate('date-invalide', now)).toThrow(
       'La date du rendez-vous est invalide.',
     );
-    expect(() => parseNewAppointmentDate('2026-08-06T07:59:59.999Z', now)).toThrow(
+    expect(() => parseNewAppointmentDate('2026-08-06T07:57:59.999Z', now)).toThrow(
       'Un nouveau rendez-vous ne peut pas être programmé dans le passé.',
     );
   });
 
-  it('accepte l’heure présente et une heure future', () => {
+  it('accepte l’heure présente, le délai de transmission et une heure future', () => {
     expect(parseNewAppointmentDate(now.toISOString(), now)).toEqual(now);
+    expect(parseNewAppointmentDate('2026-08-06T07:59:00.000Z', now)).toEqual(
+      new Date('2026-08-06T07:59:00.000Z'),
+    );
     expect(parseNewAppointmentDate('2026-08-06T08:15:00.000Z', now)).toEqual(
       new Date('2026-08-06T08:15:00.000Z'),
     );

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseBoolPipe,
@@ -59,6 +60,15 @@ export class PharmacyController {
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.PHARMACIST)
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateMedicationDto) {
     return this.pharmacy.update(id, dto);
+  }
+
+  @Delete(':id')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.PHARMACIST)
+  deactivate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.pharmacy.deactivate(id, user.id);
   }
 
   @Post(':id/movements')
