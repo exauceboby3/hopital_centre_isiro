@@ -4,9 +4,48 @@ import { AuthenticatedUser } from '../common/authenticated-user';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   AppointmentsService,
+  canCloseStaleCancelledConsultation,
   canOperationallyReassignBeforeReception,
   parseNewAppointmentDate,
 } from './appointments.service';
+
+describe('nettoyage des consultations après annulation', () => {
+  it('ferme une consultation non commencée liée à un ancien rendez-vous annulé', () => {
+    expect(
+      canCloseStaleCancelledConsultation(
+        {
+          appointmentId: 'appointment-old',
+          startedAt: null,
+          appointment: { status: AppointmentStatus.CANCELLED },
+        },
+        'appointment-current',
+      ),
+    ).toBe(true);
+  });
+
+  it('ne ferme ni la consultation courante ni une consultation déjà commencée', () => {
+    expect(
+      canCloseStaleCancelledConsultation(
+        {
+          appointmentId: 'appointment-current',
+          startedAt: null,
+          appointment: { status: AppointmentStatus.CANCELLED },
+        },
+        'appointment-current',
+      ),
+    ).toBe(false);
+    expect(
+      canCloseStaleCancelledConsultation(
+        {
+          appointmentId: 'appointment-old',
+          startedAt: new Date('2026-08-14T10:00:00.000Z'),
+          appointment: { status: AppointmentStatus.CANCELLED },
+        },
+        'appointment-current',
+      ),
+    ).toBe(false);
+  });
+});
 
 describe('parseNewAppointmentDate', () => {
   const now = new Date('2026-08-06T08:00:00.000Z');

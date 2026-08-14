@@ -73,6 +73,19 @@ export function canOperationallyReassignBeforeReception(
   );
 }
 
+export function canCloseStaleCancelledConsultation(consultation: {
+  appointmentId: string | null;
+  startedAt: Date | null;
+  appointment: { status: AppointmentStatus } | null;
+}, currentAppointmentId: string): boolean {
+  return (
+    consultation.appointmentId !== currentAppointmentId &&
+    !consultation.startedAt &&
+    (consultation.appointment?.status === AppointmentStatus.CANCELLED ||
+      consultation.appointment?.status === AppointmentStatus.NO_SHOW)
+  );
+}
+
 @Injectable()
 export class AppointmentsService {
   constructor(
@@ -241,6 +254,50 @@ export class AppointmentsService {
           BillableServiceType.CONSULTATION,
           transaction,
         );
+
+        if (!appointment.consultation) {
+          const activeConsultation = await transaction.consultation.findFirst({
+            where: {
+              patientId: appointment.patientId,
+              status: { in: [ConsultationStatus.WAITING, ConsultationStatus.IN_PROGRESS] },
+            },
+            select: {
+              id: true,
+              appointmentId: true,
+              startedAt: true,
+              appointment: { select: { status: true } },
+            },
+          });
+          if (
+            activeConsultation &&
+            canCloseStaleCancelledConsultation(activeConsultation, appointment.id)
+          ) {
+            await transaction.consultation.update({
+              where: { id: activeConsultation.id },
+              data: { status: ConsultationStatus.CANCELLED, completedAt: new Date() },
+            });
+          } else if (activeConsultation && activeConsultation.appointmentId !== appointment.id) {
+            throw new ConflictException(
+              'Ce patient possède déjà une consultation active. Terminez ou transférez cette consultation avant de le marquer arrivé.',
+            );
+          }
+        }
+      }
+
+      if (dto.status === AppointmentStatus.CANCELLED && appointment.consultation) {
+        if (appointment.consultation.startedAt || appointment.doctorAcknowledgedAt) {
+          throw new ConflictException(
+            'La consultation a déjà commencé. Transférez ou terminez la prise en charge au lieu d’annuler le rendez-vous.',
+          );
+        }
+        await transaction.consultation.updateMany({
+          where: {
+            id: appointment.consultation.id,
+            status: ConsultationStatus.WAITING,
+            startedAt: null,
+          },
+          data: { status: ConsultationStatus.CANCELLED, completedAt: new Date() },
+        });
       }
 
       const reassigned = dto.doctorId !== undefined && dto.doctorId !== appointment.doctorId;
