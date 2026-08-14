@@ -19,6 +19,7 @@ import {
   CleanupAuditLogsDto,
   CreateAdministrativeUserDto,
   ListAuditLogsDto,
+  PurgeOperationalDataDto,
   ResetOperationalCycleDto,
   UpdateManagedUserDto,
 } from './dto/admin.dto';
@@ -264,6 +265,78 @@ export class AdminService {
       cycleStartedAt: marker.createdAt,
       preservedData: true,
     };
+  }
+
+  async purgeOperationalData(dto: PurgeOperationalDataDto, actor: AuthenticatedUser) {
+    if (dto.confirmation !== 'EFFACER TOUTES LES ACTIVITES') {
+      throw new BadRequestException('La confirmation de suppression est incorrecte.');
+    }
+
+    return this.prisma.$transaction(async (transaction) => {
+      const preserved = await Promise.all([
+        transaction.patient.count(),
+        transaction.user.count(),
+        transaction.medication.count(),
+        transaction.billableService.count(),
+      ]);
+
+      await transaction.$executeRawUnsafe(`
+        TRUNCATE TABLE
+          "PatientArchiveEvent", "Appointment", "Consultation", "VitalSign", "ExamRequest",
+          "LabExamDocument", "Hospitalization", "Invoice", "InvoiceItem", "Payment",
+          "CashClosure", "StockMovement", "Message", "MessageAttachment", "AuditLog",
+          "EmergencyAlert", "EmergencyAlertComment", "CareAuthorization", "CustomFieldValue",
+          "ClinicalOrder", "BloodUnit", "BloodTransfusion", "PatientInsurance",
+          "InsuranceClaim", "InsuranceCoverage", "CareVoucher", "VoucherCoverage",
+          "PurchaseOrder", "PurchaseOrderItem", "NursingCare", "Prescription",
+          "PrescriptionItem", "MedicationBatch", "InventoryCount", "InventoryCountLine",
+          "SpecialtyCase", "RadiologyStudy", "DicomInstance", "StaffShift",
+          "AttendanceRecord", "PayrollPeriod", "PayrollEntry", "JournalEntry", "JournalLine",
+          "UtilityBill", "IdempotencyRecord", "PatientClinicalAmendment", "DepartmentStock",
+          "DepartmentStockMovement", "DepartmentDailyReport", "DepartmentDailyReportItem",
+          "InternalRequisition", "InternalRequisitionItem", "BackupRun", "BedTurnover",
+          "BreakGlassAccess", "ClinicalIncident", "DeathCase", "DischargeSummary",
+          "FollowUpPlan", "IdentityVerification", "LabAdditionalExamDecision", "LabSpecimen",
+          "LoginSecurityEvent", "MedicationAdministrationEvent", "NursingHandoff",
+          "OfflineSyncConflict", "PatientAdvance", "PatientAdvanceAllocation",
+          "PatientClinicalAlert", "PatientConsent", "PatientEpisode", "PaymentInstallment",
+          "PaymentPlan", "RecordAmendment", "TriageAssessment", "EquipmentMaintenance"
+        RESTART IDENTITY CASCADE
+      `);
+
+      await Promise.all([
+        transaction.medication.updateMany({ data: { stockQuantity: 0 } }),
+        transaction.bed.updateMany({ data: { status: 'AVAILABLE' } }),
+      ]);
+
+      const marker = await transaction.auditLog.create({
+        data: {
+          userId: actor.id,
+          action: OPERATIONAL_CYCLE_RESET_ACTION,
+          entity: 'operational-data',
+          metadata: {
+            preservedData: false,
+            preservedPatients: preserved[0],
+            preservedUsers: preserved[1],
+            preservedMedications: preserved[2],
+            preservedBillableServices: preserved[3],
+            medicationStockReset: true,
+            message: 'Purge complète des activités avec conservation des référentiels',
+          },
+        },
+        select: { id: true, createdAt: true },
+      });
+
+      return {
+        cycleStartedAt: marker.createdAt,
+        preserved: {
+          patients: preserved[0],
+          users: preserved[1],
+          medications: preserved[2],
+          billableServices: preserved[3],
+        },
+      };
+    });
   }
 
   private async findUser(id: string) {

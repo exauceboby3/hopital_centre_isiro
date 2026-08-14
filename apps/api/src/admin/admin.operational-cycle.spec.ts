@@ -77,4 +77,40 @@ describe('cycle opérationnel', () => {
       },
     });
   });
+
+  it('efface les activités mais conserve les référentiels demandés', async () => {
+    const markerDate = new Date('2026-08-14T13:30:00.000Z');
+    const executeRawUnsafe = jest.fn().mockResolvedValue(1);
+    const medicationUpdateMany = jest.fn().mockResolvedValue({ count: 12 });
+    const bedUpdateMany = jest.fn().mockResolvedValue({ count: 8 });
+    const auditCreate = jest.fn().mockResolvedValue({ id: 'marker-2', createdAt: markerDate });
+    const transaction = {
+      patient: { count: jest.fn().mockResolvedValue(25) },
+      user: { count: jest.fn().mockResolvedValue(10) },
+      medication: { count: jest.fn().mockResolvedValue(12), updateMany: medicationUpdateMany },
+      billableService: { count: jest.fn().mockResolvedValue(6) },
+      bed: { updateMany: bedUpdateMany },
+      auditLog: { create: auditCreate },
+      $executeRawUnsafe: executeRawUnsafe,
+    };
+    const prisma = {
+      $transaction: (callback: (client: typeof transaction) => Promise<unknown>) =>
+        callback(transaction),
+    };
+    const service = new AdminService(prisma as never);
+
+    await expect(
+      service.purgeOperationalData(
+        { confirmation: 'EFFACER TOUTES LES ACTIVITES' },
+        actor,
+      ),
+    ).resolves.toEqual({
+      cycleStartedAt: markerDate,
+      preserved: { patients: 25, users: 10, medications: 12, billableServices: 6 },
+    });
+    expect(executeRawUnsafe).toHaveBeenCalledTimes(1);
+    expect(medicationUpdateMany).toHaveBeenCalledWith({ data: { stockQuantity: 0 } });
+    expect(bedUpdateMany).toHaveBeenCalledWith({ data: { status: 'AVAILABLE' } });
+    expect(auditCreate).toHaveBeenCalledTimes(1);
+  });
 });

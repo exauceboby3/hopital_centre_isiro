@@ -32,4 +32,24 @@ describe('AuditInterceptor et cycle opérationnel', () => {
 
     expect(auditCreate).not.toHaveBeenCalled();
   });
+
+  it('ne recrée pas une activité après la purge complète', async () => {
+    const context = {
+      switchToHttp: () => ({
+        getRequest: () => ({
+          path: '/admin/operational-data/purge',
+          method: 'POST',
+          params: {},
+          ip: '127.0.0.1',
+          get: () => 'jest',
+        }),
+        getResponse: () => ({ statusCode: 201 }),
+      }),
+    } as unknown as ExecutionContext;
+    const next = { handle: () => of({ preserved: { patients: 25 } }) } as CallHandler;
+
+    await lastValueFrom(interceptor.intercept(context, next));
+
+    expect(auditCreate).not.toHaveBeenCalled();
+  });
 });

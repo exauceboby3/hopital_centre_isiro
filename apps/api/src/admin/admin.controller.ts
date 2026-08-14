@@ -22,6 +22,7 @@ import {
   CleanupAuditLogsDto,
   CreateAdministrativeUserDto,
   ListAuditLogsDto,
+  PurgeOperationalDataDto,
   ResetOperationalCycleDto,
   UpdateManagedUserDto,
 } from './dto/admin.dto';
@@ -83,5 +84,14 @@ export class AdminController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.admin.resetOperationalCycle(dto, user);
+  }
+
+  @Post('operational-data/purge')
+  @Roles(Role.SUPER_ADMIN)
+  purgeOperationalData(
+    @Body() dto: PurgeOperationalDataDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.admin.purgeOperationalData(dto, user);
   }
 }

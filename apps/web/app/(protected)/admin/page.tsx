@@ -242,6 +242,8 @@ export default function AdminPage() {
   const [cleanup, setCleanup] = useState({ before: '', confirmation: '' });
   const [resetOperationalOpen, setResetOperationalOpen] = useState(false);
   const [resetOperationalConfirmation, setResetOperationalConfirmation] = useState('');
+  const [purgeOperationalOpen, setPurgeOperationalOpen] = useState(false);
+  const [purgeOperationalConfirmation, setPurgeOperationalConfirmation] = useState('');
   const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -458,6 +460,29 @@ export default function AdminPage() {
       );
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Réinitialisation impossible.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const purgeOperationalData = async (event: FormEvent) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setError('');
+    setNotice('');
+    try {
+      await api('/admin/operational-data/purge', {
+        method: 'POST',
+        body: JSON.stringify({ confirmation: purgeOperationalConfirmation }),
+      });
+      setPurgeOperationalOpen(false);
+      setPurgeOperationalConfirmation('');
+      setNotice(
+        'Toutes les activités ont été effacées. Les patients, utilisateurs, médicaments, tarifs et configurations sont conservés.',
+      );
+      await load();
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Purge des activités impossible.');
     } finally {
       setSubmitting(false);
     }
@@ -740,6 +765,12 @@ export default function AdminPage() {
                 </div>
                 <button className="secondary-button" onClick={() => setResetOperationalOpen(true)}>
                   <RotateCcw size={16} /> Repartir à zéro
+                </button>
+                <button
+                  className="text-button danger"
+                  onClick={() => setPurgeOperationalOpen(true)}
+                >
+                  <Trash2 size={16} /> Effacer toutes les activités
                 </button>
               </div>
             </section>
@@ -1991,6 +2022,51 @@ export default function AdminPage() {
                 disabled={submitting || resetOperationalConfirmation !== 'REINITIALISER'}
               >
                 Commencer le nouveau cycle
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {purgeOperationalOpen && (
+        <Modal
+          title="Effacer toutes les activités"
+          eyebrow="Action irréversible réservée au super-administrateur"
+          onClose={() => setPurgeOperationalOpen(false)}
+        >
+          <form onSubmit={purgeOperationalData}>
+            <div className="alert error">
+              Les rendez-vous, consultations, examens, hospitalisations, factures, paiements,
+              dossiers cliniques, mouvements de stock, présences, gardes et paies seront
+              définitivement effacés. Les patients, comptes utilisateurs, médicaments, tarifs et
+              paramètres resteront conservés. Les quantités de médicaments seront remises à zéro.
+            </div>
+            <div className="form-grid">
+              <label className="field full">
+                <span>Écrire EFFACER TOUTES LES ACTIVITES *</span>
+                <input
+                  required
+                  autoComplete="off"
+                  value={purgeOperationalConfirmation}
+                  onChange={(event) => setPurgeOperationalConfirmation(event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setPurgeOperationalOpen(false)}
+              >
+                Annuler
+              </button>
+              <button
+                className="primary-button"
+                disabled={
+                  submitting || purgeOperationalConfirmation !== 'EFFACER TOUTES LES ACTIVITES'
+                }
+              >
+                Effacer définitivement les activités
               </button>
             </div>
           </form>

@@ -26,7 +26,8 @@ export class AuditInterceptor implements NestInterceptor {
     }
 
     const resetsOperationalCycle =
-      request.method === 'POST' && request.path === '/admin/operational-cycle/reset';
+      request.method === 'POST' &&
+      ['/admin/operational-cycle/reset', '/admin/operational-data/purge'].includes(request.path);
 
     return next.handle().pipe(
       tap({

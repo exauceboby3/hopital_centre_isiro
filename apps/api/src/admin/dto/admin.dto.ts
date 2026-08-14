@@ -130,6 +130,13 @@ export class ResetOperationalCycleDto {
   confirmation: string;
 }
 
+export class PurgeOperationalDataDto {
+  @ApiProperty({ example: 'EFFACER TOUTES LES ACTIVITES' })
+  @IsString()
+  @Equals('EFFACER TOUTES LES ACTIVITES')
+  confirmation: string;
+}
+
 export class ListAuditLogsDto {
   @ApiPropertyOptional()
   @IsOptional()
