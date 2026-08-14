@@ -1,4 +1,11 @@
-import { AppointmentStatus, ConsultationStatus, PatientJourneyStage, Role } from '@prisma/client';
+import {
+  AppointmentStatus,
+  CareAuthorizationStatus,
+  ConsultationStatus,
+  ExamStatus,
+  PatientJourneyStage,
+  Role,
+} from '@prisma/client';
 import { FinancialAuthorizationService } from '../billing/financial-authorization.service';
 import { AuthenticatedUser } from '../common/authenticated-user';
 import { PrismaService } from '../prisma/prisma.service';
@@ -8,6 +15,29 @@ import {
   canOperationallyReassignBeforeReception,
   parseNewAppointmentDate,
 } from './appointments.service';
+import { isLaboratoryReturnReady } from './appointment-acknowledgement.service';
+
+describe('reprise après laboratoire', () => {
+  it('répare un ancien retour mal classé sans consommer une seconde autorisation', () => {
+    expect(
+      isLaboratoryReturnReady({
+        journeyStage: PatientJourneyStage.WAITING_DOCTOR,
+        careAuthorization: { status: CareAuthorizationStatus.CONSUMED },
+        consultation: { examRequests: [{ status: ExamStatus.VALIDATED }] },
+      }),
+    ).toBe(true);
+  });
+
+  it('ne transforme pas un nouveau patient sans résultat validé en retour laboratoire', () => {
+    expect(
+      isLaboratoryReturnReady({
+        journeyStage: PatientJourneyStage.WAITING_DOCTOR,
+        careAuthorization: { status: CareAuthorizationStatus.CONSUMED },
+        consultation: { examRequests: [{ status: ExamStatus.IN_PROGRESS }] },
+      }),
+    ).toBe(false);
+  });
+});
 
 describe('nettoyage des consultations après annulation', () => {
   it('ferme une consultation non commencée liée à un ancien rendez-vous annulé', () => {
@@ -81,7 +111,11 @@ describe('réaffectation avant réception médicale', () => {
   it('autorise la réception avant que le médecin commence', () => {
     expect(
       canOperationallyReassignBeforeReception(
-        { doctorAcknowledgedAt: null, consultation: { startedAt: null } },
+        {
+          doctorAcknowledgedAt: null,
+          journeyStage: PatientJourneyStage.WAITING_DOCTOR,
+          consultation: { startedAt: null },
+        },
         receptionist,
       ),
     ).toBe(true);
@@ -92,11 +126,25 @@ describe('réaffectation avant réception médicale', () => {
       canOperationallyReassignBeforeReception(
         {
           doctorAcknowledgedAt: new Date('2026-08-06T08:00:00.000Z'),
+          journeyStage: PatientJourneyStage.IN_CONSULTATION,
           consultation: { startedAt: new Date('2026-08-06T08:00:00.000Z') },
         },
         receptionist,
       ),
     ).toBe(false);
+  });
+
+  it('autorise la réception à réaffecter un retour laboratoire non repris', () => {
+    expect(
+      canOperationallyReassignBeforeReception(
+        {
+          doctorAcknowledgedAt: null,
+          journeyStage: PatientJourneyStage.RETURN_TO_DOCTOR,
+          consultation: { startedAt: new Date('2026-08-06T08:00:00.000Z') },
+        },
+        receptionist,
+      ),
+    ).toBe(true);
   });
 });
 
@@ -113,6 +161,8 @@ const activeAppointment = (options?: {
   doctorUserId?: string;
   consultationStatus?: ConsultationStatus;
   certificate?: string | null;
+  journeyStage?: PatientJourneyStage;
+  doctorAcknowledgedAt?: Date | null;
 }) => {
   const startedAt = options?.startedAt ?? new Date('2026-08-02T08:00:00.000Z');
   const doctorProfileId = options?.doctorProfileId ?? 'doctor-profile-a';
@@ -128,12 +178,13 @@ const activeAppointment = (options?: {
     service: 'Consultation générale',
     reason: 'Fièvre',
     status: AppointmentStatus.CHECKED_IN,
-    journeyStage: PatientJourneyStage.IN_CONSULTATION,
+    journeyStage: options?.journeyStage ?? PatientJourneyStage.IN_CONSULTATION,
     journeyUpdatedAt: new Date('2026-08-02T08:00:00.000Z'),
     notes: 'Patient stable',
     createdAt: new Date('2026-08-02T07:00:00.000Z'),
     updatedAt: new Date('2026-08-02T08:00:00.000Z'),
-    doctorAcknowledgedAt: startedAt,
+    doctorAcknowledgedAt:
+      options && 'doctorAcknowledgedAt' in options ? options.doctorAcknowledgedAt! : startedAt,
     doctor: { id: doctorProfileId, userId: doctorUserId },
     patient: {
       id: 'patient-1',
@@ -269,6 +320,37 @@ function createService(options?: {
 }
 
 describe('AppointmentsService.transfer', () => {
+  it('conserve le retour laboratoire après une réaffectation par la réception', async () => {
+    const appointment = activeAppointment({
+      journeyStage: PatientJourneyStage.RETURN_TO_DOCTOR,
+      doctorAcknowledgedAt: null,
+    });
+    const { service, captures } = createService({ appointment });
+    const receptionist: AuthenticatedUser = {
+      id: 'reception-user',
+      username: 'reception',
+      role: Role.RECEPTIONIST,
+      additionalRoles: [],
+    };
+
+    await service.transfer(
+      'appointment-1',
+      'doctor-profile-b',
+      'Retour laboratoire confié à un autre médecin',
+      receptionist,
+    );
+
+    expect(captures.appointment?.data).toMatchObject({
+      doctorId: 'doctor-profile-b',
+      doctorAcknowledgedAt: null,
+      journeyStage: PatientJourneyStage.RETURN_TO_DOCTOR,
+    });
+    expect(captures.consultation?.data).toMatchObject({
+      doctorId: 'doctor-profile-b',
+      status: ConsultationStatus.WAITING,
+    });
+  });
+
   it('conserve le début et l’historique clinique lors d’un transfert après traitement commencé', async () => {
     const startedAt = new Date('2026-08-02T08:00:00.000Z');
     const { service, captures, messageCreate } = createService({

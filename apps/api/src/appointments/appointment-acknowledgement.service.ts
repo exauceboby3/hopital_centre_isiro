@@ -8,12 +8,31 @@ import {
   AppointmentStatus,
   CareAuthorizationStatus,
   ConsultationStatus,
+  ExamStatus,
   PatientJourneyStage,
   Role,
 } from '@prisma/client';
 import { AuthenticatedUser, hasAnyRole } from '../common/authenticated-user';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppointmentsService } from './appointments.service';
+
+export function isLaboratoryReturnReady(appointment: {
+  journeyStage: PatientJourneyStage;
+  careAuthorization: { status: CareAuthorizationStatus } | null;
+  consultation: { examRequests: Array<{ status: ExamStatus }> } | null;
+}): boolean {
+  const laboratoryExams = appointment.consultation?.examRequests ?? [];
+  const hasCompletedLaboratoryCycle =
+    laboratoryExams.some((exam) => exam.status === ExamStatus.VALIDATED) &&
+    laboratoryExams.every(
+      (exam) => exam.status === ExamStatus.VALIDATED || exam.status === ExamStatus.CANCELLED,
+    );
+  return (
+    appointment.careAuthorization?.status === CareAuthorizationStatus.CONSUMED &&
+    (appointment.journeyStage === PatientJourneyStage.RETURN_TO_DOCTOR ||
+      hasCompletedLaboratoryCycle)
+  );
+}
 
 @Injectable()
 export class AppointmentAcknowledgementService {
@@ -32,15 +51,19 @@ export class AppointmentAcknowledgementService {
         journeyStage: true,
         doctor: { select: { userId: true } },
         careAuthorization: { select: { status: true } },
-        consultation: { select: { id: true, startedAt: true } },
+        consultation: {
+          select: {
+            id: true,
+            startedAt: true,
+            examRequests: { select: { status: true } },
+          },
+        },
       },
     });
 
     if (!appointment) throw new NotFoundException('Rendez-vous introuvable.');
 
-    const isLaboratoryReturn =
-      appointment.journeyStage === PatientJourneyStage.RETURN_TO_DOCTOR &&
-      appointment.careAuthorization?.status === CareAuthorizationStatus.CONSUMED;
+    const isLaboratoryReturn = isLaboratoryReturnReady(appointment);
 
     if (!isLaboratoryReturn) {
       return this.appointments.acknowledge(id, user);

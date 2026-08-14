@@ -62,22 +62,27 @@ export function parseNewAppointmentDate(value: string, now = new Date()): Date {
 export function canOperationallyReassignBeforeReception(
   appointment: {
     doctorAcknowledgedAt: Date | null;
+    journeyStage: PatientJourneyStage;
     consultation: { startedAt: Date | null } | null;
   },
   user: AuthenticatedUser,
 ): boolean {
   return (
     !appointment.doctorAcknowledgedAt &&
-    !appointment.consultation?.startedAt &&
+    (!appointment.consultation?.startedAt ||
+      appointment.journeyStage === PatientJourneyStage.RETURN_TO_DOCTOR) &&
     hasAnyRole(user, [Role.SUPER_ADMIN, Role.ADMIN, Role.RECEPTIONIST, Role.SECRETARY])
   );
 }
 
-export function canCloseStaleCancelledConsultation(consultation: {
-  appointmentId: string | null;
-  startedAt: Date | null;
-  appointment: { status: AppointmentStatus } | null;
-}, currentAppointmentId: string): boolean {
+export function canCloseStaleCancelledConsultation(
+  consultation: {
+    appointmentId: string | null;
+    startedAt: Date | null;
+    appointment: { status: AppointmentStatus } | null;
+  },
+  currentAppointmentId: string,
+): boolean {
   return (
     consultation.appointmentId !== currentAppointmentId &&
     !consultation.startedAt &&
@@ -463,6 +468,7 @@ export class AppointmentsService {
         appointment.status === AppointmentStatus.CANCELLED &&
         appointment.journeyStage === PatientJourneyStage.CANCELLED;
       const canReassignBeforeReception = canOperationallyReassignBeforeReception(appointment, user);
+      const laboratoryReturn = appointment.journeyStage === PatientJourneyStage.RETURN_TO_DOCTOR;
       if (!canReassignBeforeReception) {
         this.assertAssignedDoctor(appointment.doctor?.userId, user);
       }
@@ -513,7 +519,9 @@ export class AppointmentsService {
           doctorAcknowledgedAt: null,
           journeyStage: reactivatingCancelledAppointment
             ? PatientJourneyStage.AWAITING_PAYMENT
-            : PatientJourneyStage.WAITING_DOCTOR,
+            : laboratoryReturn
+              ? PatientJourneyStage.RETURN_TO_DOCTOR
+              : PatientJourneyStage.WAITING_DOCTOR,
           journeyUpdatedAt: new Date(),
           notes: [appointment.notes, `Transfert : ${transferReason}`].filter(Boolean).join('\n'),
         },
