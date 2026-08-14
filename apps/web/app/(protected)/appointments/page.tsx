@@ -253,6 +253,7 @@ export default function AppointmentsPage() {
 
   const setStatus = async (id: string, status: string) => {
     setError('');
+    setSubmitting(true);
     try {
       await api(`/appointments/${id}`, {
         method: 'PATCH',
@@ -261,6 +262,8 @@ export default function AppointmentsPage() {
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Mise à jour impossible.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -535,6 +538,7 @@ export default function AppointmentsPage() {
                             <button
                               className="text-button"
                               disabled={
+                                submitting ||
                                 !row.careAuthorization ||
                                 !['AUTHORIZED', 'WAIVED'].includes(row.careAuthorization.status)
                               }
@@ -585,6 +589,7 @@ export default function AppointmentsPage() {
                           {scope === 'active' && (
                             <button
                               className="text-button danger"
+                              disabled={submitting}
                               onClick={() => void setStatus(row.id, 'CANCELLED')}
                             >
                               Annuler

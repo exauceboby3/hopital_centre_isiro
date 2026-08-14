@@ -269,8 +269,10 @@ export class AppointmentsService {
         targetDoctorId &&
         !appointment.consultation
       ) {
-        await transaction.consultation.create({
-          data: {
+        await transaction.consultation.upsert({
+          where: { appointmentId: appointment.id },
+          update: {},
+          create: {
             patientId: appointment.patientId,
             doctorId: targetDoctorId,
             appointmentId: appointment.id,
@@ -343,8 +345,10 @@ export class AppointmentsService {
       let consultation = appointment.consultation;
       if (!consultation) {
         if (!appointment.doctorId) throw new ConflictException('Aucun médecin affecté.');
-        consultation = await transaction.consultation.create({
-          data: {
+        consultation = await transaction.consultation.upsert({
+          where: { appointmentId: appointment.id },
+          update: {},
+          create: {
             patientId: appointment.patientId,
             doctorId: appointment.doctorId,
             appointmentId: appointment.id,
