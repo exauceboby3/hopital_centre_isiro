@@ -1,7 +1,35 @@
 import { CareAuthorizationStatus, Role } from '@prisma/client';
 import { FinancialAuthorizationService } from '../billing/financial-authorization.service';
+import { ROLES_KEY } from '../common/decorators/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
+import { AppointmentsController } from './appointments.controller';
 import { AppointmentsService } from './appointments.service';
+
+describe('AppointmentsController accès caisse', () => {
+  const methodTarget = (method: string) => {
+    const target: unknown = Object.getOwnPropertyDescriptor(
+      AppointmentsController.prototype,
+      method,
+    )?.value;
+    if (typeof target !== 'function') throw new Error(`Méthode ${method} introuvable.`);
+    return target;
+  };
+  const methodRoles = (method: 'list' | 'doctorAvailability' | 'create') =>
+    Reflect.getMetadata(ROLES_KEY, methodTarget(method)) as Role[];
+  const controllerRoles = Reflect.getMetadata(ROLES_KEY, AppointmentsController) as Role[];
+
+  it('autorise uniquement les opérations nécessaires à la création depuis la caisse', () => {
+    expect(methodRoles('list')).toContain(Role.CASHIER);
+    expect(methodRoles('doctorAvailability')).toContain(Role.CASHIER);
+    expect(methodRoles('create')).toContain(Role.CASHIER);
+  });
+
+  it('maintient les autres actions de rendez-vous hors du rôle caisse', () => {
+    expect(controllerRoles).not.toContain(Role.CASHIER);
+    expect(Reflect.getMetadata(ROLES_KEY, methodTarget('directReferral'))).toBeUndefined();
+    expect(Reflect.getMetadata(ROLES_KEY, methodTarget('update'))).toBeUndefined();
+  });
+});
 
 describe('AppointmentsService confidentialité financière', () => {
   const appointment = {
@@ -53,5 +81,17 @@ describe('AppointmentsService confidentialité financière', () => {
 
     expect(rows[0]).toHaveProperty('careAuthorization.invoice.number', 'FAC-2026-000003');
     expect(rows[0]).toHaveProperty('careAuthorization.service.price', 20_000);
+  });
+
+  it('conserve les détails de facture nécessaires à l’encaissement pour un caissier', async () => {
+    const rows = await createService().list(undefined, undefined, undefined, 'active', {
+      id: 'cashier-1',
+      username: 'cashier',
+      role: Role.CASHIER,
+      additionalRoles: [],
+    });
+
+    expect(rows[0]).toHaveProperty('careAuthorization.invoice.id', 'invoice-1');
+    expect(rows[0]).toHaveProperty('careAuthorization.invoice.number', 'FAC-2026-000003');
   });
 });
