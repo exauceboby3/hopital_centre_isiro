@@ -40,7 +40,7 @@ import {
   type ConsultationFormMode,
   type DoctorAvailability,
   type Icd10Catalog,
-  bodySystems,
+  bodySystemGroups,
   decisionGuidance,
   decisionOptions,
   formatBodySystems,
@@ -193,7 +193,21 @@ export function ConsultationFormModal({
             ? `Dossier médical · ${patientName(editing.patient)}`
             : `Évaluation initiale · ${patientName(editing.patient)}`;
   const bodySystemOptions = useMemo(
-    () => bodySystems.map((system) => ({ value: system, label: system })),
+    () =>
+      bodySystemGroups.flatMap((group) => [
+        {
+          value: group.label,
+          label: 'Ensemble du système',
+          shortLabel: group.label,
+          group: group.label,
+        },
+        ...group.structures.map((structure) => ({
+          value: `${group.label} — ${structure}`,
+          label: structure,
+          shortLabel: structure,
+          group: group.label,
+        })),
+      ]),
     [],
   );
   const diagnosisOptions = useMemo(
