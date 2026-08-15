@@ -2242,6 +2242,24 @@ tbody tr:hover {
   font-weight: 750;
 }
 
+.searchable-option-group {
+  position: sticky;
+  z-index: 1;
+  top: -0.35rem;
+  margin: 0.45rem -0.05rem 0.2rem;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  color: var(--brand-dark);
+  background: var(--brand-soft);
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+}
+
+.searchable-select.expanded .searchable-options {
+  max-height: 32rem;
+}
+
 .searchable-options button {
   display: flex;
   align-items: center;
