@@ -197,7 +197,7 @@ export function ConsultationFormModal({
       bodySystemGroups.flatMap((group) => [
         {
           value: group.label,
-          label: 'Ensemble du système',
+          label: 'Tous les symptômes du groupe',
           shortLabel: group.label,
           group: group.label,
         },
@@ -329,7 +329,7 @@ export function ConsultationFormModal({
           {initialLocked ? (
             <div className="form-grid">
               <ReadOnlyField
-                label="Systèmes concernés par la plainte principale"
+                label="Signes et symptômes de la plainte principale"
                 value={form.chiefComplaint}
               />
               <ReadOnlyField
@@ -337,7 +337,7 @@ export function ConsultationFormModal({
                 value={form.presentIllnessHistory}
               />
               <ReadOnlyField
-                label="Systèmes explorés dans l’anamnèse"
+                label="Revue des symptômes par système"
                 value={form.anamnesisComplements}
               />
               <ReadOnlyField
@@ -354,14 +354,14 @@ export function ConsultationFormModal({
                 className="full"
                 required
                 expanded
-                label="Systèmes concernés par la plainte principale"
+                label="Signes et symptômes de la plainte principale"
                 values={selectedChiefComplaintSystems}
                 options={bodySystemOptions}
                 onChange={(values) =>
                   setForm({ ...form, chiefComplaint: formatBodySystems(values) })
                 }
-                placeholder="Rechercher un système puis le cocher…"
-                helpText="Sélectionnez tous les systèmes concernés ; aucune saisie libre n’est nécessaire."
+                placeholder="Rechercher un symptôme : fièvre, douleur, toux…"
+                helpText="Sélectionnez tous les signes et symptômes rapportés par le patient."
               />
               <label className="field full">
                 <span>Histoire de la maladie actuelle*</span>
@@ -377,14 +377,14 @@ export function ConsultationFormModal({
               <SearchableMultiSelect
                 className="full"
                 expanded
-                label="Systèmes explorés dans l’anamnèse"
+                label="Revue des symptômes par système"
                 values={selectedAnamnesisSystems}
                 options={bodySystemOptions}
                 onChange={(values) =>
                   setForm({ ...form, anamnesisComplements: formatBodySystems(values) })
                 }
-                placeholder="Rechercher un système puis le cocher…"
-                helpText="Cochez les systèmes revus pendant l’interrogatoire clinique."
+                placeholder="Rechercher et cocher les symptômes retrouvés…"
+                helpText="Cochez les symptômes supplémentaires retrouvés pendant l’interrogatoire."
               />
               {legacyAnamnesis && (
                 <div className="alert info full clinical-legacy-note">
