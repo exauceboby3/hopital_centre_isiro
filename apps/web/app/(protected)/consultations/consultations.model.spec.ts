@@ -11,30 +11,28 @@ import {
 } from './consultations.model';
 
 describe('consultation clinical selectors', () => {
-  it('stores body systems in the official alphabetical display order', () => {
+  it('stores clinical symptom selections in their stable display order', () => {
     const selected = ['Système nerveux', 'Appareil digestif'];
     const stored = formatBodySystems(selected);
 
     expect(stored).toBe('Appareil digestif\nSystème nerveux');
     expect(parseBodySystems(stored)).toEqual(['Appareil digestif', 'Système nerveux']);
-    expect([...bodySystems]).toEqual(
-      [...bodySystems].sort((left, right) => left.localeCompare(right, 'fr')),
-    );
+    expect(bodySystems).toContain('Signes généraux et constitutionnels');
   });
 
   it('ignores legacy free text when resolving selected systems', () => {
     expect(parseBodySystems('Douleur abdominale depuis deux jours')).toEqual([]);
   });
 
-  it('details every body system with selectable anatomical structures', () => {
-    expect(bodySystemGroups).toHaveLength(16);
+  it('details every clinical group with selectable signs and symptoms', () => {
+    expect(bodySystemGroups).toHaveLength(17);
     expect(bodySystemGroups.every((group) => group.structures.length >= 8)).toBe(true);
     expect(bodySystemStructures.length).toBeGreaterThan(150);
 
     const selected = [
-      'Appareil digestif — Foie',
-      'Système nerveux — Cerveau',
-      'Système sensoriel — vision — Rétine',
+      'Signes généraux et constitutionnels — Fièvre',
+      'Appareil digestif — Douleur abdominale',
+      'Système nerveux — Céphalée ou mal de tête',
     ];
 
     expect(parseBodySystems(formatBodySystems(selected))).toEqual(selected);
