@@ -1,9 +1,15 @@
 import { api, ApiError } from './api';
+import { notifyError } from './notifications';
+
+jest.mock('./notifications', () => ({
+  notifyError: jest.fn(),
+}));
 
 const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  jest.clearAllMocks();
   jest.restoreAllMocks();
 });
 
@@ -61,5 +67,41 @@ describe('api', () => {
       code: 'INVALID_JSON_RESPONSE',
       status: 200,
     });
+  });
+
+  it('conserve la notification globale des erreurs par défaut', async () => {
+    globalThis.fetch = jest
+      .fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ message: 'Action refusée.' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+    await expect(api('/restricted')).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 403,
+    });
+    expect(notifyError).toHaveBeenCalledWith('Action refusée.');
+  });
+
+  it('permet de traiter une erreur attendue sans afficher une notification globale', async () => {
+    globalThis.fetch = jest
+      .fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ message: 'Ce patient est attribué à un autre médecin.' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+    await expect(
+      api('/appointments/appointment-1/acknowledge', { method: 'PATCH' }, { notifyOnError: false }),
+    ).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 403,
+    });
+    expect(notifyError).not.toHaveBeenCalled();
   });
 });

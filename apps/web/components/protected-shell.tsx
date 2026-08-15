@@ -30,7 +30,7 @@ import NextImage from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { canAccessPath } from '@/lib/access-control';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { HOSPITAL_PROFILE_UPDATED_EVENT, HospitalBranding, publishBranding } from '@/lib/branding';
 import { scheduleHospitalNotificationSound } from '@/lib/notification-sound';
 import { effectiveRoles, hasAnyRole, roleLabels } from '@/lib/roles';
@@ -141,9 +141,25 @@ export function ProtectedShell({ children }: Readonly<{ children: React.ReactNod
     useProtectedShellPolling(user, playSound);
   const acknowledgePatient = async (appointmentId: string) => {
     try {
-      await api(`/appointments/${appointmentId}/acknowledge`, { method: 'PATCH' });
+      const currentQueue = await api<WaitingAppointment[]>(
+        '/appointments/waiting-room',
+        {},
+        { notifyOnError: false },
+      );
+      setWaitingPatients(currentQueue);
+      if (!currentQueue.some((appointment) => appointment.id === appointmentId)) return;
+
+      await api(
+        `/appointments/${appointmentId}/acknowledge`,
+        { method: 'PATCH' },
+        { notifyOnError: false },
+      );
       setWaitingPatients((current) => current.filter((row) => row.id !== appointmentId));
     } catch (error) {
+      if (error instanceof ApiError && error.status === 403) {
+        setWaitingPatients((current) => current.filter((row) => row.id !== appointmentId));
+        return;
+      }
       setShellError(error instanceof Error ? error.message : "Impossible d'accepter le patient.");
     }
   };
