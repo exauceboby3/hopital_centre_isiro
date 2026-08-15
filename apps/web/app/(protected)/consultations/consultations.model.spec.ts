@@ -1,4 +1,6 @@
 import {
+  bodySystemGroups,
+  bodySystemStructures,
   bodySystems,
   formatBodySystems,
   formatDiagnoses,
@@ -22,6 +24,20 @@ describe('consultation clinical selectors', () => {
 
   it('ignores legacy free text when resolving selected systems', () => {
     expect(parseBodySystems('Douleur abdominale depuis deux jours')).toEqual([]);
+  });
+
+  it('details every body system with selectable anatomical structures', () => {
+    expect(bodySystemGroups).toHaveLength(16);
+    expect(bodySystemGroups.every((group) => group.structures.length >= 8)).toBe(true);
+    expect(bodySystemStructures.length).toBeGreaterThan(150);
+
+    const selected = [
+      'Appareil digestif — Foie',
+      'Système nerveux — Cerveau',
+      'Système sensoriel — vision — Rétine',
+    ];
+
+    expect(parseBodySystems(formatBodySystems(selected))).toEqual(selected);
   });
 
   it('stores and restores official CIM-10 codes with their complete labels', () => {
