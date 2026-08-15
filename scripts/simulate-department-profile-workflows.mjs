@@ -179,7 +179,12 @@ const reportPage = fs.readFileSync('apps/web/app/(protected)/service-reports/pag
 const prescriptionComponent = fs.readFileSync('apps/web/components/consultation-structured-prescription.tsx', 'utf8');
 verify('le cadre mobile est centré sur 480 px', globals.includes('width: min(100%, 480px)'));
 verify('les contrôles tactiles mobiles mesurent au moins 44 px', globals.includes('min-height: 44px'));
-verify('le dossier patient présente une chronologie et des avenants', patientRecord.includes('Chronologie') && patientRecord.includes('Corrections et ajouts'));
+verify(
+  'le dossier patient présente un historique médical structuré et des avenants',
+  patientRecord.includes('Historique médical') &&
+    patientRecord.includes('patient-history-table') &&
+    patientRecord.includes('Corrections et ajouts'),
+);
 verify('le rapport reprend MIH, MIF, PED, G-O, maternité et chirurgie', ['MIH', 'MIF', 'PED', 'GO', 'MATERNITE', 'CHIRURGIE'].every((key) => reportPage.includes(key)));
 verify('la fiche de réquisition comporte demandeur, fonction, unité et motif', ['Demandeur', 'Fonction', 'Unité', 'Motif de la demande'].every((label) => reportPage.includes(label)));
 verify('la prescription permet un produit non référencé', prescriptionComponent.includes('Produit non référencé / achat extérieur'));

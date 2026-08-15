@@ -4,6 +4,8 @@ import {
   Activity,
   AlertTriangle,
   ArrowLeft,
+  ChevronDown,
+  ChevronUp,
   FileClock,
   FilePlus2,
   HeartPulse,
@@ -15,8 +17,9 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
+import { StatusBadge } from '@/components/status-badge';
 import { api } from '@/lib/api';
 import { hasAnyRole } from '@/lib/roles';
 import { Patient } from '@/lib/types';
@@ -32,6 +35,9 @@ type HistoryEntry = {
   status?: string;
   author?: string;
   department?: string;
+  details?: Array<{ label: string; value: string }>;
+  diagnoses?: Array<{ code: string; label: string }>;
+  signature?: { doctorName: string; signedAt: string; hash: string } | null;
 };
 
 type History = {
@@ -125,6 +131,7 @@ export default function PatientRecordPage() {
   const [discussions, setDiscussions] = useState<EmergencyDiscussion[]>([]);
   const [comment, setComment] = useState<Record<string, string>>({});
   const [tab, setTab] = useState<'SUMMARY' | 'TIMELINE' | 'AMENDMENTS' | 'DISCUSSIONS'>('SUMMARY');
+  const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -208,6 +215,14 @@ export default function PatientRecordPage() {
   };
 
   const latest = useMemo(() => history?.entries.slice(0, 6) ?? [], [history]);
+  const toggleHistoryEntry = (key: string) => {
+    setExpandedEntries((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   if (loading)
     return (
@@ -261,7 +276,7 @@ export default function PatientRecordPage() {
           Vue générale
         </button>
         <button className={tab === 'TIMELINE' ? 'active' : ''} onClick={() => setTab('TIMELINE')}>
-          Chronologie
+          Historique médical
         </button>
         <button
           className={tab === 'AMENDMENTS' ? 'active' : ''}
@@ -367,33 +382,134 @@ export default function PatientRecordPage() {
       )}
 
       {tab === 'TIMELINE' && (
-        <section className="panel patient-timeline-panel">
-          {history.groups.map((group) => (
-            <div className="patient-timeline-group" key={group.date}>
-              <h3>
-                {new Date(`${group.date}T00:00:00`).toLocaleDateString('fr-CD', {
-                  dateStyle: 'full',
-                })}
-              </h3>
-              {group.entries.map((entry) => (
-                <article key={`${entry.kind}-${entry.id}`}>
-                  <i />
-                  <div>
-                    <span className="eyebrow">{labels[entry.kind] ?? entry.kind}</span>
-                    <strong>{entry.title}</strong>
-                    <p>{entry.description || 'Aucun détail complémentaire.'}</p>
-                    <small>
-                      {entry.author || 'Système'} · {entry.department || 'Service non précisé'} ·{' '}
-                      {new Date(entry.date).toLocaleTimeString('fr-CD', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </small>
-                  </div>
-                </article>
-              ))}
+        <section className="panel patient-history-panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">Données médicales et administratives</span>
+              <h2>Historique structuré du patient</h2>
             </div>
-          ))}
+            <strong>{history.entries.length}</strong>
+          </div>
+          <div className="table-scroll">
+            <table className="patient-history-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Type</th>
+                  <th>Information essentielle</th>
+                  <th>Statut</th>
+                  <th>Responsable</th>
+                  <th>Dossier</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.entries.map((entry) => {
+                  const key = `${entry.kind}-${entry.id}`;
+                  const expanded = expandedEntries.has(key);
+                  const hasDetails = Boolean(
+                    entry.details?.length || entry.diagnoses?.length || entry.signature,
+                  );
+                  return (
+                    <Fragment key={key}>
+                      <tr>
+                        <td>
+                          <strong>{new Date(entry.date).toLocaleDateString('fr-CD')}</strong>
+                          <br />
+                          <span className="muted">
+                            {new Date(entry.date).toLocaleTimeString('fr-CD', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="patient-history-kind">
+                            {labels[entry.kind] ?? entry.kind}
+                          </span>
+                        </td>
+                        <td>
+                          <strong>{entry.title}</strong>
+                          <p>{entry.description || 'Aucun détail complémentaire.'}</p>
+                        </td>
+                        <td>{entry.status ? <StatusBadge status={entry.status} /> : '—'}</td>
+                        <td>
+                          <strong>{entry.author || 'Système'}</strong>
+                          <br />
+                          <span className="muted">{entry.department || 'Service non précisé'}</span>
+                        </td>
+                        <td>
+                          {hasDetails ? (
+                            <button
+                              type="button"
+                              className="text-button patient-history-toggle"
+                              aria-expanded={expanded}
+                              onClick={() => toggleHistoryEntry(key)}
+                            >
+                              {expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                              {expanded ? 'Réduire' : 'Afficher plus'}
+                            </button>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                      </tr>
+                      {expanded && (
+                        <tr className="patient-history-detail-row">
+                          <td colSpan={6}>
+                            <div className="patient-history-details">
+                              {entry.diagnoses && entry.diagnoses.length > 0 && (
+                                <section>
+                                  <h3>Diagnostics CIM-10</h3>
+                                  <table className="compact-table patient-diagnosis-table">
+                                    <thead>
+                                      <tr>
+                                        <th>Code officiel</th>
+                                        <th>Diagnostic</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {entry.diagnoses.map((diagnosis) => (
+                                        <tr key={diagnosis.code}>
+                                          <td>
+                                            <strong>{diagnosis.code}</strong>
+                                          </td>
+                                          <td>{diagnosis.label}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </section>
+                              )}
+                              {entry.details && entry.details.length > 0 && (
+                                <section>
+                                  <h3>Éléments cliniques importants</h3>
+                                  <dl>
+                                    {entry.details.map((detail) => (
+                                      <div key={detail.label}>
+                                        <dt>{detail.label}</dt>
+                                        <dd>{detail.value}</dd>
+                                      </div>
+                                    ))}
+                                  </dl>
+                                </section>
+                              )}
+                              {entry.signature && (
+                                <p className="patient-history-signature">
+                                  <ShieldCheck size={16} /> Dossier signé par{' '}
+                                  {entry.signature.doctorName} le{' '}
+                                  {new Date(entry.signature.signedAt).toLocaleString('fr-CD')}.
+                                </p>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
 

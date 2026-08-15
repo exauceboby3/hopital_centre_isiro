@@ -97,6 +97,32 @@
   font-weight: 700;
 }
 
+.clinical-appointment-context {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-left: 4px solid var(--primary);
+  border-radius: 10px;
+  background: var(--canvas);
+}
+
+.clinical-appointment-context span {
+  color: var(--muted);
+}
+
+.clinical-legacy-note {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.consultation-diagnosis-table > .table-scroll {
+  margin-top: 7px;
+}
+
+.consultation-diagnosis-table p {
+  white-space: pre-line;
+}
+
 .clinical-form-section {
   display: grid;
   gap: 14px;

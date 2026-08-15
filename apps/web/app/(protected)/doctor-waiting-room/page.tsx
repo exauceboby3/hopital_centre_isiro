@@ -37,6 +37,10 @@ interface Doctor {
   availability: 'AVAILABLE' | 'BUSY' | 'UNKNOWN';
 }
 
+interface AcceptedAppointment {
+  consultation?: { id: string } | null;
+}
+
 const triageRank: Record<WaitingPatient['triageLevel'], number> = {
   RED: 1,
   ORANGE: 2,
@@ -134,10 +138,14 @@ export default function DoctorWaitingRoomPage() {
   const accept = async (row: WaitingPatient) => {
     setAcceptingId(row.id);
     try {
-      await api(`/appointments/${row.id}/acknowledge`, { method: 'PATCH' });
+      const accepted = await api<AcceptedAppointment>(`/appointments/${row.id}/acknowledge`, {
+        method: 'PATCH',
+      });
       notifySuccess(`${patientName(row)} est maintenant en consultation.`, 'Patient reçu');
       setRows((current) => current.filter((item) => item.id !== row.id));
-      router.push(`/consultations?appointmentId=${encodeURIComponent(row.id)}`);
+      const query = new URLSearchParams({ appointmentId: row.id });
+      if (accepted.consultation?.id) query.set('consultationId', accepted.consultation.id);
+      router.push(`/consultations?${query.toString()}`);
     } catch (reason) {
       notifyError(reason instanceof Error ? reason.message : 'Impossible de recevoir le patient.');
     } finally {

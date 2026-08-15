@@ -89,6 +89,7 @@ interface Appointment {
 
 interface BillableService {
   id: string;
+  code?: string;
   name: string;
   price?: string;
 }
@@ -126,7 +127,6 @@ const emptyForm = {
   patientId: '',
   doctorId: '',
   scheduledAt: '',
-  billableServiceId: '',
   reason: '',
 };
 
@@ -449,10 +449,16 @@ export default function AppointmentsPage() {
       setError('Choisissez une date et une heure futures selon l’heure d’Isiro.');
       return;
     }
+    const consultationService = services.find((entry) => entry.code === 'CONS-GEN') ?? services[0];
+    if (!consultationService) {
+      setError(
+        'Le service de consultation générale est introuvable. Activez-le dans le catalogue de facturation.',
+      );
+      return;
+    }
     setSubmitting(true);
     try {
-      const service =
-        services.find((entry) => entry.id === form.billableServiceId)?.name ?? 'Consultation';
+      const service = consultationService.name;
       const created = await api<Appointment>(
         directReferral ? '/appointments/direct-referral' : '/appointments',
         {
@@ -462,11 +468,16 @@ export default function AppointmentsPage() {
               ? {
                   patientId: form.patientId,
                   doctorId: form.doctorId,
-                  billableServiceId: form.billableServiceId,
+                  billableServiceId: consultationService.id,
                   reason: form.reason || undefined,
                   service,
                 }
-              : { ...form, service, scheduledAt: scheduledAt!.toISOString() },
+              : {
+                  ...form,
+                  billableServiceId: consultationService.id,
+                  service,
+                  scheduledAt: scheduledAt!.toISOString(),
+                },
           ),
         },
       );
@@ -1034,21 +1045,6 @@ export default function AppointmentsPage() {
                   <small>Le premier créneau proposé est dans 15 minutes.</small>
                 </label>
               )}
-              <label className="field">
-                <span>Type de consultation *</span>
-                <select
-                  required
-                  value={form.billableServiceId}
-                  onChange={(event) => setForm({ ...form, billableServiceId: event.target.value })}
-                >
-                  <option value="">Sélectionner</option>
-                  {services.map((service) => (
-                    <option key={service.id} value={service.id}>
-                      {service.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
               <label className="field full">
                 <span>Motif</span>
                 <textarea

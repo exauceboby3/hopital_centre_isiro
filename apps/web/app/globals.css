@@ -2253,6 +2253,47 @@ tbody tr:hover {
   padding: 0.9rem;
   text-align: center;
 }
+.searchable-selected-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.5rem;
+}
+.searchable-selected-values > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--brand) 24%, var(--line));
+  border-radius: 999px;
+  color: var(--brand);
+  background: var(--brand-soft);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+.searchable-selected-values button {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  color: currentColor;
+  background: transparent;
+}
+.searchable-checkbox {
+  display: grid !important;
+  flex: 0 0 auto;
+  width: 1.15rem;
+  height: 1.15rem;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+}
+.searchable-checkbox.checked {
+  border-color: var(--brand);
+  color: white;
+  background: var(--brand);
+}
 .modal-actions {
   display: flex;
   justify-content: flex-end;
