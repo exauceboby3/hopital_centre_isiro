@@ -142,24 +142,271 @@ export interface Icd10Catalog {
   rows: Icd10CatalogRow[];
 }
 
-export const bodySystems = [
-  'Appareil cardiovasculaire',
-  'Appareil digestif',
-  'Appareil génital féminin',
-  'Appareil génital masculin',
-  'Appareil musculosquelettique',
-  'Appareil respiratoire',
-  'Appareil urinaire',
-  'Bouche et dentition',
-  'Système endocrinien et métabolique',
-  'Système hématologique',
-  'Système immunitaire',
-  'Système lymphatique',
-  'Système nerveux',
-  'Système sensoriel — audition et équilibre',
-  'Système sensoriel — vision',
-  'Système tégumentaire — peau et phanères',
+export const bodySystemGroups = [
+  {
+    label: 'Appareil cardiovasculaire',
+    structures: [
+      'Artères',
+      'Artérioles',
+      'Capillaires',
+      'Circulation coronaire',
+      'Circulation périphérique',
+      'Cœur',
+      'Endocarde',
+      'Microcirculation',
+      'Myocarde',
+      'Péricarde',
+      'Valves cardiaques',
+      'Veines',
+      'Veinules',
+    ],
+  },
+  {
+    label: 'Appareil digestif',
+    structures: [
+      'Anus',
+      'Appendice',
+      'Canaux biliaires',
+      'Côlon',
+      'Duodénum',
+      'Estomac',
+      'Foie',
+      'Gros intestin',
+      'Iléon',
+      'Jéjunum',
+      'Œsophage',
+      'Pancréas exocrine',
+      'Péritoine',
+      'Pharynx digestif',
+      'Rectum',
+      'Vésicule biliaire',
+    ],
+  },
+  {
+    label: 'Appareil génital féminin',
+    structures: [
+      'Col de l’utérus',
+      'Endomètre',
+      'Glandes de Bartholin',
+      'Ovaires',
+      'Périnée féminin',
+      'Seins et glandes mammaires',
+      'Trompes utérines',
+      'Utérus',
+      'Vagin',
+      'Vulve',
+    ],
+  },
+  {
+    label: 'Appareil génital masculin',
+    structures: [
+      'Canaux déférents',
+      'Épididymes',
+      'Pénis',
+      'Périnée masculin',
+      'Prostate',
+      'Scrotum',
+      'Testicules',
+      'Urètre masculin',
+      'Vésicules séminales',
+    ],
+  },
+  {
+    label: 'Appareil musculosquelettique',
+    structures: [
+      'Articulations',
+      'Bourses séreuses',
+      'Cartilages',
+      'Colonne vertébrale',
+      'Fascias',
+      'Ligaments',
+      'Membres inférieurs',
+      'Membres supérieurs',
+      'Moelle osseuse',
+      'Muscles squelettiques',
+      'Os',
+      'Squelette axial',
+      'Squelette appendiculaire',
+      'Tendons',
+    ],
+  },
+  {
+    label: 'Appareil respiratoire',
+    structures: [
+      'Alvéoles pulmonaires',
+      'Bronches',
+      'Bronchioles',
+      'Diaphragme',
+      'Larynx',
+      'Médiastin',
+      'Nez et fosses nasales',
+      'Pharynx respiratoire',
+      'Plèvre',
+      'Poumon gauche',
+      'Poumon droit',
+      'Sinus paranasaux',
+      'Trachée',
+    ],
+  },
+  {
+    label: 'Appareil urinaire',
+    structures: [
+      'Bassinet rénal',
+      'Calices rénaux',
+      'Néphron',
+      'Rein gauche',
+      'Rein droit',
+      'Uretères',
+      'Urètre',
+      'Vessie',
+    ],
+  },
+  {
+    label: 'Bouche et dentition',
+    structures: [
+      'Articulation temporomandibulaire',
+      'Dents',
+      'Gencives',
+      'Glandes salivaires',
+      'Langue',
+      'Lèvres',
+      'Muqueuse buccale',
+      'Palais',
+      'Parodonte',
+      'Plancher buccal',
+    ],
+  },
+  {
+    label: 'Système endocrinien et métabolique',
+    structures: [
+      'Glandes parathyroïdes',
+      'Glandes surrénales',
+      'Hypophyse',
+      'Hypothalamus',
+      'Métabolisme des glucides',
+      'Métabolisme des lipides',
+      'Métabolisme des protéines',
+      'Métabolisme hydroélectrolytique',
+      'Ovaires — fonction endocrine',
+      'Pancréas endocrine',
+      'Testicules — fonction endocrine',
+      'Thyroïde',
+    ],
+  },
+  {
+    label: 'Système hématologique',
+    structures: [
+      'Coagulation et hémostase',
+      'Globules blancs',
+      'Globules rouges',
+      'Hémoglobine',
+      'Moelle hématopoïétique',
+      'Plasma',
+      'Plaquettes',
+      'Sang périphérique',
+    ],
+  },
+  {
+    label: 'Système immunitaire',
+    structures: [
+      'Anticorps et immunoglobulines',
+      'Complément',
+      'Cytokines',
+      'Immunité adaptative',
+      'Immunité innée',
+      'Lymphocytes B',
+      'Lymphocytes T',
+      'Phagocytes',
+    ],
+  },
+  {
+    label: 'Système lymphatique',
+    structures: [
+      'Amygdales',
+      'Canaux lymphatiques',
+      'Capillaires lymphatiques',
+      'Ganglions lymphatiques',
+      'Lymphe',
+      'Rate',
+      'Tissu lymphoïde associé aux muqueuses',
+      'Thymus',
+      'Vaisseaux lymphatiques',
+    ],
+  },
+  {
+    label: 'Système nerveux',
+    structures: [
+      'Cerveau',
+      'Cervelet',
+      'Jonction neuromusculaire',
+      'Méninges',
+      'Moelle épinière',
+      'Nerfs crâniens',
+      'Nerfs périphériques',
+      'Système nerveux autonome',
+      'Système nerveux central',
+      'Système nerveux parasympathique',
+      'Système nerveux sympathique',
+      'Tronc cérébral',
+    ],
+  },
+  {
+    label: 'Système sensoriel — audition et équilibre',
+    structures: [
+      'Caisse du tympan',
+      'Canaux semi-circulaires',
+      'Cochlée',
+      'Nerf vestibulocochléaire',
+      'Oreille externe',
+      'Oreille interne',
+      'Oreille moyenne',
+      'Osselets',
+      'Système vestibulaire',
+      'Trompe auditive',
+      'Tympan',
+    ],
+  },
+  {
+    label: 'Système sensoriel — vision',
+    structures: [
+      'Choroïde',
+      'Conjonctive',
+      'Cornée',
+      'Cristallin',
+      'Glandes lacrymales',
+      'Iris',
+      'Muscles oculomoteurs',
+      'Nerf optique',
+      'Orbite',
+      'Paupières',
+      'Rétine',
+      'Sclère',
+      'Uvéa',
+      'Vitré',
+    ],
+  },
+  {
+    label: 'Système tégumentaire — peau et phanères',
+    structures: [
+      'Cheveux et poils',
+      'Derme',
+      'Épiderme',
+      'Glandes sébacées',
+      'Glandes sudoripares',
+      'Hypoderme et tissu sous-cutané',
+      'Muqueuses cutanées',
+      'Ongles',
+      'Peau',
+    ],
+  },
 ] as const;
+
+export const bodySystems = bodySystemGroups.map((group) => group.label);
+
+export const bodySystemStructures = bodySystemGroups.flatMap((group) => [
+  group.label,
+  ...group.structures.map((structure) => `${group.label} — ${structure}`),
+]);
 
 export function parseBodySystems(value?: string) {
   if (!value) return [];
@@ -169,12 +416,12 @@ export function parseBodySystems(value?: string) {
       .map((entry) => entry.trim())
       .filter(Boolean),
   );
-  return bodySystems.filter((system) => entries.has(system));
+  return bodySystemStructures.filter((structure) => entries.has(structure));
 }
 
 export function formatBodySystems(values: string[]) {
   const selected = new Set(values);
-  return bodySystems.filter((system) => selected.has(system)).join('\n');
+  return bodySystemStructures.filter((structure) => selected.has(structure)).join('\n');
 }
 
 export function icd10DisplayLabel(row: Icd10CatalogRow) {

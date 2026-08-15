@@ -1,7 +1,7 @@
 'use client';
 
 import { Check, ChevronDown, Search, X } from 'lucide-react';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react';
 
 const SEARCH_PAGE_SIZE = 80;
 
@@ -10,6 +10,7 @@ export interface SearchableOption {
   label: string;
   shortLabel?: string;
   description?: string;
+  group?: string;
   disabled?: boolean;
 }
 
@@ -277,26 +278,33 @@ export function SearchableMultiSelect({
               <div className="searchable-empty">Aucun résultat</div>
             ) : (
               <>
-                {filtered.map((option) => {
+                {filtered.map((option, index) => {
                   const checked = values.includes(option.value);
+                  const previousGroup = filtered[index - 1]?.group;
                   return (
-                    <button
-                      type="button"
-                      role="option"
-                      aria-selected={checked}
-                      disabled={option.disabled}
-                      key={option.value}
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => toggle(option.value)}
-                    >
-                      <span>
-                        <strong>{option.label}</strong>
-                        {option.description && <small>{option.description}</small>}
-                      </span>
-                      <span className={`searchable-checkbox${checked ? ' checked' : ''}`}>
-                        {checked && <Check size={14} />}
-                      </span>
-                    </button>
+                    <Fragment key={option.value}>
+                      {option.group && option.group !== previousGroup && (
+                        <div className="searchable-option-group" role="presentation">
+                          {option.group}
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={checked}
+                        disabled={option.disabled}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => toggle(option.value)}
+                      >
+                        <span>
+                          <strong>{option.label}</strong>
+                          {option.description && <small>{option.description}</small>}
+                        </span>
+                        <span className={`searchable-checkbox${checked ? ' checked' : ''}`}>
+                          {checked && <Check size={14} />}
+                        </span>
+                      </button>
+                    </Fragment>
                   );
                 })}
                 {filtered.length < matchingOptions.length && (
