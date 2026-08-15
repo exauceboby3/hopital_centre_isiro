@@ -15,6 +15,10 @@ export class ApiError extends Error {
   }
 }
 
+export interface ApiRequestOptions {
+  notifyOnError?: boolean;
+}
+
 const statusMessages: Record<number, string> = {
   400: 'Le formulaire contient des informations invalides.',
   401: 'Votre session est expirée. Reconnectez-vous.',
@@ -33,35 +37,53 @@ const statusMessages: Record<number, string> = {
   504: 'Le serveur met trop de temps à répondre. Réessayez.',
 };
 
-async function safeFetch(url: string, init: RequestInit): Promise<Response> {
+async function safeFetch(
+  url: string,
+  init: RequestInit,
+  notifyOnError: boolean,
+): Promise<Response> {
   try {
     return await fetch(url, init);
   } catch {
     const message =
       'Impossible de joindre le serveur. Vérifiez que l’API fonctionne et que le réseau est disponible.';
-    notifyError(message, 'Serveur indisponible');
+    if (notifyOnError) notifyError(message, 'Serveur indisponible');
     throw new ApiError(message, 0, 'NETWORK_ERROR');
   }
 }
 
-async function request<T>(path: string, init: RequestInit, allowRefresh: boolean): Promise<T> {
+async function request<T>(
+  path: string,
+  init: RequestInit,
+  allowRefresh: boolean,
+  options: ApiRequestOptions,
+): Promise<T> {
+  const notifyOnError = options.notifyOnError !== false;
   const isFormData = typeof FormData !== 'undefined' && init.body instanceof FormData;
-  const response = await safeFetch(`${API_URL}${path}`, {
-    ...init,
-    credentials: 'include',
-    headers: {
-      ...(init.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
-      ...init.headers,
+  const response = await safeFetch(
+    `${API_URL}${path}`,
+    {
+      ...init,
+      credentials: 'include',
+      headers: {
+        ...(init.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
+        ...init.headers,
+      },
     },
-  });
+    notifyOnError,
+  );
 
   if (response.status === 401 && allowRefresh && !path.startsWith('/auth/')) {
-    const refreshed = await safeFetch(`${API_URL}/auth/refresh`, {
-      method: 'POST',
-      credentials: 'include',
-    });
+    const refreshed = await safeFetch(
+      `${API_URL}/auth/refresh`,
+      {
+        method: 'POST',
+        credentials: 'include',
+      },
+      notifyOnError,
+    );
     if (refreshed.ok) {
-      return request<T>(path, init, false);
+      return request<T>(path, init, false, options);
     }
   }
 
@@ -78,7 +100,7 @@ async function request<T>(path: string, init: RequestInit, allowRefresh: boolean
     if (response.status >= 500 && payload?.requestId) {
       message = `${message} Référence : ${payload.requestId}.`;
     }
-    notifyError(message);
+    if (notifyOnError) notifyError(message);
     throw new ApiError(
       message,
       response.status,
@@ -101,13 +123,17 @@ async function request<T>(path: string, init: RequestInit, allowRefresh: boolean
     return JSON.parse(responseBody) as T;
   } catch {
     const message = 'Le serveur a renvoyé une réponse illisible. Rechargez la page puis réessayez.';
-    notifyError(message);
+    if (notifyOnError) notifyError(message);
     throw new ApiError(message, response.status, 'INVALID_JSON_RESPONSE');
   }
 }
 
-export function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  return request<T>(path, init, true);
+export function api<T>(
+  path: string,
+  init: RequestInit = {},
+  options: ApiRequestOptions = {},
+): Promise<T> {
+  return request<T>(path, init, true, options);
 }
 
 export function apiUrl(path: string): string {
