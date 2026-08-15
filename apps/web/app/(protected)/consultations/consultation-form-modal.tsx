@@ -15,13 +15,20 @@ import {
   Save,
   ScanLine,
 } from 'lucide-react';
-import type { Dispatch, FormEventHandler, SetStateAction } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type FormEventHandler,
+  type SetStateAction,
+} from 'react';
 import {
   ConsultationStructuredPrescription,
   type ConsultationPrescription,
 } from '@/components/consultation-structured-prescription';
 import { Modal } from '@/components/modal';
-import { SearchableSelect } from '@/components/searchable-select';
+import { SearchableMultiSelect, SearchableSelect } from '@/components/searchable-select';
 import { StatusBadge } from '@/components/status-badge';
 import { patientName } from '@/lib/display';
 import {
@@ -32,10 +39,18 @@ import {
   type ConsultationExam,
   type ConsultationFormMode,
   type DoctorAvailability,
+  type Icd10Catalog,
+  bodySystems,
   decisionGuidance,
   decisionOptions,
+  formatBodySystems,
+  formatDiagnoses,
   formatDate,
+  icd10DisplayLabel,
   initialDecisionOptions,
+  parseBodySystems,
+  parseDiagnoses,
+  parseDiagnosisCodes,
   resultValues,
   saveLabel,
   workflowLabel,
@@ -90,6 +105,37 @@ function ReadOnlyField({ label, value }: { label: string; value?: string }) {
   );
 }
 
+function ReadOnlyDiagnoses({ value }: { value?: string }) {
+  const diagnoses = parseDiagnoses(value);
+  if (!diagnoses.length)
+    return <ReadOnlyField label="Hypothèses diagnostiques CIM-10" value={value} />;
+  return (
+    <div className="field full consultation-readonly-field consultation-diagnosis-table">
+      <span>Hypothèses diagnostiques CIM-10</span>
+      <div className="table-scroll">
+        <table className="compact-table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Diagnostic</th>
+            </tr>
+          </thead>
+          <tbody>
+            {diagnoses.map((diagnosis) => (
+              <tr key={diagnosis.code}>
+                <td>
+                  <strong>{diagnosis.code}</strong>
+                </td>
+                <td>{diagnosis.label}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export function ConsultationFormModal({
   editing,
   mode,
@@ -119,6 +165,9 @@ export function ConsultationFormModal({
   existingPrescription,
   onPrescriptionCreated,
 }: ConsultationFormModalProps) {
+  const [diagnosisCatalog, setDiagnosisCatalog] = useState<Icd10Catalog['rows']>([]);
+  const [diagnosisCatalogError, setDiagnosisCatalogError] = useState('');
+  const [diagnosisCatalogLoading, setDiagnosisCatalogLoading] = useState(true);
   const initialLocked = mode !== 'INITIAL_ASSESSMENT';
   const postLaboratory = mode === 'POST_LABORATORY';
   const readOnly = ['LABORATORY_VIEW', 'HOSPITALIZATION_VIEW', 'READ_ONLY'].includes(mode);
@@ -143,6 +192,55 @@ export function ConsultationFormModal({
           : mode === 'READ_ONLY'
             ? `Dossier médical · ${patientName(editing.patient)}`
             : `Évaluation initiale · ${patientName(editing.patient)}`;
+  const bodySystemOptions = useMemo(
+    () => bodySystems.map((system) => ({ value: system, label: system })),
+    [],
+  );
+  const diagnosisOptions = useMemo(
+    () =>
+      diagnosisCatalog.map((row) => ({
+        value: row[0],
+        label: `${row[0]} · ${icd10DisplayLabel(row)}`,
+        shortLabel: row[0],
+        description: row[3],
+      })),
+    [diagnosisCatalog],
+  );
+  const selectedChiefComplaintSystems = parseBodySystems(form.chiefComplaint);
+  const selectedAnamnesisSystems = parseBodySystems(form.anamnesisComplements);
+  const selectedDiagnosisCodes = parseDiagnosisCodes(form.diagnosis);
+  const legacyAnamnesis =
+    form.anamnesisComplements.trim() && !selectedAnamnesisSystems.length
+      ? form.anamnesisComplements.trim()
+      : '';
+  const legacyDiagnosis =
+    form.diagnosis.trim() && !selectedDiagnosisCodes.length ? form.diagnosis.trim() : '';
+
+  useEffect(() => {
+    if (mode !== 'INITIAL_ASSESSMENT') return;
+    const controller = new AbortController();
+    setDiagnosisCatalogLoading(true);
+    fetch('/data/cim-10-fr-2025.json', { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Référentiel CIM-10 indisponible.');
+        const catalog = (await response.json()) as Icd10Catalog;
+        if (!Array.isArray(catalog.rows) || !catalog.rows.length) {
+          throw new Error('Référentiel CIM-10 vide ou invalide.');
+        }
+        setDiagnosisCatalog(catalog.rows);
+        setDiagnosisCatalogError('');
+      })
+      .catch((reason: unknown) => {
+        if (reason instanceof DOMException && reason.name === 'AbortError') return;
+        setDiagnosisCatalogError(
+          reason instanceof Error ? reason.message : 'Référentiel CIM-10 indisponible.',
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDiagnosisCatalogLoading(false);
+      });
+    return () => controller.abort();
+  }, [mode]);
 
   return (
     <Modal
@@ -196,6 +294,11 @@ export function ConsultationFormModal({
           </div>
         )}
 
+        <div className="clinical-appointment-context">
+          <strong>Motif transmis lors du rendez-vous</strong>
+          <span>{editing.reason || 'Aucun motif renseigné à l’accueil.'}</span>
+        </div>
+
         <section className="clinical-form-section">
           <div className="section-title">
             <span>{initialLocked ? <LockKeyhole size={16} /> : '1'}</span>
@@ -211,31 +314,40 @@ export function ConsultationFormModal({
 
           {initialLocked ? (
             <div className="form-grid">
-              <ReadOnlyField label="Plainte principale" value={form.chiefComplaint} />
+              <ReadOnlyField
+                label="Systèmes concernés par la plainte principale"
+                value={form.chiefComplaint}
+              />
               <ReadOnlyField
                 label="Histoire de la maladie actuelle"
                 value={form.presentIllnessHistory}
               />
-              <ReadOnlyField label="Compléments d’anamnèse" value={form.anamnesisComplements} />
+              <ReadOnlyField
+                label="Systèmes explorés dans l’anamnèse"
+                value={form.anamnesisComplements}
+              />
               <ReadOnlyField
                 label="Antécédents, interventions, histoire familiale et allergies"
                 value={form.medicalHistory}
               />
               <ReadOnlyField label="Examen physique initial" value={form.physicalExamination} />
-              <ReadOnlyField label="Hypothèses diagnostiques initiales" value={form.diagnosis} />
+              <ReadOnlyDiagnoses value={form.diagnosis} />
               <ReadOnlyField label="Conduite initiale" value={form.treatmentPlan} />
             </div>
           ) : (
             <div className="form-grid">
-              <label className="field full">
-                <span>Plainte principale*</span>
-                <textarea
-                  required
-                  rows={2}
-                  value={form.chiefComplaint}
-                  onChange={(event) => setForm({ ...form, chiefComplaint: event.target.value })}
-                />
-              </label>
+              <SearchableMultiSelect
+                className="full"
+                required
+                label="Systèmes concernés par la plainte principale"
+                values={selectedChiefComplaintSystems}
+                options={bodySystemOptions}
+                onChange={(values) =>
+                  setForm({ ...form, chiefComplaint: formatBodySystems(values) })
+                }
+                placeholder="Rechercher un système puis le cocher…"
+                helpText="Sélectionnez tous les systèmes concernés ; aucune saisie libre n’est nécessaire."
+              />
               <label className="field full">
                 <span>Histoire de la maladie actuelle*</span>
                 <textarea
@@ -247,16 +359,22 @@ export function ConsultationFormModal({
                   }
                 />
               </label>
-              <label className="field full">
-                <span>Compléments d’anamnèse</span>
-                <textarea
-                  rows={3}
-                  value={form.anamnesisComplements}
-                  onChange={(event) =>
-                    setForm({ ...form, anamnesisComplements: event.target.value })
-                  }
-                />
-              </label>
+              <SearchableMultiSelect
+                className="full"
+                label="Systèmes explorés dans l’anamnèse"
+                values={selectedAnamnesisSystems}
+                options={bodySystemOptions}
+                onChange={(values) =>
+                  setForm({ ...form, anamnesisComplements: formatBodySystems(values) })
+                }
+                placeholder="Rechercher un système puis le cocher…"
+                helpText="Cochez les systèmes revus pendant l’interrogatoire clinique."
+              />
+              {legacyAnamnesis && (
+                <div className="alert info full clinical-legacy-note">
+                  <strong>Ancienne anamnèse :</strong> {legacyAnamnesis}
+                </div>
+              )}
               <label className="field full">
                 <span>Antécédents, interventions, histoire familiale et allergies</span>
                 <textarea
@@ -276,15 +394,29 @@ export function ConsultationFormModal({
                   }
                 />
               </label>
-              <label className="field full">
-                <span>Hypothèses diagnostiques*</span>
-                <textarea
-                  required
-                  rows={3}
-                  value={form.diagnosis}
-                  onChange={(event) => setForm({ ...form, diagnosis: event.target.value })}
-                />
-              </label>
+              <SearchableMultiSelect
+                className="full"
+                required
+                disabled={diagnosisCatalogLoading || Boolean(diagnosisCatalogError)}
+                label="Hypothèses diagnostiques CIM-10"
+                values={selectedDiagnosisCodes}
+                options={diagnosisOptions}
+                onChange={(codes) =>
+                  setForm({ ...form, diagnosis: formatDiagnoses(codes, diagnosisCatalog) })
+                }
+                placeholder="Saisir un code ou le nom d’une maladie…"
+                helpText={
+                  diagnosisCatalogLoading
+                    ? 'Chargement du référentiel officiel…'
+                    : diagnosisCatalogError ||
+                      `${diagnosisCatalog.length.toLocaleString('fr-FR')} codes CIM-10-FR · ATIH / ANS / OMS · CC BY-ND 3.0 IGO`
+                }
+              />
+              {legacyDiagnosis && (
+                <div className="alert info full clinical-legacy-note">
+                  <strong>Ancienne hypothèse :</strong> {legacyDiagnosis}
+                </div>
+              )}
               <label className="field full">
                 <span>Conduite thérapeutique initiale*</span>
                 <textarea
@@ -377,8 +509,7 @@ export function ConsultationFormModal({
                       )}
                       {exam.resultData?.conclusion && (
                         <p className="consultation-result-conclusion">
-                          <strong>Conclusion du biologiste :</strong>{' '}
-                          {exam.resultData.conclusion}
+                          <strong>Conclusion du biologiste :</strong> {exam.resultData.conclusion}
                         </p>
                       )}
                     </article>
@@ -455,10 +586,7 @@ export function ConsultationFormModal({
                   label="Diagnostic confirmé ou révisé"
                   value={form.postLaboratoryDiagnosis}
                 />
-                <ReadOnlyField
-                  label="Conduite après résultats"
-                  value={form.postLaboratoryPlan}
-                />
+                <ReadOnlyField label="Conduite après résultats" value={form.postLaboratoryPlan} />
                 <ReadOnlyField label="Notes complémentaires" value={form.postLaboratoryNotes} />
               </div>
             )}
@@ -470,8 +598,12 @@ export function ConsultationFormModal({
             <div className="section-title">
               <span>3</span>
               <div>
-                <strong>{postLaboratory ? 'Décision après interprétation' : 'Prochaine étape'}</strong>
-                <small>Choisissez une action explicite ; aucune libération administrative n’est faite ici</small>
+                <strong>
+                  {postLaboratory ? 'Décision après interprétation' : 'Prochaine étape'}
+                </strong>
+                <small>
+                  Choisissez une action explicite ; aucune libération administrative n’est faite ici
+                </small>
               </div>
             </div>
 
@@ -506,7 +638,8 @@ export function ConsultationFormModal({
                   <FlaskConical size={18} />
                   <span>
                     <strong>Après l’envoi :</strong> l’évaluation initiale devient non modifiable.
-                    Le patient reviendra chez le même médecin lorsque tous les résultats seront validés.
+                    Le patient reviendra chez le même médecin lorsque tous les résultats seront
+                    validés.
                   </span>
                 </div>
                 <label className="field full">
@@ -581,7 +714,8 @@ export function ConsultationFormModal({
                     <strong>Médecin :</strong> enregistre l’indication clinique.
                   </li>
                   <li>
-                    <strong>Réception et soins :</strong> organisent l’admission, la chambre et le lit.
+                    <strong>Réception et soins :</strong> organisent l’admission, la chambre et le
+                    lit.
                   </li>
                   <li>
                     <strong>Caisse :</strong> finalise le compte avant toute sortie administrative.

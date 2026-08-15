@@ -131,6 +131,82 @@ export interface DoctorAvailability {
   availability: string;
 }
 
+export type Icd10CatalogRow = [code: string, label: string, parentLabel: string, chapter: string];
+
+export interface Icd10Catalog {
+  classification: string;
+  version: string;
+  publication: string;
+  source: string;
+  license: string;
+  rows: Icd10CatalogRow[];
+}
+
+export const bodySystems = [
+  'Appareil cardiovasculaire',
+  'Appareil digestif',
+  'Appareil génital féminin',
+  'Appareil génital masculin',
+  'Appareil musculosquelettique',
+  'Appareil respiratoire',
+  'Appareil urinaire',
+  'Bouche et dentition',
+  'Système endocrinien et métabolique',
+  'Système hématologique',
+  'Système immunitaire',
+  'Système lymphatique',
+  'Système nerveux',
+  'Système sensoriel — audition et équilibre',
+  'Système sensoriel — vision',
+  'Système tégumentaire — peau et phanères',
+] as const;
+
+export function parseBodySystems(value?: string) {
+  if (!value) return [];
+  const entries = new Set(
+    value
+      .split(/\r?\n|\s·\s/u)
+      .map((entry) => entry.trim())
+      .filter(Boolean),
+  );
+  return bodySystems.filter((system) => entries.has(system));
+}
+
+export function formatBodySystems(values: string[]) {
+  const selected = new Set(values);
+  return bodySystems.filter((system) => selected.has(system)).join('\n');
+}
+
+export function icd10DisplayLabel(row: Icd10CatalogRow) {
+  const [, label, parentLabel] = row;
+  return parentLabel && parentLabel !== label ? `${parentLabel} — ${label}` : label;
+}
+
+export function parseDiagnosisCodes(value?: string) {
+  return parseDiagnoses(value).map((diagnosis) => diagnosis.code);
+}
+
+export function parseDiagnoses(value?: string) {
+  if (!value) return [];
+  return value
+    .split(/\r?\n/u)
+    .map((line) => {
+      const match = line.trim().match(/^([A-Z][0-9]{2}(?:\.[A-Z0-9]{1,3})?)(?:\s+[—-]\s+(.+))?$/u);
+      return match ? { code: match[1]!, label: match[2]?.trim() || 'Libellé non renseigné' } : null;
+    })
+    .filter((diagnosis): diagnosis is { code: string; label: string } => Boolean(diagnosis));
+}
+
+export function formatDiagnoses(codes: string[], rows: Icd10CatalogRow[]) {
+  const catalog = new Map(rows.map((row) => [row[0], row]));
+  return codes
+    .map((code) => {
+      const row = catalog.get(code);
+      return row ? `${code} — ${icd10DisplayLabel(row)}` : code;
+    })
+    .join('\n');
+}
+
 export const emptyClinical = {
   chiefComplaint: '',
   presentIllnessHistory: '',

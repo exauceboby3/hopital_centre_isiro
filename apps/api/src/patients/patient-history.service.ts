@@ -1,6 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ExamStatus, Role } from '@prisma/client';
-import { decodeClinicalReport, decodeMedicalSignature } from '../consultations/clinical-report';
+import {
+  decodeClinicalReport,
+  decodeCodedDiagnoses,
+  decodeMedicalSignature,
+} from '../consultations/clinical-report';
 import { presentVitalSign } from '../common/vital-sign-metadata';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -14,6 +18,8 @@ interface HistoryEntry {
   status?: string;
   author?: string;
   department?: string;
+  details?: Array<{ label: string; value: string }>;
+  diagnoses?: Array<{ code: string; label: string }>;
   signature?: { doctorName: string; signedAt: string; hash: string } | null;
 }
 
@@ -148,6 +154,7 @@ export class PatientHistoryService {
 
     consultations.forEach((row) => {
       const report = decodeClinicalReport(row.report).sections;
+      const diagnoses = decodeCodedDiagnoses(report.diagnosis);
       const signature = decodeMedicalSignature(row.certificate);
       const doctorName = [row.doctor.lastName, row.doctor.postName, row.doctor.firstName]
         .filter(Boolean)
@@ -156,9 +163,13 @@ export class PatientHistoryService {
         id: row.id,
         kind: 'CONSULTATION',
         date: row.completedAt ?? row.startedAt ?? row.createdAt,
-        title: `Consultation · ${report.chiefComplaint ?? row.reason}`,
+        title: 'Consultation médicale',
         description: [
-          report.diagnosis ? `Diagnostic : ${report.diagnosis}` : undefined,
+          diagnoses.length
+            ? `Diagnostic : ${diagnoses.map((diagnosis) => diagnosis.code).join(', ')}`
+            : report.diagnosis
+              ? `Diagnostic : ${report.diagnosis}`
+              : undefined,
           report.treatmentPlan ? `Conduite : ${report.treatmentPlan}` : undefined,
           row.orientation,
         ]
@@ -167,6 +178,20 @@ export class PatientHistoryService {
         status: row.status,
         author: doctorName || row.doctor.user.username,
         department: 'Médecine',
+        details: [
+          { label: 'Motif du rendez-vous', value: row.reason },
+          { label: 'Systèmes concernés', value: report.chiefComplaint },
+          { label: 'Histoire de la maladie', value: report.presentIllnessHistory },
+          { label: 'Systèmes explorés', value: report.anamnesisComplements },
+          { label: 'Antécédents et allergies', value: report.medicalHistory },
+          { label: 'Examen physique', value: report.physicalExamination },
+          { label: 'Conduite thérapeutique', value: report.treatmentPlan },
+          { label: 'Interprétation du laboratoire', value: report.laboratoryInterpretation },
+          { label: 'Diagnostic après laboratoire', value: report.postLaboratoryDiagnosis },
+          { label: 'Conduite après laboratoire', value: report.postLaboratoryPlan },
+          { label: 'Orientation', value: row.orientation },
+        ].filter((detail): detail is { label: string; value: string } => Boolean(detail.value)),
+        diagnoses,
         signature: signature
           ? { doctorName: signature.doctorName, signedAt: signature.signedAt, hash: signature.hash }
           : null,

@@ -35,21 +35,6 @@ function enhanceAppointmentPage() {
   });
 
   document.querySelectorAll<HTMLElement>('.modal-card').forEach((modal) => {
-    if (modal.textContent?.includes('Planifier un rendez-vous')) {
-      const consultationLabel = [...modal.querySelectorAll<HTMLLabelElement>('label')].find((label) =>
-        label.textContent?.includes('Type de consultation'),
-      );
-      const title = consultationLabel?.querySelector<HTMLElement>(':scope > span');
-      replaceText(title ?? null, 'Type de consultation — incluse dans la fiche *');
-      if (consultationLabel && !consultationLabel.querySelector('.appointment-file-help')) {
-        const help = document.createElement('small');
-        help.className = 'appointment-file-help muted';
-        help.textContent =
-          'Aucun frais de consultation supplémentaire : la fiche mensuelle de 5 000 CDF couvre la consultation.';
-        consultationLabel.append(help);
-      }
-    }
-
     modal.querySelectorAll<HTMLElement>('strong').forEach((label) => {
       if (label.textContent?.trim() === 'Paiement') replaceText(label, 'Accès par fiche');
     });

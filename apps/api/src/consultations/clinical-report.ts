@@ -47,6 +47,11 @@ export interface MedicalSignature {
   hash: string;
 }
 
+export interface CodedDiagnosis {
+  code: string;
+  label: string;
+}
+
 const clean = (value: unknown) =>
   typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 
@@ -54,7 +59,12 @@ export function decodeClinicalReport(value?: string | null): ClinicalReportEnvel
   if (!value) return { version: CLINICAL_REPORT_VERSION, sections: {} };
   try {
     const parsed = JSON.parse(value) as Partial<ClinicalReportEnvelope>;
-    if (parsed && typeof parsed === 'object' && parsed.sections && typeof parsed.sections === 'object') {
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      parsed.sections &&
+      typeof parsed.sections === 'object'
+    ) {
       return {
         version: Number(parsed.version) || CLINICAL_REPORT_VERSION,
         sections: parsed.sections,
@@ -81,6 +91,17 @@ export function mergeClinicalReport(
     version: CLINICAL_REPORT_VERSION,
     sections: { ...envelope.sections, ...normalized },
   } satisfies ClinicalReportEnvelope);
+}
+
+export function decodeCodedDiagnoses(value?: string | null): CodedDiagnosis[] {
+  if (!value) return [];
+  return value
+    .split(/\r?\n/u)
+    .map((line) => {
+      const match = line.trim().match(/^([A-Z][0-9]{2}(?:\.[A-Z0-9]{1,3})?)\s+[—-]\s+(.+)$/u);
+      return match ? { code: match[1]!, label: match[2]!.trim() } : null;
+    })
+    .filter((diagnosis): diagnosis is CodedDiagnosis => Boolean(diagnosis));
 }
 
 export function decodeMedicalSignature(value?: string | null): MedicalSignature | null {

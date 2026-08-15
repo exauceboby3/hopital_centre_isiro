@@ -31,6 +31,8 @@ import {
   emptyClinical,
   finalDecisions,
   formatDate,
+  parseBodySystems,
+  parseDiagnosisCodes,
   successMessage,
   workflowLabel,
 } from './consultations.model';
@@ -56,6 +58,7 @@ export default function ConsultationsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [scope, setScope] = useState<'active' | 'history'>('active');
   const [focusAppointmentId, setFocusAppointmentId] = useState('');
+  const [focusConsultationId, setFocusConsultationId] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -66,8 +69,10 @@ export default function ConsultationsPage() {
   const canEdit = hasAnyRole(user, ['DOCTOR', 'SURGEON', 'MIDWIFE', 'ADMIN', 'SUPER_ADMIN']);
 
   useEffect(() => {
-    const appointmentId = new URLSearchParams(window.location.search).get('appointmentId') ?? '';
+    const parameters = new URLSearchParams(window.location.search);
+    const appointmentId = parameters.get('appointmentId') ?? '';
     setFocusAppointmentId(appointmentId);
+    setFocusConsultationId(parameters.get('consultationId') ?? '');
   }, []);
 
   const load = useCallback(
@@ -146,11 +151,13 @@ export default function ConsultationsPage() {
 
   useEffect(() => {
     if (!focusAppointmentId || openedFocusRef.current === focusAppointmentId || loading) return;
-    const focused = rows.find((row) => row.appointment?.id === focusAppointmentId);
+    const focused = rows.find(
+      (row) => row.id === focusConsultationId || row.appointment?.id === focusAppointmentId,
+    );
     if (!focused) return;
     openedFocusRef.current = focusAppointmentId;
     openClinicalForm(focused);
-  }, [focusAppointmentId, loading, openClinicalForm, rows]);
+  }, [focusAppointmentId, focusConsultationId, loading, openClinicalForm, rows]);
 
   const acknowledge = async (appointment: WaitingAppointment) => {
     setSubmitting(true);
@@ -212,6 +219,14 @@ export default function ConsultationsPage() {
       !editing ||
       ['LABORATORY_VIEW', 'HOSPITALIZATION_VIEW', 'READ_ONLY'].includes(editingMode)
     ) {
+      return;
+    }
+    if (editingMode === 'INITIAL_ASSESSMENT' && !parseBodySystems(form.chiefComplaint).length) {
+      setError('Sélectionnez au moins un système concerné par la plainte principale.');
+      return;
+    }
+    if (editingMode === 'INITIAL_ASSESSMENT' && !parseDiagnosisCodes(form.diagnosis).length) {
+      setError('Sélectionnez au moins une hypothèse diagnostique dans le référentiel CIM-10.');
       return;
     }
     if (form.decision === 'LABORATORY' && !selectedExamIds.length) {
@@ -323,6 +338,7 @@ export default function ConsultationsPage() {
       setNotice(successMessage(form.decision));
       setEditing(null);
       setFocusAppointmentId('');
+      setFocusConsultationId('');
       window.history.replaceState({}, '', '/consultations');
       await load(false);
     } catch (reason) {
@@ -367,7 +383,10 @@ export default function ConsultationsPage() {
   }, [examSearch, laboratoryServices]);
 
   const filteredRows = rows.filter((row) => {
-    const focused = !focusAppointmentId || row.appointment?.id === focusAppointmentId;
+    const focused =
+      (!focusAppointmentId && !focusConsultationId) ||
+      row.id === focusConsultationId ||
+      row.appointment?.id === focusAppointmentId;
     const historical =
       row.status === 'COMPLETED' ||
       row.status === 'CANCELLED' ||
@@ -640,8 +659,9 @@ export default function ConsultationsPage() {
           onSubmit={save}
           onClose={() => {
             setEditing(null);
-            if (focusAppointmentId) {
+            if (focusAppointmentId || focusConsultationId) {
               setFocusAppointmentId('');
+              setFocusConsultationId('');
               window.history.replaceState({}, '', '/consultations');
             }
           }}
