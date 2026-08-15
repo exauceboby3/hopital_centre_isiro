@@ -3,6 +3,8 @@
 import { Check, ChevronDown, Search, X } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
+const SEARCH_PAGE_SIZE = 80;
+
 export interface SearchableOption {
   value: string;
   label: string;
@@ -166,6 +168,7 @@ export function SearchableMultiSelect({
   disabled = false,
   className = '',
   helpText,
+  expanded = false,
 }: {
   label: string;
   values: string[];
@@ -176,12 +179,14 @@ export function SearchableMultiSelect({
   disabled?: boolean;
   className?: string;
   helpText?: string;
+  expanded?: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const listboxId = useId();
   const labelId = useId();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(SEARCH_PAGE_SIZE);
   const selected = useMemo(
     () => values.map((value) => options.find((option) => option.value === value)).filter(Boolean),
     [options, values],
@@ -189,24 +194,29 @@ export function SearchableMultiSelect({
 
   useEffect(() => {
     const close = (event: MouseEvent) => {
-      if (!root.current?.contains(event.target as Node)) setOpen(false);
+      if (!expanded && !root.current?.contains(event.target as Node)) setOpen(false);
     };
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
-  }, []);
+  }, [expanded]);
 
-  const filtered = useMemo(() => {
+  const matchingOptions = useMemo(() => {
     const search = normalize(query.trim());
-    return options
-      .filter((option) =>
-        search
-          ? normalize(`${option.value} ${option.label} ${option.description ?? ''}`).includes(
-              search,
-            )
-          : true,
-      )
-      .slice(0, 80);
+    return options.filter((option) =>
+      search
+        ? normalize(`${option.value} ${option.label} ${option.description ?? ''}`).includes(search)
+        : true,
+    );
   }, [options, query]);
+
+  const filtered = useMemo(
+    () => matchingOptions.slice(0, visibleCount),
+    [matchingOptions, visibleCount],
+  );
+
+  useEffect(() => {
+    setVisibleCount(SEARCH_PAGE_SIZE);
+  }, [query, options]);
 
   const toggle = (value: string) => {
     onChange(
@@ -237,14 +247,16 @@ export function SearchableMultiSelect({
           ))}
         </div>
       )}
-      <div className={`searchable-select ${open ? 'open' : ''}`}>
+      <div
+        className={`searchable-select ${open || expanded ? 'open' : ''}${expanded ? ' expanded' : ''}`}
+      >
         <Search size={17} aria-hidden="true" />
         <input
           disabled={disabled}
           autoComplete="off"
           role="combobox"
           aria-labelledby={labelId}
-          aria-expanded={open}
+          aria-expanded={open || expanded}
           aria-controls={listboxId}
           aria-autocomplete="list"
           placeholder={placeholder}
@@ -259,33 +271,50 @@ export function SearchableMultiSelect({
           }}
         />
         <ChevronDown size={17} aria-hidden="true" />
-        {open && !disabled && (
+        {(open || expanded) && !disabled && (
           <div id={listboxId} className="searchable-options" role="listbox" aria-multiselectable>
             {filtered.length === 0 ? (
               <div className="searchable-empty">Aucun résultat</div>
             ) : (
-              filtered.map((option) => {
-                const checked = values.includes(option.value);
-                return (
+              <>
+                {filtered.map((option) => {
+                  const checked = values.includes(option.value);
+                  return (
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={checked}
+                      disabled={option.disabled}
+                      key={option.value}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => toggle(option.value)}
+                    >
+                      <span>
+                        <strong>{option.label}</strong>
+                        {option.description && <small>{option.description}</small>}
+                      </span>
+                      <span className={`searchable-checkbox${checked ? ' checked' : ''}`}>
+                        {checked && <Check size={14} />}
+                      </span>
+                    </button>
+                  );
+                })}
+                {filtered.length < matchingOptions.length && (
                   <button
                     type="button"
-                    role="option"
-                    aria-selected={checked}
-                    disabled={option.disabled}
-                    key={option.value}
+                    className="searchable-load-more"
                     onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => toggle(option.value)}
+                    onClick={() => setVisibleCount((count) => count + SEARCH_PAGE_SIZE)}
                   >
-                    <span>
-                      <strong>{option.label}</strong>
-                      {option.description && <small>{option.description}</small>}
-                    </span>
-                    <span className={`searchable-checkbox${checked ? ' checked' : ''}`}>
-                      {checked && <Check size={14} />}
-                    </span>
+                    Afficher les {Math.min(
+                      SEARCH_PAGE_SIZE,
+                      matchingOptions.length - filtered.length,
+                    )}{' '}
+                    suivants · {filtered.length.toLocaleString('fr-FR')} sur{' '}
+                    {matchingOptions.length.toLocaleString('fr-FR')}
                   </button>
-                );
-              })
+                )}
+              </>
             )}
           </div>
         )}

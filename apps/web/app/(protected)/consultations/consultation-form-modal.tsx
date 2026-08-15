@@ -339,6 +339,7 @@ export function ConsultationFormModal({
               <SearchableMultiSelect
                 className="full"
                 required
+                expanded
                 label="Systèmes concernés par la plainte principale"
                 values={selectedChiefComplaintSystems}
                 options={bodySystemOptions}
@@ -361,6 +362,7 @@ export function ConsultationFormModal({
               </label>
               <SearchableMultiSelect
                 className="full"
+                expanded
                 label="Systèmes explorés dans l’anamnèse"
                 values={selectedAnamnesisSystems}
                 options={bodySystemOptions}
