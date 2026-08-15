@@ -29,6 +29,7 @@ export const RECEPTION_ROLES: readonly Role[] = [
   'RECEPTIONIST',
   'SECRETARY',
 ];
+export const APPOINTMENT_ROLES: readonly Role[] = [...RECEPTION_ROLES, 'CASHIER'];
 export const CLINICIAN_ROLES: readonly Role[] = [
   'SUPER_ADMIN',
   'ADMIN',
@@ -119,7 +120,7 @@ const routeRules: RouteRule[] = [
   { prefix: '/emergency-access', roles: EMERGENCY_ACCESS_ROLES },
   { prefix: '/care-vouchers', roles: BILLING_ROLES },
   { prefix: '/hospitalizations', roles: HOSPITALIZATION_ROLES },
-  { prefix: '/appointments', roles: RECEPTION_ROLES },
+  { prefix: '/appointments', roles: APPOINTMENT_ROLES },
   { prefix: '/consultations', roles: CLINICIAN_ROLES },
   { prefix: '/laboratory', roles: LABORATORY_ROLES },
   { prefix: '/nursing', roles: NURSING_ROLES },

@@ -47,6 +47,7 @@ export class AppointmentsController {
   ) {}
 
   @Get()
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.RECEPTIONIST, Role.SECRETARY, Role.CASHIER)
   list(
     @CurrentUser() user: AuthenticatedUser,
     @Query('from') from?: string,
@@ -71,7 +72,14 @@ export class AppointmentsController {
   }
 
   @Get('doctors/availability')
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.RECEPTIONIST, Role.SECRETARY, ...clinicianRoles)
+  @Roles(
+    Role.SUPER_ADMIN,
+    Role.ADMIN,
+    Role.RECEPTIONIST,
+    Role.SECRETARY,
+    Role.CASHIER,
+    ...clinicianRoles,
+  )
   doctorAvailability() {
     return this.availability.list();
   }
@@ -84,6 +92,7 @@ export class AppointmentsController {
   }
 
   @Post()
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.RECEPTIONIST, Role.SECRETARY, Role.CASHIER)
   async create(@Body() dto: CreateAppointmentDto, @CurrentUser() user: AuthenticatedUser) {
     await this.financialAccess.assertCareAccess(dto.patientId, BillableServiceType.CONSULTATION);
     const appointment = await this.appointments.create(dto, user);

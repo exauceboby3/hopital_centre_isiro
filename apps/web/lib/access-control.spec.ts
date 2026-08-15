@@ -61,6 +61,11 @@ describe('access-control', () => {
     expect(canAccessPath(user('DOCTOR'), '/doctor-waiting-room')).toBe(true);
   });
 
+  it('ouvre la préparation des rendez-vous à la caisse sans l’ouvrir à la comptabilité', () => {
+    expect(canAccessPath(user('CASHIER'), '/appointments')).toBe(true);
+    expect(canAccessPath(user('ACCOUNTANT'), '/appointments')).toBe(false);
+  });
+
   it('réserve les centres transversaux aux administrateurs', () => {
     expect(canAccessPath(user('ADMIN'), '/quality-continuity')).toBe(true);
     expect(canAccessPath(user('ADMIN'), '/clinical-safety')).toBe(true);

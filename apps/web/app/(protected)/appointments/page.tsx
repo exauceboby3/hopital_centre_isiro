@@ -24,6 +24,7 @@ import { SearchableSelect } from '@/components/searchable-select';
 import { StatusBadge } from '@/components/status-badge';
 import { api } from '@/lib/api';
 import {
+  currency,
   isiroLocalDateTimeToDate,
   localDateTimeInputValue,
   matchesSearch,
@@ -76,7 +77,7 @@ interface Appointment {
   };
   careAuthorization?: {
     status: string;
-    invoice?: { number: string; status: string };
+    invoice?: { id: string; number: string; status: string; total: string; payments: Payment[] };
     paymentClearance?: { inOrder: boolean; status: 'IN_ORDER' | 'TO_REGULARIZE' };
   };
   consultation?: {
@@ -90,6 +91,35 @@ interface BillableService {
   id: string;
   name: string;
   price?: string;
+}
+
+interface Payment {
+  id: string;
+  amount: string;
+  payerType: 'PATIENT' | 'INSURER' | 'SPONSOR';
+}
+
+interface Invoice {
+  id: string;
+  number: string;
+  status: string;
+  total: string;
+  patient: Patient;
+  payments: Payment[];
+  careAuthorization?: { id: string; description: string; status: string };
+  insuranceCoverage?: { patientAmount: string; insurerAmount: string };
+  voucherCoverage?: { patientAmount: string; sponsorAmount: string };
+}
+
+interface PatientFinancialSummary {
+  file: {
+    active: boolean;
+    validUntil?: string | null;
+    pending?: { invoiceId: string; invoiceNumber: string; amount: number; status: string } | null;
+  };
+  outstandingBalance: number;
+  financialHold: boolean;
+  death: { deceased: boolean };
 }
 
 const emptyForm = {
@@ -137,6 +167,25 @@ export default function AppointmentsPage() {
   const [vitals, setVitals] = useState(emptyVitals);
   const [createOpen, setCreateOpen] = useState(false);
   const [directReferral, setDirectReferral] = useState(false);
+  const [appointmentFinancialSummary, setAppointmentFinancialSummary] =
+    useState<PatientFinancialSummary | null>(null);
+  const [financialChecking, setFinancialChecking] = useState(false);
+  const [billingOpen, setBillingOpen] = useState(false);
+  const [billingPatient, setBillingPatient] = useState<Patient | null>(null);
+  const [billingSummary, setBillingSummary] = useState<PatientFinancialSummary | null>(null);
+  const [billingInvoices, setBillingInvoices] = useState<Invoice[]>([]);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [appointmentInvoiceId, setAppointmentInvoiceId] = useState<string | null>(null);
+  const [billingOrigin, setBillingOrigin] = useState<
+    'FORM' | 'CREATED_APPOINTMENT' | 'LIST' | null
+  >(null);
+  const [paying, setPaying] = useState<Invoice | null>(null);
+  const [payment, setPayment] = useState({
+    amount: '',
+    method: 'CASH',
+    payerType: 'PATIENT',
+    reference: '',
+  });
   const [transferring, setTransferring] = useState<Appointment | null>(null);
   const [transfer, setTransfer] = useState({ doctorId: '', reason: '' });
   const [doctorsOpen, setDoctorsOpen] = useState(false);
@@ -148,7 +197,19 @@ export default function AppointmentsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const canCreate = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'RECEPTIONIST', 'SECRETARY']);
+  const canManageAppointments = hasAnyRole(user, [
+    'SUPER_ADMIN',
+    'ADMIN',
+    'RECEPTIONIST',
+    'SECRETARY',
+  ]);
+  const canCreateAppointment = hasAnyRole(user, [
+    'SUPER_ADMIN',
+    'ADMIN',
+    'RECEPTIONIST',
+    'SECRETARY',
+    'CASHIER',
+  ]);
   const canManageMoney = hasAnyRole(user, ['SUPER_ADMIN', 'ADMIN', 'CASHIER', 'ACCOUNTANT']);
   const canRecordVitals = hasAnyRole(user, [
     'SUPER_ADMIN',
@@ -185,6 +246,196 @@ export default function AppointmentsPage() {
     return () => window.clearInterval(timer);
   }, [load]);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!createOpen || !canManageMoney || !form.patientId) {
+      setAppointmentFinancialSummary(null);
+      setFinancialChecking(false);
+      return;
+    }
+
+    setFinancialChecking(true);
+    void api<PatientFinancialSummary>(`/patient-financial-access/${form.patientId}`)
+      .then((summary) => {
+        if (!cancelled) setAppointmentFinancialSummary(summary);
+      })
+      .catch(() => {
+        if (!cancelled) setAppointmentFinancialSummary(null);
+      })
+      .finally(() => {
+        if (!cancelled) setFinancialChecking(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canManageMoney, createOpen, form.patientId]);
+
+  const remainingForPayer = (invoice: Invoice, payerType: string) => {
+    const alreadyPaid = invoice.payments
+      .filter((entry) => entry.payerType === payerType)
+      .reduce((sum, entry) => sum + Number(entry.amount), 0);
+    const limit =
+      payerType === 'INSURER'
+        ? Number(invoice.insuranceCoverage?.insurerAmount ?? 0)
+        : payerType === 'SPONSOR'
+          ? Number(invoice.voucherCoverage?.sponsorAmount ?? 0)
+          : Number(
+              invoice.insuranceCoverage?.patientAmount ??
+                invoice.voucherCoverage?.patientAmount ??
+                invoice.total,
+            );
+    return Math.max(0, limit - alreadyPaid);
+  };
+
+  const refreshPatientBilling = async (patientId: string) => {
+    setBillingLoading(true);
+    try {
+      const [summary, invoices] = await Promise.all([
+        api<PatientFinancialSummary>(`/patient-financial-access/${patientId}`),
+        api<Invoice[]>(`/billing/invoices?patientId=${encodeURIComponent(patientId)}`),
+      ]);
+      setBillingSummary(summary);
+      setBillingInvoices(invoices);
+      return { summary, invoices };
+    } finally {
+      setBillingLoading(false);
+    }
+  };
+
+  const selectInvoiceForPayment = (invoice: Invoice) => {
+    const payerType =
+      remainingForPayer(invoice, 'PATIENT') > 0
+        ? 'PATIENT'
+        : invoice.voucherCoverage
+          ? 'SPONSOR'
+          : invoice.insuranceCoverage
+            ? 'INSURER'
+            : 'PATIENT';
+    setPaying(invoice);
+    setPayment({
+      amount: String(remainingForPayer(invoice, payerType)),
+      method: 'CASH',
+      payerType,
+      reference: '',
+    });
+  };
+
+  const openPatientBilling = async (
+    patient: Patient,
+    origin: 'FORM' | 'CREATED_APPOINTMENT' | 'LIST',
+    targetInvoiceId?: string,
+  ) => {
+    setError('');
+    setCreateOpen(false);
+    setBillingPatient(patient);
+    setBillingOrigin(origin);
+    setAppointmentInvoiceId(targetInvoiceId ?? null);
+    setPaying(null);
+    setBillingOpen(true);
+    try {
+      const { invoices } = await refreshPatientBilling(patient.id);
+      const target = targetInvoiceId
+        ? invoices.find((invoice) => invoice.id === targetInvoiceId)
+        : undefined;
+      if (target && !['PAID', 'CANCELLED'].includes(target.status)) {
+        selectInvoiceForPayment(target);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Facturation du patient inaccessible.');
+    }
+  };
+
+  const closePatientBilling = () => {
+    const returnToForm = billingOrigin === 'FORM';
+    const refreshAppointments = billingOrigin !== 'FORM';
+    setBillingOpen(false);
+    setBillingPatient(null);
+    setBillingSummary(null);
+    setBillingInvoices([]);
+    setPaying(null);
+    setAppointmentInvoiceId(null);
+    setBillingOrigin(null);
+    if (returnToForm) setCreateOpen(true);
+    else setForm(emptyForm);
+    if (refreshAppointments) void load();
+  };
+
+  const preparePatientFile = async () => {
+    if (!billingPatient) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      const authorization = await api<{ invoiceId: string }>(
+        `/patient-financial-access/${billingPatient.id}/file-renewal`,
+        { method: 'POST' },
+      );
+      const { invoices } = await refreshPatientBilling(billingPatient.id);
+      const invoice = invoices.find((entry) => entry.id === authorization.invoiceId);
+      if (invoice) selectInvoiceForPayment(invoice);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Fiche patient impossible à préparer.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const payInvoice = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!paying || !billingPatient) return;
+    const maximum = remainingForPayer(paying, payment.payerType);
+    const amount = Number(payment.amount);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > maximum) {
+      setError(`Le montant doit être compris entre 0 et ${currency(maximum)}.`);
+      return;
+    }
+
+    setSubmitting(true);
+    setError('');
+    try {
+      await api(`/billing/invoices/${paying.id}/payments`, {
+        method: 'POST',
+        body: JSON.stringify({
+          ...payment,
+          amount,
+          reference: payment.reference || undefined,
+        }),
+      });
+      const { summary, invoices } = await refreshPatientBilling(billingPatient.id);
+      const updatedTarget = appointmentInvoiceId
+        ? invoices.find((invoice) => invoice.id === appointmentInvoiceId)
+        : undefined;
+      if (
+        appointmentInvoiceId &&
+        updatedTarget &&
+        (['PAID', 'CANCELLED'].includes(updatedTarget.status) ||
+          ['AUTHORIZED', 'WAIVED', 'CONSUMED'].includes(
+            updatedTarget.careAuthorization?.status ?? '',
+          ))
+      ) {
+        setBillingOpen(false);
+        setBillingPatient(null);
+        setBillingSummary(null);
+        setBillingInvoices([]);
+        setPaying(null);
+        setAppointmentInvoiceId(null);
+        setBillingOrigin(null);
+        setForm(emptyForm);
+        setScope('active');
+        await load();
+      } else {
+        setPaying(null);
+        setPayment({ amount: '', method: 'CASH', payerType: 'PATIENT', reference: '' });
+        if (!summary.financialHold && billingOrigin === 'FORM') {
+          setAppointmentFinancialSummary(summary);
+        }
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Paiement impossible.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
@@ -202,24 +453,32 @@ export default function AppointmentsPage() {
     try {
       const service =
         services.find((entry) => entry.id === form.billableServiceId)?.name ?? 'Consultation';
-      await api(directReferral ? '/appointments/direct-referral' : '/appointments', {
-        method: 'POST',
-        body: JSON.stringify(
-          directReferral
-            ? {
-                patientId: form.patientId,
-                doctorId: form.doctorId,
-                billableServiceId: form.billableServiceId,
-                reason: form.reason || undefined,
-                service,
-              }
-            : { ...form, service, scheduledAt: scheduledAt!.toISOString() },
-        ),
-      });
-      setCreateOpen(false);
-      setForm(emptyForm);
+      const created = await api<Appointment>(
+        directReferral ? '/appointments/direct-referral' : '/appointments',
+        {
+          method: 'POST',
+          body: JSON.stringify(
+            directReferral
+              ? {
+                  patientId: form.patientId,
+                  doctorId: form.doctorId,
+                  billableServiceId: form.billableServiceId,
+                  reason: form.reason || undefined,
+                  service,
+                }
+              : { ...form, service, scheduledAt: scheduledAt!.toISOString() },
+          ),
+        },
+      );
       setScope('active');
-      await load();
+      const invoice = created.careAuthorization?.invoice;
+      if (canManageMoney && invoice && !['PAID', 'CANCELLED'].includes(invoice.status)) {
+        await openPatientBilling(created.patient, 'CREATED_APPOINTMENT', invoice.id);
+      } else {
+        setCreateOpen(false);
+        setForm(emptyForm);
+        await load();
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Enregistrement impossible.');
     } finally {
@@ -318,6 +577,7 @@ export default function AppointmentsPage() {
     const waiting = doctors.reduce((sum, doctor) => sum + doctor.waitingPatients.length, 0);
     return { available, busy, unavailable, waiting };
   }, [doctors]);
+  const selectedFormPatient = patients.find((patient) => patient.id === form.patientId);
 
   return (
     <>
@@ -327,19 +587,21 @@ export default function AppointmentsPage() {
           <h1>Rendez-vous</h1>
           <p>Un patient actif apparaît une seule fois pendant son parcours.</p>
         </div>
-        {canCreate && (
+        {canCreateAppointment && (
           <div className="row-actions">
-            <button
-              className="secondary-button"
-              onClick={() => {
-                setDirectReferral(true);
-                setForm(emptyForm);
-                setError('');
-                setCreateOpen(true);
-              }}
-            >
-              <Send size={18} /> Transfert direct
-            </button>
+            {canManageAppointments && (
+              <button
+                className="secondary-button"
+                onClick={() => {
+                  setDirectReferral(true);
+                  setForm(emptyForm);
+                  setError('');
+                  setCreateOpen(true);
+                }}
+              >
+                <Send size={18} /> Transfert direct
+              </button>
+            )}
             <button
               className="primary-button"
               onClick={() => {
@@ -534,19 +796,40 @@ export default function AppointmentsPage() {
                           <button className="text-button" onClick={() => setViewing(row)}>
                             <Eye size={15} /> Détails
                           </button>
-                          {scope === 'active' && row.status === 'SCHEDULED' && (
-                            <button
-                              className="text-button"
-                              disabled={
-                                submitting ||
-                                !row.careAuthorization ||
-                                !['AUTHORIZED', 'WAIVED'].includes(row.careAuthorization.status)
-                              }
-                              onClick={() => void setStatus(row.id, 'CHECKED_IN')}
-                            >
-                              Marquer arrivé
-                            </button>
-                          )}
+                          {scope === 'active' &&
+                            row.status === 'SCHEDULED' &&
+                            canManageAppointments && (
+                              <button
+                                className="text-button"
+                                disabled={
+                                  submitting ||
+                                  !row.careAuthorization ||
+                                  !['AUTHORIZED', 'WAIVED'].includes(row.careAuthorization.status)
+                                }
+                                onClick={() => void setStatus(row.id, 'CHECKED_IN')}
+                              >
+                                Marquer arrivé
+                              </button>
+                            )}
+                          {scope === 'active' &&
+                            canManageMoney &&
+                            row.careAuthorization?.invoice &&
+                            !['PAID', 'CANCELLED'].includes(
+                              row.careAuthorization.invoice.status,
+                            ) && (
+                              <button
+                                className="text-button"
+                                onClick={() =>
+                                  void openPatientBilling(
+                                    row.patient,
+                                    'LIST',
+                                    row.careAuthorization?.invoice?.id,
+                                  )
+                                }
+                              >
+                                <WalletCards size={15} /> Encaisser
+                              </button>
+                            )}
                           {scope === 'active' && canRecordVitals && (
                             <button
                               className="text-button"
@@ -561,7 +844,7 @@ export default function AppointmentsPage() {
                           {scope === 'active' &&
                             row.status === 'CHECKED_IN' &&
                             !row.doctorAcknowledgedAt &&
-                            canCreate && (
+                            canManageAppointments && (
                               <button
                                 className="text-button"
                                 onClick={() => {
@@ -575,7 +858,7 @@ export default function AppointmentsPage() {
                           {scope === 'history' &&
                             row.status === 'CANCELLED' &&
                             !row.doctorAcknowledgedAt &&
-                            canCreate && (
+                            canManageAppointments && (
                               <button
                                 className="text-button"
                                 onClick={() => {
@@ -586,7 +869,7 @@ export default function AppointmentsPage() {
                                 <Send size={15} /> Réorienter
                               </button>
                             )}
-                          {scope === 'active' && (
+                          {scope === 'active' && canManageAppointments && (
                             <button
                               className="text-button danger"
                               disabled={submitting}
@@ -595,7 +878,9 @@ export default function AppointmentsPage() {
                               Annuler
                             </button>
                           )}
-                          <CustomFieldsEditor entity="APPOINTMENT" entityId={row.id} />
+                          {canManageAppointments && (
+                            <CustomFieldsEditor entity="APPOINTMENT" entityId={row.id} />
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -680,6 +965,50 @@ export default function AppointmentsPage() {
                   description: patient.medicalRecordNumber,
                 }))}
               />
+              {canManageMoney && selectedFormPatient && (
+                <div
+                  className={`alert full ${
+                    appointmentFinancialSummary?.financialHold ||
+                    appointmentFinancialSummary?.death.deceased
+                      ? 'error'
+                      : 'info'
+                  }`}
+                >
+                  <strong>Situation financière du patient</strong>
+                  <p>
+                    {financialChecking
+                      ? 'Vérification en cours…'
+                      : appointmentFinancialSummary?.death.deceased
+                        ? 'Ce patient est déclaré décédé : aucune nouvelle prise en charge ne peut être ouverte.'
+                        : appointmentFinancialSummary?.financialHold
+                          ? [
+                              !appointmentFinancialSummary.file.active
+                                ? 'fiche mensuelle inactive'
+                                : '',
+                              appointmentFinancialSummary.outstandingBalance > 0
+                                ? `solde de ${currency(
+                                    appointmentFinancialSummary.outstandingBalance,
+                                  )} à régulariser`
+                                : '',
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')
+                          : appointmentFinancialSummary
+                            ? 'Compte en ordre. La consultation sera facturée ici après la création du rendez-vous.'
+                            : 'La vérification automatique est indisponible. Ouvrez la facturation avant de continuer.'}
+                  </p>
+                  {!appointmentFinancialSummary?.death.deceased && (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={financialChecking}
+                      onClick={() => void openPatientBilling(selectedFormPatient, 'FORM')}
+                    >
+                      <WalletCards size={16} /> Ouvrir la facturation ici
+                    </button>
+                  )}
+                </div>
+              )}
               <SearchableSelect
                 required
                 className="full"
@@ -737,11 +1066,216 @@ export default function AppointmentsPage() {
               >
                 Annuler
               </button>
-              <button className="primary-button" disabled={submitting}>
-                {directReferral ? 'Transférer le dossier' : 'Enregistrer'}
+              <button
+                className="primary-button"
+                disabled={
+                  submitting ||
+                  Boolean(
+                    canManageMoney &&
+                    (appointmentFinancialSummary?.financialHold ||
+                      appointmentFinancialSummary?.death.deceased),
+                  )
+                }
+              >
+                {directReferral
+                  ? 'Transférer le dossier'
+                  : canManageMoney
+                    ? 'Enregistrer et préparer le paiement'
+                    : 'Enregistrer'}
               </button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {billingOpen && billingPatient && (
+        <Modal
+          wide
+          title="Facturation du patient"
+          eyebrow={`${patientName(billingPatient)} · ${billingPatient.medicalRecordNumber}`}
+          onClose={closePatientBilling}
+        >
+          {error && <div className="alert error">{error}</div>}
+          {billingLoading ? (
+            <div className="empty-state">
+              <Activity className="spin" /> Vérification des factures…
+            </div>
+          ) : (
+            <>
+              {billingSummary && (
+                <div className={`alert ${billingSummary.financialHold ? 'error' : 'info'}`}>
+                  <strong>
+                    {billingSummary.death.deceased
+                      ? 'Patient déclaré décédé'
+                      : billingSummary.financialHold
+                        ? 'Paiement requis avant le rendez-vous'
+                        : appointmentInvoiceId
+                          ? 'Facture du rendez-vous prête à encaisser'
+                          : 'Compte du patient en ordre'}
+                  </strong>
+                  <p>
+                    Fiche mensuelle : {billingSummary.file.active ? 'active' : 'inactive'} · Solde
+                    antérieur : {currency(billingSummary.outstandingBalance)}
+                  </p>
+                  {!billingSummary.death.deceased &&
+                    !billingSummary.file.active &&
+                    !billingSummary.file.pending && (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        disabled={submitting}
+                        onClick={() => void preparePatientFile()}
+                      >
+                        Préparer la fiche mensuelle (5 000 CDF)
+                      </button>
+                    )}
+                </div>
+              )}
+
+              <div className="table-scroll">
+                <table className="compact-table">
+                  <thead>
+                    <tr>
+                      <th>Facture</th>
+                      <th>Motif</th>
+                      <th>Total</th>
+                      <th>Reste patient</th>
+                      <th>État</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {billingInvoices.filter(
+                      (invoice) => !['PAID', 'CANCELLED'].includes(invoice.status),
+                    ).length === 0 ? (
+                      <tr>
+                        <td colSpan={6}>
+                          <div className="empty-state">
+                            <WalletCards />
+                            <strong>Aucune facture en attente</strong>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      billingInvoices
+                        .filter((invoice) => !['PAID', 'CANCELLED'].includes(invoice.status))
+                        .map((invoice) => (
+                          <tr key={invoice.id}>
+                            <td>
+                              <strong>{invoice.number}</strong>
+                            </td>
+                            <td>{invoice.careAuthorization?.description ?? 'Facture patient'}</td>
+                            <td>{currency(invoice.total)}</td>
+                            <td>{currency(remainingForPayer(invoice, 'PATIENT'))}</td>
+                            <td>
+                              <StatusBadge status={invoice.status} />
+                            </td>
+                            <td>
+                              <button
+                                type="button"
+                                className="text-button"
+                                onClick={() => selectInvoiceForPayment(invoice)}
+                              >
+                                <WalletCards size={15} /> Encaisser
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {paying && (
+                <form onSubmit={payInvoice}>
+                  <div className="alert info">
+                    Encaissement de <strong>{paying.number}</strong> · montant encore dû par le
+                    payeur sélectionné : {currency(remainingForPayer(paying, payment.payerType))}
+                  </div>
+                  <div className="form-grid">
+                    <label className="field">
+                      <span>Montant *</span>
+                      <input
+                        required
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        max={remainingForPayer(paying, payment.payerType)}
+                        value={payment.amount}
+                        onChange={(event) => setPayment({ ...payment, amount: event.target.value })}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Mode *</span>
+                      <select
+                        value={payment.method}
+                        onChange={(event) => setPayment({ ...payment, method: event.target.value })}
+                      >
+                        <option value="CASH">Espèces</option>
+                        <option value="MOBILE_MONEY">Mobile Money</option>
+                        <option value="BANK_TRANSFER">Virement</option>
+                        <option value="CARD">Carte</option>
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Payeur *</span>
+                      <select
+                        value={payment.payerType}
+                        onChange={(event) => {
+                          const payerType = event.target.value;
+                          setPayment({
+                            ...payment,
+                            payerType,
+                            amount: String(remainingForPayer(paying, payerType)),
+                          });
+                        }}
+                      >
+                        <option value="PATIENT">Patient</option>
+                        {paying.insuranceCoverage && <option value="INSURER">Assureur</option>}
+                        {paying.voucherCoverage && (
+                          <option value="SPONSOR">Organisme du bon</option>
+                        )}
+                      </select>
+                    </label>
+                    <label className="field full">
+                      <span>Référence</span>
+                      <input
+                        value={payment.reference}
+                        onChange={(event) =>
+                          setPayment({ ...payment, reference: event.target.value })
+                        }
+                      />
+                    </label>
+                  </div>
+                  <div className="modal-actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => setPaying(null)}
+                    >
+                      Choisir une autre facture
+                    </button>
+                    <button className="primary-button" disabled={submitting}>
+                      Confirmer le paiement
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {!paying && (
+                <div className="modal-actions">
+                  <button type="button" className="secondary-button" onClick={closePatientBilling}>
+                    {billingOrigin === 'FORM' ? 'Retour au rendez-vous' : 'Fermer'}
+                  </button>
+                  {billingOrigin === 'FORM' && billingSummary && !billingSummary.financialHold && (
+                    <button type="button" className="primary-button" onClick={closePatientBilling}>
+                      Reprendre et créer le rendez-vous
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
+          )}
         </Modal>
       )}
 
