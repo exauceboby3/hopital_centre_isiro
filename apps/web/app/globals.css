@@ -2216,6 +2216,32 @@ tbody tr:hover {
   box-shadow: 0 16px 35px rgb(15 23 42 / 16%);
 }
 
+.searchable-select.expanded {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.45rem;
+}
+
+.searchable-select.expanded > svg:first-child,
+.searchable-select.expanded > svg:last-child {
+  top: 0.85rem;
+}
+
+.searchable-select.expanded .searchable-options {
+  position: static;
+  width: 100%;
+  max-height: none;
+  box-shadow: none;
+}
+
+.searchable-load-more {
+  justify-content: center !important;
+  margin-top: 0.3rem;
+  border: 1px solid var(--line) !important;
+  color: var(--brand) !important;
+  font-weight: 750;
+}
+
 .searchable-options button {
   display: flex;
   align-items: center;
